@@ -126,3 +126,15 @@ class SplitTransactionRead(BaseModel):
     category_id: int | None
     amount: int
     memo: str | None
+
+
+class VirtualMatchRequest(BaseModel):
+    """Schema for linking a real transaction to a virtual one.
+
+    Attributes:
+        real_transaction_id: ID of the real (imported) transaction.
+        virtual_transaction_id: ID of the virtual transaction to link.
+    """
+
+    real_transaction_id: int
+    virtual_transaction_id: int

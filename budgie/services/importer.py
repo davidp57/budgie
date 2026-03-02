@@ -36,6 +36,10 @@ async def confirm_import(
     solely on the database unique constraint, so that the caller always
     receives accurate counts.
 
+    When a transaction carries a ``virtual_linked_id``, the corresponding
+    virtual transaction is marked as ``cleared='reconciled'`` and the
+    new real transaction records the link.
+
     Args:
         db: Active async SQLAlchemy session.
         account_id: Database ID of the target account.
@@ -63,8 +67,22 @@ async def confirm_import(
             memo=txn.description,
             import_hash=txn.import_hash,
             cleared="uncleared",
+            virtual_linked_id=txn.virtual_linked_id,
         )
         db.add(db_txn)
+
+        # If linked to a virtual transaction, mark it as realized
+        if txn.virtual_linked_id is not None:
+            virtual_result = await db.execute(
+                select(Transaction).where(
+                    Transaction.id == txn.virtual_linked_id,
+                    Transaction.is_virtual == True,  # noqa: E712
+                )
+            )
+            virtual_txn = virtual_result.scalar_one_or_none()
+            if virtual_txn is not None:
+                virtual_txn.cleared = "reconciled"
+
         imported += 1
 
     if imported > 0:

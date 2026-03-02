@@ -7,16 +7,77 @@ from budgie.schemas.transaction import (
     TransactionCreate,
     TransactionRead,
     TransactionUpdate,
+    VirtualMatchRequest,
 )
 from budgie.services.transaction import (
     create_transaction,
     delete_transaction,
     get_transaction,
     get_transactions,
+    get_virtual_unlinked,
+    link_virtual,
     update_transaction,
 )
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+@router.get("/virtual/unlinked", response_model=list[TransactionRead])
+async def list_virtual_unlinked(
+    db: DBSession,
+    current_user: CurrentUser,
+) -> list[TransactionRead]:
+    """List all unlinked (pending) virtual transactions for the user.
+
+    Returns virtual transactions that have not yet been matched to a
+    real imported transaction.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+
+    Returns:
+        List of pending virtual transaction data.
+    """
+    txns = await get_virtual_unlinked(db, current_user.id)
+    return [TransactionRead.model_validate(t) for t in txns]
+
+
+@router.post("/virtual/match", response_model=TransactionRead)
+async def match_virtual_transaction(
+    schema: VirtualMatchRequest,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> TransactionRead:
+    """Link a real transaction to a virtual one, marking the virtual as realized.
+
+    Args:
+        schema: Match request with real and virtual transaction IDs.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+
+    Returns:
+        Updated real transaction data.
+
+    Raises:
+        HTTPException: 404 if either transaction is not found.
+        HTTPException: 400 if the virtual transaction ID is invalid.
+    """
+    real_txn = await get_transaction(db, schema.real_transaction_id, current_user.id)
+    if real_txn is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Real transaction not found",
+        )
+    try:
+        updated = await link_virtual(
+            db, real_txn, schema.virtual_transaction_id, current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    return TransactionRead.model_validate(updated)
 
 
 @router.get("", response_model=list[TransactionRead])
@@ -24,6 +85,7 @@ async def list_transactions(
     db: DBSession,
     current_user: CurrentUser,
     account_id: int | None = None,
+    is_virtual: bool | None = None,
 ) -> list[TransactionRead]:
     """List transactions for the authenticated user.
 
@@ -31,11 +93,12 @@ async def list_transactions(
         db: Async database session.
         current_user: JWT-authenticated user.
         account_id: Optional account filter.
+        is_virtual: Optional filter — True for virtual only, False for real only.
 
     Returns:
         List of transaction data.
     """
-    txns = await get_transactions(db, current_user.id, account_id)
+    txns = await get_transactions(db, current_user.id, account_id, is_virtual)
     return [TransactionRead.model_validate(t) for t in txns]
 
 

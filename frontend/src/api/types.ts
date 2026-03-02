@@ -89,6 +89,7 @@ export interface TransactionCreate {
   memo?: string | null
   cleared?: ClearedStatus
   is_virtual?: boolean
+  virtual_linked_id?: number | null
 }
 
 export interface TransactionUpdate {
@@ -124,26 +125,23 @@ export interface BudgetLineInput {
 // ── Import ───────────────────────────────────────────────────────
 
 export interface ImportedTransaction {
-  date: string
-  amount: number
-  description: string | null
+  date: string        // YYYY-MM-DD
+  amount: number      // centimes
+  description: string
+  payee_name: string | null
   reference: string | null
-  duplicate: boolean
+  import_hash: string
+  virtual_linked_id?: number | null   // set by user during preview matching
 }
 
 export interface ParsePreviewResponse {
   transactions: ImportedTransaction[]
-  count: number
-}
-
-export interface ImportConfirmRequest {
-  account_id: number
-  transactions: ImportedTransaction[]
+  total: number
 }
 
 export interface ImportResult {
   imported: number
-  skipped: number
+  duplicates: number
 }
 
 // ── Category rules ───────────────────────────────────────────────

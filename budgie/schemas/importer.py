@@ -17,6 +17,7 @@ class ImportedTransactionSchema(BaseModel):
         payee_name: Payee name, if available.
         reference: Bank reference, if available.
         import_hash: SHA-256 deduplication hash.
+        virtual_linked_id: Optional ID of a virtual transaction to link.
     """
 
     date: datetime.date
@@ -25,6 +26,7 @@ class ImportedTransactionSchema(BaseModel):
     payee_name: str | None = None
     reference: str | None = None
     import_hash: str
+    virtual_linked_id: int | None = None
 
 
 class ImportPreviewResponse(BaseModel):

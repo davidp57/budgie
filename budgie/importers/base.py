@@ -21,6 +21,8 @@ class ImportedTransaction(BaseModel):
         reference: Bank reference (e.g., FITID for OFX files).
         import_hash: SHA-256 hash used for deduplication.
             Auto-computed from canonical fields when not provided.
+        virtual_linked_id: Optional ID of a virtual transaction to link
+            upon import confirmation.
     """
 
     date: datetime.date
@@ -29,6 +31,7 @@ class ImportedTransaction(BaseModel):
     payee_name: str | None = None
     reference: str | None = None
     import_hash: str = ""
+    virtual_linked_id: int | None = None
 
     @model_validator(mode="after")
     def compute_import_hash(self) -> ImportedTransaction:
