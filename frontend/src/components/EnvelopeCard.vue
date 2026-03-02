@@ -51,14 +51,31 @@ function commitEdit(): void {
 const availableClass = computed(() =>
   props.envelope.available < 0 ? 'text-error font-semibold' : 'text-success',
 )
+
+/** e.g. "Groceries · Restaurants" */
+const categoryLabel = computed(() =>
+  props.envelope.categories.map((c) => c.name).join(' · '),
+)
 </script>
 
 <template>
   <div
     class="grid grid-cols-[1fr_120px_120px_120px] gap-2 items-center py-1 border-b border-base-300/50 last:border-0"
   >
-    <!-- Category name -->
-    <span class="text-sm truncate">{{ envelope.category_name }}</span>
+    <!-- Envelope name + rollover badge + categories -->
+    <div class="min-w-0">
+      <div class="flex items-center gap-1">
+        <span class="text-sm font-medium truncate">{{ envelope.envelope_name }}</span>
+        <span
+          v-if="envelope.rollover"
+          class="badge badge-xs badge-info"
+          title="Rollover: unspent balance carries forward"
+        >↻</span>
+      </div>
+      <div v-if="categoryLabel" class="text-xs text-base-content/40 truncate">
+        {{ categoryLabel }}
+      </div>
+    </div>
 
     <!-- Budgeted (editable) -->
     <div class="text-right">

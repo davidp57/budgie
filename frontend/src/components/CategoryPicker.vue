@@ -1,40 +1,169 @@
 <script setup lang="ts">
 /**
- * CategoryPicker — grouped <select> for picking a category.
+ * CategoryPicker — combobox for picking (or creating) a category.
+ *
  * v-model: category_id (number | null)
+ *
+ * Emits 'create' with the typed name when the user selects "Create …".
+ * The parent should POST the new category and call back via v-model.
  */
-import type { CategoryGroupWithCategories } from '@/api/types'
+import { computed, ref, watch } from 'vue'
+import type { CategoryGroupWithCategories, Category } from '@/api/types'
+import CreateCategoryModal from './CreateCategoryModal.vue'
 
-defineProps<{
+const props = defineProps<{
   modelValue: number | null
   groups: CategoryGroupWithCategories[]
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: number | null]
+  'category-created': [category: Category]
 }>()
 
-function onChange(ev: Event): void {
-  const val = (ev.target as HTMLSelectElement).value
-  emit('update:modelValue', val === '' ? null : Number(val))
+// ── flat list of all categories ───────────────────────────────────
+const allCategories = computed<Category[]>(() =>
+  props.groups.flatMap((g) => g.categories),
+)
+
+// ── search text shown in the input ───────────────────────────────
+const query = ref('')
+const open = ref(false)
+const showModal = ref(false)
+const pendingName = ref('')
+
+// Set the display text from the current modelValue
+watch(
+  () => props.modelValue,
+  (id) => {
+    if (id === null) {
+      query.value = ''
+      return
+    }
+    const cat = allCategories.value.find((c) => c.id === id)
+    if (cat) query.value = cat.name
+  },
+  { immediate: true },
+)
+
+// ── filtered list ────────────────────────────────────────────────
+const filtered = computed<Category[]>(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return allCategories.value
+  return allCategories.value.filter((c) => c.name.toLowerCase().includes(q))
+})
+
+/** True when the query doesn't match any existing category name exactly */
+const canCreate = computed<boolean>(() => {
+  const q = query.value.trim()
+  if (!q) return false
+  return !allCategories.value.some((c) => c.name.toLowerCase() === q.toLowerCase())
+})
+
+// ── interaction ───────────────────────────────────────────────────
+function onInput(ev: Event): void {
+  query.value = (ev.target as HTMLInputElement).value
+  open.value = true
+}
+
+function onFocus(): void {
+  open.value = true
+}
+
+function onBlur(): void {
+  // Delay so click on option is registered first
+  setTimeout(() => {
+    open.value = false
+    // Restore display text for current selection
+    const cat = allCategories.value.find((c) => c.id === props.modelValue)
+    query.value = cat ? cat.name : ''
+  }, 150)
+}
+
+function select(cat: Category): void {
+  emit('update:modelValue', cat.id)
+  query.value = cat.name
+  open.value = false
+}
+
+function clear(): void {
+  emit('update:modelValue', null)
+  query.value = ''
+  open.value = false
+}
+
+function openCreate(): void {
+  pendingName.value = query.value.trim()
+  showModal.value = true
+  open.value = false
+}
+
+function onCategoryCreated(cat: Category): void {
+  emit('category-created', cat)
+  emit('update:modelValue', cat.id)
+  query.value = cat.name
+  showModal.value = false
 }
 </script>
 
 <template>
-  <select
-    class="select select-bordered select-sm"
-    :value="modelValue ?? ''"
-    @change="onChange"
-  >
-    <option value="">— No category —</option>
-    <optgroup v-for="group in groups" :key="group.id" :label="group.name">
-      <option
-        v-for="cat in group.categories"
+  <div class="relative">
+    <div class="flex gap-1 items-center">
+      <input
+        type="text"
+        class="input input-bordered input-sm flex-1"
+        placeholder="Search category…"
+        :value="query"
+        @input="onInput"
+        @focus="onFocus"
+        @blur="onBlur"
+        autocomplete="off"
+      />
+      <button
+        v-if="modelValue !== null"
+        class="btn btn-ghost btn-xs"
+        tabindex="-1"
+        @mousedown.prevent="clear"
+        title="Clear"
+      >✕</button>
+    </div>
+
+    <!-- Dropdown -->
+    <ul
+      v-if="open"
+      class="absolute z-50 mt-1 w-full bg-base-100 border border-base-300 rounded-box shadow-lg max-h-48 overflow-y-auto text-sm"
+    >
+      <li
+        v-for="cat in filtered"
         :key="cat.id"
-        :value="cat.id"
+        class="px-3 py-1.5 cursor-pointer hover:bg-base-200"
+        :class="{ 'bg-primary/10 font-medium': cat.id === modelValue }"
+        @mousedown.prevent="select(cat)"
       >
         {{ cat.name }}
-      </option>
-    </optgroup>
-  </select>
+      </li>
+
+      <!-- "Create …" option -->
+      <li
+        v-if="canCreate"
+        class="px-3 py-1.5 cursor-pointer hover:bg-base-200 text-primary italic border-t border-base-300"
+        @mousedown.prevent="openCreate"
+      >
+        Create "{{ query.trim() }}"…
+      </li>
+
+      <li v-if="filtered.length === 0 && !canCreate" class="px-3 py-1.5 text-base-content/40 italic">
+        No categories
+      </li>
+    </ul>
+  </div>
+
+  <!-- Inline category creation modal -->
+  <CreateCategoryModal
+    v-if="showModal"
+    :initial-name="pendingName"
+    :groups="groups"
+    @confirm="onCategoryCreated"
+    @cancel="showModal = false"
+  />
 </template>

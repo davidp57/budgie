@@ -299,17 +299,13 @@ async def test_delete_transaction(auth_client: AsyncClient):
 
 
 async def test_set_budget_allocation(auth_client: AsyncClient):
-    group = await auth_client.post(
-        "/api/category-groups", json={"name": "Bills", "sort_order": 1}
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Bills"}
     )
-    cat = await auth_client.post(
-        "/api/categories",
-        json={"name": "Electricity", "group_id": group.json()["id"]},
-    )
-    cat_id = cat.json()["id"]
+    env_id = envelope.json()["id"]
     response = await auth_client.put(
         "/api/budget/2026-01",
-        json=[{"category_id": cat_id, "budgeted": 15000}],
+        json=[{"envelope_id": env_id, "budgeted": 15000}],
     )
     assert response.status_code == 200
     allocations = response.json()
@@ -318,17 +314,13 @@ async def test_set_budget_allocation(auth_client: AsyncClient):
 
 
 async def test_get_budget_month(auth_client: AsyncClient) -> None:
-    group = await auth_client.post(
-        "/api/category-groups", json={"name": "Bills", "sort_order": 1}
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Bills"}
     )
-    cat = await auth_client.post(
-        "/api/categories",
-        json={"name": "Electricity", "group_id": group.json()["id"]},
-    )
-    cat_id = cat.json()["id"]
+    env_id = envelope.json()["id"]
     await auth_client.put(
         "/api/budget/2026-01",
-        json=[{"category_id": cat_id, "budgeted": 20000}],
+        json=[{"envelope_id": env_id, "budgeted": 20000}],
     )
     response = await auth_client.get("/api/budget/2026-01")
     assert response.status_code == 200
@@ -349,26 +341,22 @@ async def test_get_budget_month_empty(auth_client: AsyncClient) -> None:
 
 async def test_get_budget_month_envelope_fields(auth_client: AsyncClient) -> None:
     """Envelope response includes budgeted, activity, available and names."""
-    group = await auth_client.post(
-        "/api/category-groups", json={"name": "Household", "sort_order": 1}
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Household", "rollover": False}
     )
-    cat = await auth_client.post(
-        "/api/categories",
-        json={"name": "Rent", "group_id": group.json()["id"]},
-    )
-    cat_id = cat.json()["id"]
+    env_id = envelope.json()["id"]
     await auth_client.put(
         "/api/budget/2026-01",
-        json=[{"category_id": cat_id, "budgeted": 80000}],
+        json=[{"envelope_id": env_id, "budgeted": 80000}],
     )
     response = await auth_client.get("/api/budget/2026-01")
     assert response.status_code == 200
     envelopes = response.json()["envelopes"]
     assert len(envelopes) == 1
     env = envelopes[0]
-    assert env["category_id"] == cat_id
-    assert env["category_name"] == "Rent"
-    assert env["group_name"] == "Household"
+    assert env["envelope_id"] == env_id
+    assert env["envelope_name"] == "Household"
+    assert env["rollover"] is False
     assert env["budgeted"] == 80000
     assert env["activity"] == 0
     assert env["available"] == 80000
@@ -376,12 +364,8 @@ async def test_get_budget_month_envelope_fields(auth_client: AsyncClient) -> Non
 
 async def test_get_budget_month_to_be_budgeted(auth_client: AsyncClient) -> None:
     """to_be_budgeted reflects income minus total budgeted."""
-    group = await auth_client.post(
-        "/api/category-groups", json={"name": "Bills", "sort_order": 1}
-    )
-    cat = await auth_client.post(
-        "/api/categories",
-        json={"name": "Phone", "group_id": group.json()["id"]},
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Bills"}
     )
     account = await auth_client.post(
         "/api/accounts",
@@ -399,7 +383,7 @@ async def test_get_budget_month_to_be_budgeted(auth_client: AsyncClient) -> None
     )
     await auth_client.put(
         "/api/budget/2026-01",
-        json=[{"category_id": cat.json()["id"], "budgeted": 100000}],
+        json=[{"envelope_id": envelope.json()["id"], "budgeted": 100000}],
     )
     response = await auth_client.get("/api/budget/2026-01")
     assert response.status_code == 200

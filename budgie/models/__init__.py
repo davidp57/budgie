@@ -8,6 +8,7 @@ from budgie.models.account import Account
 from budgie.models.budget import BudgetAllocation
 from budgie.models.category import Category, CategoryGroup
 from budgie.models.category_rule import CategoryRule
+from budgie.models.envelope import Envelope, envelope_categories
 from budgie.models.payee import Payee
 from budgie.models.transaction import SplitTransaction, Transaction
 from budgie.models.user import User
@@ -18,8 +19,10 @@ __all__ = [
     "Category",
     "CategoryGroup",
     "CategoryRule",
+    "Envelope",
     "Payee",
     "SplitTransaction",
     "Transaction",
     "User",
+    "envelope_categories",
 ]

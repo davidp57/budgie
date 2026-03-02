@@ -352,23 +352,19 @@ async def test_create_split_transaction(db_session: AsyncSession):
 
 async def test_create_budget_allocation(db_session: AsyncSession):
     from budgie.models.budget import BudgetAllocation
-    from budgie.models.category import Category, CategoryGroup
+    from budgie.models.envelope import Envelope
     from budgie.models.user import User
 
     user = User(username="alice", hashed_password="hash")
     db_session.add(user)
     await db_session.commit()
 
-    group = CategoryGroup(user_id=user.id, name="Bills", sort_order=1)
-    db_session.add(group)
-    await db_session.commit()
-
-    cat = Category(group_id=group.id, name="Electricity", sort_order=1)
-    db_session.add(cat)
+    envelope = Envelope(user_id=user.id, name="Bills")
+    db_session.add(envelope)
     await db_session.commit()
 
     alloc = BudgetAllocation(
-        category_id=cat.id,
+        envelope_id=envelope.id,
         month="2026-01",
         budgeted=15000,  # 150€
     )
@@ -383,26 +379,22 @@ async def test_create_budget_allocation(db_session: AsyncSession):
 
 async def test_budget_allocation_unique_category_month(db_session: AsyncSession):
     from budgie.models.budget import BudgetAllocation
-    from budgie.models.category import Category, CategoryGroup
+    from budgie.models.envelope import Envelope
     from budgie.models.user import User
 
     user = User(username="alice", hashed_password="hash")
     db_session.add(user)
     await db_session.commit()
 
-    group = CategoryGroup(user_id=user.id, name="Bills", sort_order=1)
-    db_session.add(group)
+    envelope = Envelope(user_id=user.id, name="Bills")
+    db_session.add(envelope)
     await db_session.commit()
 
-    cat = Category(group_id=group.id, name="Electricity", sort_order=1)
-    db_session.add(cat)
-    await db_session.commit()
-
-    alloc1 = BudgetAllocation(category_id=cat.id, month="2026-01", budgeted=15000)
+    alloc1 = BudgetAllocation(envelope_id=envelope.id, month="2026-01", budgeted=15000)
     db_session.add(alloc1)
     await db_session.commit()
 
-    alloc2 = BudgetAllocation(category_id=cat.id, month="2026-01", budgeted=20000)
+    alloc2 = BudgetAllocation(envelope_id=envelope.id, month="2026-01", budgeted=20000)
     db_session.add(alloc2)
     with pytest.raises(IntegrityError):
         await db_session.commit()

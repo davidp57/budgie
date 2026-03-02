@@ -22,7 +22,7 @@ async def get_budget(
 ) -> MonthBudgetResponse:
     """Get the full envelope budget view for a given month.
 
-    Returns per-category budgeted/activity/available amounts along with the
+    Returns per-envelope budgeted/activity/available amounts along with the
     global to_be_budgeted figure (income minus total allocated this month).
 
     Args:
@@ -45,7 +45,7 @@ async def set_budget(
 ) -> list[BudgetAllocationRead]:
     """Create or update budget allocations for a given month.
 
-    Accepts a list of category_id + budgeted pairs and upserts each.
+    Accepts a list of envelope_id + budgeted pairs and upserts each.
 
     Args:
         month: Budget month in YYYY-MM format.
@@ -60,7 +60,7 @@ async def set_budget(
     for line in lines:
         allocation = await upsert_allocation(
             db,
-            category_id=line.category_id,
+            envelope_id=line.envelope_id,
             month=month,
             schema=BudgetAllocationUpdate(budgeted=line.budgeted),
         )

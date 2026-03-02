@@ -1,7 +1,11 @@
-"""Tests for the budget engine service (Phase 5).
+"""Tests for the budget engine service.
 
 Tests envelope calculations: budgeted, activity, available,
 and the to_be_budgeted month aggregate.
+
+Architecture: Envelopes are the budget units. Categories are linked to at most
+one envelope via the envelope_categories M2M table. Budget allocations target
+envelopes (not categories).
 
 TDD — tests written before implementation.
 """
@@ -12,6 +16,7 @@ import pytest
 from budgie.models.account import Account
 from budgie.models.budget import BudgetAllocation
 from budgie.models.category import Category, CategoryGroup
+from budgie.models.envelope import Envelope, envelope_categories
 from budgie.models.transaction import Transaction
 from budgie.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,10 +33,13 @@ async def _make_user(db: AsyncSession, username: str = "alice") -> User:
 
 
 async def _make_category(
-    db: AsyncSession, user_id: int, name: str = "Food"
+    db: AsyncSession,
+    user_id: int,
+    name: str = "Food",
+    group_name: str = "Expenses",
 ) -> tuple[Category, CategoryGroup]:
     """Create a category group + category scoped to user."""
-    group = CategoryGroup(user_id=user_id, name="Expenses", sort_order=0)
+    group = CategoryGroup(user_id=user_id, name=group_name, sort_order=0)
     db.add(group)
     await db.flush()
     cat = Category(group_id=group.id, name=name, sort_order=0)
@@ -76,11 +84,40 @@ async def _make_transaction(
     return txn
 
 
+async def _make_envelope(
+    db: AsyncSession,
+    user_id: int,
+    name: str = "My Envelope",
+    rollover: bool = False,
+    sort_order: int = 0,
+) -> Envelope:
+    """Create and persist an envelope (with no categories)."""
+    env = Envelope(
+        user_id=user_id, name=name, rollover=rollover, sort_order=sort_order
+    )
+    db.add(env)
+    await db.flush()
+    return env
+
+
+async def _link_category(
+    db: AsyncSession, envelope_id: int, category_id: int
+) -> None:
+    """Link a category to an envelope via the association table."""
+    await db.execute(
+        envelope_categories.insert(),
+        [{"envelope_id": envelope_id, "category_id": category_id}],
+    )
+    await db.flush()
+
+
 async def _make_allocation(
-    db: AsyncSession, category_id: int, month: str, budgeted: int
+    db: AsyncSession, envelope_id: int, month: str, budgeted: int
 ) -> BudgetAllocation:
-    """Create and persist a budget allocation."""
-    alloc = BudgetAllocation(category_id=category_id, month=month, budgeted=budgeted)
+    """Create and persist a budget allocation for an envelope."""
+    alloc = BudgetAllocation(
+        envelope_id=envelope_id, month=month, budgeted=budgeted
+    )
     db.add(alloc)
     await db.flush()
     return alloc
@@ -94,15 +131,15 @@ async def test_budgeted_from_allocation(db_session: AsyncSession) -> None:
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    cat, _ = await _make_category(db_session, user.id)
-    await _make_allocation(db_session, cat.id, "2026-01", budgeted=15000)
+    env = await _make_envelope(db_session, user.id, "Food")
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=15000)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
     assert len(view.envelopes) == 1
-    envelope = view.envelopes[0]
-    assert envelope.category_id == cat.id
-    assert envelope.budgeted == 15000
+    line = view.envelopes[0]
+    assert line.envelope_id == env.id
+    assert line.budgeted == 15000
 
 
 async def test_budgeted_zero_when_no_allocation(db_session: AsyncSession) -> None:
@@ -110,7 +147,7 @@ async def test_budgeted_zero_when_no_allocation(db_session: AsyncSession) -> Non
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id)
+    await _make_envelope(db_session, user.id, "Transport")
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -118,15 +155,15 @@ async def test_budgeted_zero_when_no_allocation(db_session: AsyncSession) -> Non
     assert view.envelopes[0].budgeted == 0
 
 
-async def test_all_categories_appear_even_without_allocation(
+async def test_all_envelopes_appear_even_without_allocation(
     db_session: AsyncSession,
 ) -> None:
-    """All user categories appear in envelopes, regardless of allocations."""
+    """All user envelopes appear in the view, regardless of allocations."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id, name="Food")
-    await _make_category(db_session, user.id, name="Transport")
+    await _make_envelope(db_session, user.id, "Food")
+    await _make_envelope(db_session, user.id, "Transport")
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -137,32 +174,25 @@ async def test_all_categories_appear_even_without_allocation(
 
 
 async def test_activity_sums_transactions_for_month(db_session: AsyncSession) -> None:
-    """Activity = sum of real transactions for the month in that category."""
+    """Activity = sum of real transactions for the month across envelope categories."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    cat, _ = await _make_category(db_session, user.id, name="Groceries")
+    cat, _ = await _make_category(db_session, user.id, "Groceries")
+    env = await _make_envelope(db_session, user.id, "Food")
+    await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 1, 10),
-        amount=-3000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 1, 10), -3000, cat.id
     )
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 1, 20),
-        amount=-2000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 1, 20), -2000, cat.id
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
-    envelope = view.envelopes[0]
-    assert envelope.activity == -5000  # sum of two expenses
+    assert view.envelopes[0].activity == -5000  # sum of two expenses
 
 
 async def test_activity_includes_virtual_transactions(db_session: AsyncSession) -> None:
@@ -170,15 +200,17 @@ async def test_activity_includes_virtual_transactions(db_session: AsyncSession) 
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    cat, _ = await _make_category(db_session, user.id, name="Rent")
+    cat, _ = await _make_category(db_session, user.id, "Rent")
+    env = await _make_envelope(db_session, user.id, "Housing")
+    await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
     await _make_transaction(
         db_session,
         account.id,
         datetime.date(2026, 1, 1),
-        amount=-80000,
-        category_id=cat.id,
+        -80000,
+        cat.id,
         is_virtual=True,
     )
 
@@ -187,12 +219,38 @@ async def test_activity_includes_virtual_transactions(db_session: AsyncSession) 
     assert view.envelopes[0].activity == -80000
 
 
+async def test_activity_sums_multiple_categories_per_envelope(
+    db_session: AsyncSession,
+) -> None:
+    """Activity = sum of all categories linked to the envelope."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    cat1, _ = await _make_category(db_session, user.id, "Groceries", "Food")
+    cat2, _ = await _make_category(db_session, user.id, "Restaurants", "Food")
+    env = await _make_envelope(db_session, user.id, "Food Budget")
+    await _link_category(db_session, env.id, cat1.id)
+    await _link_category(db_session, env.id, cat2.id)
+    account = await _make_account(db_session, user.id)
+
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 1, 5), -4000, cat1.id
+    )
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 1, 12), -1500, cat2.id
+    )
+
+    view = await get_month_budget_view(db_session, "2026-01", user.id)
+
+    assert view.envelopes[0].activity == -5500  # -4000 + -1500
+
+
 async def test_activity_zero_when_no_transactions(db_session: AsyncSession) -> None:
     """Activity = 0 when there are no transactions for the month."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id)
+    await _make_envelope(db_session, user.id, "Savings")
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -205,15 +263,13 @@ async def test_activity_excludes_other_months(db_session: AsyncSession) -> None:
 
     user = await _make_user(db_session)
     cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Misc")
+    await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
     # Transaction in February — should NOT appear in January activity
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 2, 5),
-        amount=-5000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 2, 5), -5000, cat.id
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
@@ -224,23 +280,21 @@ async def test_activity_excludes_other_months(db_session: AsyncSession) -> None:
 # ── Tests: envelope.available ────────────────────────────────────
 
 
-async def test_available_equals_budgeted_minus_activity(
+async def test_available_no_rollover_budgeted_minus_activity(
     db_session: AsyncSession,
 ) -> None:
-    """Available = budgeted - activity for a single month."""
+    """rollover=False: available = budgeted_this_month + activity_this_month."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
     cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Food", rollover=False)
+    await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
-    await _make_allocation(db_session, cat.id, "2026-01", budgeted=10000)
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=10000)
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 1, 15),
-        amount=-3000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 1, 15), -3000, cat.id
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
@@ -248,50 +302,76 @@ async def test_available_equals_budgeted_minus_activity(
     assert view.envelopes[0].available == 7000  # 10000 - 3000
 
 
-async def test_available_is_cumulative_across_months(db_session: AsyncSession) -> None:
-    """Available = Σ(budgeted) - Σ(activity) over all months up to current."""
+async def test_available_no_rollover_does_not_carry_previous_months(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: previous month surplus is NOT included in available."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
     cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Bills", rollover=False)
+    await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
-    # January: budget 100€, spend 30€ → leftover 70€
-    await _make_allocation(db_session, cat.id, "2026-01", budgeted=10000)
+    # January: budget 100€, spend 30€ → surplus 70€ (should NOT carry to Feb)
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=10000)
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 1, 10),
-        amount=-3000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 1, 10), -3000, cat.id
     )
-
-    # February: budget 50€, spend 20€ → leftover 30€
-    await _make_allocation(db_session, cat.id, "2026-02", budgeted=5000)
+    # February: budget 50€, spend 20€
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=5000)
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 2, 10),
-        amount=-2000,
-        category_id=cat.id,
+        db_session, account.id, datetime.date(2026, 2, 10), -2000, cat.id
     )
 
     view = await get_month_budget_view(db_session, "2026-02", user.id)
 
-    # available = (10000 + 5000) - (3000 + 2000) = 10000
-    assert view.envelopes[0].available == 10000
+    # available = 5000 - 2000 = 3000 (no carry-over)
+    assert view.envelopes[0].available == 3000
 
 
-async def test_available_future_months_not_counted(db_session: AsyncSession) -> None:
-    """Allocations/transactions from future months do not affect current available."""
+async def test_available_rollover_cumulative_across_months(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=True: available cumulates all months up to current."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
     cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(
+        db_session, user.id, "Emergency Fund", rollover=True
+    )
+    await _link_category(db_session, env.id, cat.id)
+    account = await _make_account(db_session, user.id)
 
-    await _make_allocation(db_session, cat.id, "2026-01", budgeted=5000)
+    # January: budget 100€, spend 30€ → leftover 70€
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=10000)
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 1, 10), -3000, cat.id
+    )
+    # February: budget 50€, spend 20€ → leftover 30€
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=5000)
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 2, 10), -2000, cat.id
+    )
+
+    view = await get_month_budget_view(db_session, "2026-02", user.id)
+
+    # available = (10000 + 5000) + (-3000 + -2000) = 15000 - 5000 = 10000
+    assert view.envelopes[0].available == 10000
+
+
+async def test_available_future_months_not_counted(db_session: AsyncSession) -> None:
+    """Allocations from future months do not affect current available."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Savings", rollover=True)
+
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=5000)
     # March allocation should NOT be counted when viewing January
-    await _make_allocation(db_session, cat.id, "2026-03", budgeted=9999)
+    await _make_allocation(db_session, env.id, "2026-03", budgeted=9999)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -308,18 +388,14 @@ async def test_to_be_budgeted_income_minus_total_budgeted(
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Expenses")
     account = await _make_account(db_session, user.id)
 
     # Income (positive, no category)
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2026, 1, 1),
-        amount=200000,  # 2000€ income
-        category_id=None,
+        db_session, account.id, datetime.date(2026, 1, 1), 200000
     )
-    await _make_allocation(db_session, cat.id, "2026-01", budgeted=150000)
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=150000)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -331,7 +407,7 @@ async def test_to_be_budgeted_zero_income_no_budget(db_session: AsyncSession) ->
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id)
+    await _make_envelope(db_session, user.id, "Misc")
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -345,17 +421,11 @@ async def test_to_be_budgeted_negative_expenses_not_counted_as_income(
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id)
+    await _make_envelope(db_session, user.id, "Misc")
     acc = await _make_account(db_session, user.id)
 
     # Negative uncategorized transaction (e.g., bank fees) — NOT income
-    await _make_transaction(
-        db_session,
-        acc.id,
-        datetime.date(2026, 1, 5),
-        amount=-1000,
-        category_id=None,
-    )
+    await _make_transaction(db_session, acc.id, datetime.date(2026, 1, 5), -1000)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
@@ -366,22 +436,22 @@ async def test_to_be_budgeted_negative_expenses_not_counted_as_income(
 
 
 async def test_envelopes_scoped_to_user(db_session: AsyncSession) -> None:
-    """Categories from another user do not appear in the budget view."""
+    """Envelopes from another user do not appear in the budget view."""
     from budgie.services.budget import get_month_budget_view
 
     alice = await _make_user(db_session, "alice")
     bob = await _make_user(db_session, "bob")
 
-    await _make_category(db_session, alice.id, "Alice Food")
-    await _make_category(db_session, bob.id, "Bob Transport")
+    await _make_envelope(db_session, alice.id, "Alice Food")
+    await _make_envelope(db_session, bob.id, "Bob Transport")
 
     alice_view = await get_month_budget_view(db_session, "2026-01", alice.id)
     bob_view = await get_month_budget_view(db_session, "2026-01", bob.id)
 
     assert len(alice_view.envelopes) == 1
-    assert alice_view.envelopes[0].category_name == "Alice Food"
+    assert alice_view.envelopes[0].envelope_name == "Alice Food"
     assert len(bob_view.envelopes) == 1
-    assert bob_view.envelopes[0].category_name == "Bob Transport"
+    assert bob_view.envelopes[0].envelope_name == "Bob Transport"
 
 
 async def test_activity_scoped_to_user_accounts(db_session: AsyncSession) -> None:
@@ -391,21 +461,18 @@ async def test_activity_scoped_to_user_accounts(db_session: AsyncSession) -> Non
     alice = await _make_user(db_session, "alice")
     bob = await _make_user(db_session, "bob")
 
-    # Alice has a category
     cat, _ = await _make_category(db_session, alice.id)
-    # Bob has an account that somehow references Alice's category — should not count
+    env = await _make_envelope(db_session, alice.id, "Food")
+    await _link_category(db_session, env.id, cat.id)
+
+    # Bob has an account that references Alice's category — should NOT count
     bob_account = await _make_account(db_session, bob.id, "Bob Checking")
     await _make_transaction(
-        db_session,
-        bob_account.id,
-        datetime.date(2026, 1, 10),
-        amount=-5000,
-        category_id=cat.id,
+        db_session, bob_account.id, datetime.date(2026, 1, 10), -5000, cat.id
     )
 
     alice_view = await get_month_budget_view(db_session, "2026-01", alice.id)
 
-    # Alice's activity should be 0, not -5000 (Bob's transaction)
     assert alice_view.envelopes[0].activity == 0
 
 
@@ -423,8 +490,8 @@ async def test_month_in_response(db_session: AsyncSession) -> None:
     assert view.month == "2026-03"
 
 
-async def test_empty_view_when_no_categories(db_session: AsyncSession) -> None:
-    """Returns empty envelopes list when user has no categories."""
+async def test_empty_view_when_no_envelopes(db_session: AsyncSession) -> None:
+    """Returns empty envelopes list when user has no envelopes."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
@@ -438,10 +505,10 @@ async def test_empty_view_when_no_categories(db_session: AsyncSession) -> None:
 # ── Tests: envelope metadata ─────────────────────────────────────
 
 
-async def test_envelope_contains_category_and_group_names(
+async def test_envelope_contains_name_rollover_and_categories(
     db_session: AsyncSession,
 ) -> None:
-    """Envelope includes denormalized category and group names for the UI."""
+    """EnvelopeLineRead includes name, rollover flag, and categories list."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
@@ -451,36 +518,32 @@ async def test_envelope_contains_category_and_group_names(
     cat = Category(group_id=group.id, name="Electricity", sort_order=0)
     db_session.add(cat)
     await db_session.flush()
+    env = await _make_envelope(db_session, user.id, "Bills", rollover=False)
+    await _link_category(db_session, env.id, cat.id)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
-    envelope = view.envelopes[0]
-    assert envelope.category_name == "Electricity"
-    assert envelope.group_name == "Household"
-    assert envelope.group_id == group.id
+    line = view.envelopes[0]
+    assert line.envelope_name == "Bills"
+    assert line.rollover is False
+    assert len(line.categories) == 1
+    assert line.categories[0].name == "Electricity"
+    assert line.categories[0].group_name == "Household"
 
 
-async def test_hidden_categories_excluded(db_session: AsyncSession) -> None:
-    """Hidden categories are excluded from the budget view."""
+async def test_envelope_with_no_categories_still_shown(
+    db_session: AsyncSession,
+) -> None:
+    """Envelopes with no linked categories still appear in the budget view."""
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    group = CategoryGroup(user_id=user.id, name="Old", sort_order=0)
-    db_session.add(group)
-    await db_session.flush()
-    hidden_cat = Category(
-        group_id=group.id, name="Deprecated", sort_order=0, hidden=True
-    )
-    visible_cat = Category(group_id=group.id, name="Active", sort_order=1, hidden=False)
-    db_session.add(hidden_cat)
-    db_session.add(visible_cat)
-    await db_session.flush()
+    await _make_envelope(db_session, user.id, "Uncategorized Fund")
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
-    names = [e.category_name for e in view.envelopes]
-    assert "Active" in names
-    assert "Deprecated" not in names
+    assert len(view.envelopes) == 1
+    assert view.envelopes[0].categories == []
 
 
 async def test_to_be_budgeted_only_current_month_income(
@@ -490,16 +553,12 @@ async def test_to_be_budgeted_only_current_month_income(
     from budgie.services.budget import get_month_budget_view
 
     user = await _make_user(db_session)
-    await _make_category(db_session, user.id)
+    await _make_envelope(db_session, user.id, "Expenses")
     account = await _make_account(db_session, user.id)
 
     # December income — should NOT be counted in January
     await _make_transaction(
-        db_session,
-        account.id,
-        datetime.date(2025, 12, 31),
-        amount=300000,
-        category_id=None,
+        db_session, account.id, datetime.date(2025, 12, 31), 300000
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)

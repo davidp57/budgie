@@ -101,11 +101,17 @@ export interface TransactionUpdate {
 
 // ── Budget ───────────────────────────────────────────────────────
 
-export interface EnvelopeLine {
-  category_id: number
-  category_name: string
-  group_id: number
+export interface CategoryRef {
+  id: number
+  name: string
   group_name: string
+}
+
+export interface EnvelopeLine {
+  envelope_id: number
+  envelope_name: string
+  rollover: boolean
+  categories: CategoryRef[]
   budgeted: number // centimes
   activity: number // centimes
   available: number // centimes
@@ -118,8 +124,32 @@ export interface MonthBudget {
 }
 
 export interface BudgetLineInput {
-  category_id: number
+  envelope_id: number
   budgeted: number // centimes
+}
+
+// ── Envelopes ────────────────────────────────────────────────────
+
+export interface Envelope {
+  id: number
+  name: string
+  rollover: boolean
+  sort_order: number
+  categories: CategoryRef[]
+}
+
+export interface EnvelopeCreate {
+  name: string
+  rollover?: boolean
+  sort_order?: number
+  category_ids?: number[]
+}
+
+export interface EnvelopeUpdate {
+  name?: string
+  rollover?: boolean
+  sort_order?: number
+  category_ids?: number[]
 }
 
 // ── Import ───────────────────────────────────────────────────────

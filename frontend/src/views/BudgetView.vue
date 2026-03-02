@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { getMonthBudget, setMonthBudget } from '@/api/budget'
+import { createEnvelope } from '@/api/envelopes'
 import { formatAmount, type EnvelopeLine, type MonthBudget } from '@/api/types'
 import MonthPicker from '@/components/MonthPicker.vue'
 import EnvelopeCard from '@/components/EnvelopeCard.vue'
@@ -15,8 +16,14 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 
-// Track edits: category_id → new budgeted value (centimes)
+// Track edits: envelope_id → new budgeted value (centimes)
 const edits = ref<Record<number, number>>({})
+
+// New envelope creation
+const addingEnvelope = ref(false)
+const newEnvelopeName = ref('')
+const newEnvelopeRollover = ref(false)
+const creatingEnvelope = ref(false)
 
 async function load(month: string): Promise<void> {
   loading.value = true
@@ -43,7 +50,7 @@ async function saveAll(): Promise<void> {
   saving.value = true
   try {
     const lines = Object.entries(edits.value).map(([id, budgeted]) => ({
-      category_id: Number(id),
+      envelope_id: Number(id),
       budgeted,
     }))
     if (lines.length > 0) {
@@ -58,19 +65,24 @@ async function saveAll(): Promise<void> {
 }
 
 function onEdit(envelope: EnvelopeLine, value: number): void {
-  edits.value[envelope.category_id] = value
+  edits.value[envelope.envelope_id] = value
 }
 
-// Group envelopes by group_id for display
-function groupedEnvelopes(): Array<{ group_name: string; envelopes: EnvelopeLine[] }> {
-  if (!budget.value) return []
-  const map = new Map<string, EnvelopeLine[]>()
-  for (const env of budget.value.envelopes) {
-    const key = env.group_name
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(env)
+async function submitNewEnvelope(): Promise<void> {
+  const name = newEnvelopeName.value.trim()
+  if (!name) return
+  creatingEnvelope.value = true
+  try {
+    await createEnvelope({ name, rollover: newEnvelopeRollover.value })
+    newEnvelopeName.value = ''
+    newEnvelopeRollover.value = false
+    addingEnvelope.value = false
+    await load(currentMonth.value)
+  } catch {
+    error.value = 'Failed to create envelope.'
+  } finally {
+    creatingEnvelope.value = false
   }
-  return Array.from(map.entries()).map(([group_name, envelopes]) => ({ group_name, envelopes }))
 }
 </script>
 
@@ -109,32 +121,72 @@ function groupedEnvelopes(): Array<{ group_name: string; envelopes: EnvelopeLine
     <div v-else-if="error" class="alert alert-error">{{ error }}</div>
 
     <template v-else-if="budget">
-      <div v-if="budget.envelopes.length === 0" class="text-base-content/50 text-center py-12">
-        No categories yet. Add categories in Settings.
+      <!-- Column headers -->
+      <div
+        v-if="budget.envelopes.length > 0"
+        class="hidden sm:grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 mb-1 text-sm text-base-content/50 font-medium"
+      >
+        <span>Envelope</span>
+        <span class="text-right">Budgeted</span>
+        <span class="text-right">Activity</span>
+        <span class="text-right">Available</span>
       </div>
 
-      <div v-else class="flex flex-col gap-4">
-        <!-- Column headers -->
-        <div class="hidden sm:grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 text-sm text-base-content/50 font-medium">
-          <span>Category</span>
-          <span class="text-right">Budgeted</span>
-          <span class="text-right">Activity</span>
-          <span class="text-right">Available</span>
-        </div>
+      <!-- Envelope list (flat, ordered by sort_order from backend) -->
+      <div class="card bg-base-100 shadow mb-4">
+        <div class="card-body p-3">
+          <EnvelopeCard
+            v-for="envelope in budget.envelopes"
+            :key="envelope.envelope_id"
+            :envelope="envelope"
+            :edited-value="edits[envelope.envelope_id]"
+            @edit="(v) => onEdit(envelope, v)"
+          />
 
-        <div v-for="group in groupedEnvelopes()" :key="group.group_name" class="card bg-base-100 shadow">
-          <div class="card-body p-3">
-            <h3 class="font-semibold text-sm text-base-content/60 uppercase tracking-wide mb-2">
-              {{ group.group_name }}
-            </h3>
-            <EnvelopeCard
-              v-for="envelope in group.envelopes"
-              :key="envelope.category_id"
-              :envelope="envelope"
-              :edited-value="edits[envelope.category_id]"
-              @edit="(v) => onEdit(envelope, v)"
-            />
+          <div
+            v-if="budget.envelopes.length === 0"
+            class="text-base-content/50 text-center py-6 text-sm"
+          >
+            No envelopes yet. Create one to start budgeting.
           </div>
+        </div>
+      </div>
+
+      <!-- Add envelope row -->
+      <div v-if="!addingEnvelope" class="flex justify-start">
+        <button class="btn btn-ghost btn-sm text-primary" @click="addingEnvelope = true">
+          + Add envelope
+        </button>
+      </div>
+
+      <div v-else class="card bg-base-100 shadow p-3">
+        <div class="flex flex-wrap gap-2 items-center">
+          <input
+            v-model="newEnvelopeName"
+            type="text"
+            class="input input-bordered input-sm flex-1 min-w-[160px]"
+            placeholder="Envelope name"
+            autofocus
+            @keyup.enter="submitNewEnvelope"
+            @keyup.escape="addingEnvelope = false"
+          />
+          <label class="flex items-center gap-1 text-sm select-none cursor-pointer">
+            <input
+              v-model="newEnvelopeRollover"
+              type="checkbox"
+              class="checkbox checkbox-xs"
+            />
+            Rollover
+          </label>
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="creatingEnvelope || !newEnvelopeName.trim()"
+            @click="submitNewEnvelope"
+          >
+            <span v-if="creatingEnvelope" class="loading loading-spinner loading-xs"></span>
+            Create
+          </button>
+          <button class="btn btn-ghost btn-sm" @click="addingEnvelope = false">Cancel</button>
         </div>
       </div>
     </template>

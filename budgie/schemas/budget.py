@@ -2,34 +2,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-
-class BudgetAllocationCreate(BaseModel):
-    """Schema for creating or updating a budget allocation.
-
-    Amounts are in integer centimes (e.g., 15000 = 150.00€).
-
-    Attributes:
-        category_id: Category receiving the allocation.
-        month: Budget month in YYYY-MM format.
-        budgeted: Amount budgeted in integer centimes (must be >= 0).
-    """
-
-    category_id: int
-    month: str = Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
-    budgeted: int = Field(..., ge=0)
-
-    @field_validator("month")
-    @classmethod
-    def validate_month_format(cls, v: str) -> str:
-        """Ensure month is in YYYY-MM format.
-
-        Args:
-            v: The month string to validate.
-
-        Returns:
-            The validated month string.
-        """
-        return v
+from budgie.schemas.envelope import CategoryRef
 
 
 class BudgetAllocationRead(BaseModel):
@@ -37,7 +10,7 @@ class BudgetAllocationRead(BaseModel):
 
     Attributes:
         id: Allocation ID.
-        category_id: Category ID.
+        envelope_id: Envelope ID.
         month: Budget month in YYYY-MM format.
         budgeted: Amount budgeted in centimes.
     """
@@ -45,7 +18,7 @@ class BudgetAllocationRead(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
-    category_id: int
+    envelope_id: int
     month: str
     budgeted: int
 
@@ -61,37 +34,51 @@ class BudgetAllocationUpdate(BaseModel):
 
 
 class BudgetLineInput(BaseModel):
-    """A single line in a budget PUT request (category + amount).
+    """A single line in a budget PUT request (envelope + amount).
 
     Attributes:
-        category_id: Category to allocate budget for.
+        envelope_id: Envelope to allocate budget for.
         budgeted: Amount in integer centimes (must be >= 0).
     """
 
-    category_id: int
+    envelope_id: int
     budgeted: int = Field(..., ge=0)
+
+    @field_validator("budgeted")
+    @classmethod
+    def validate_budgeted(cls, v: int) -> int:
+        """Ensure budgeted amount is non-negative.
+
+        Args:
+            v: The budgeted value.
+
+        Returns:
+            The validated value.
+        """
+        return v
 
 
 class EnvelopeLineRead(BaseModel):
-    """Per-category envelope with budgeted, activity, and available amounts.
+    """Per-envelope budget line with budgeted, activity, and available amounts.
 
     Used in the full month budget view returned by GET /api/budget/{month}.
     Amounts are in integer centimes.
 
     Attributes:
-        category_id: Category primary key.
-        category_name: Display name of the category (denormalized for UI).
-        group_id: Parent category group primary key.
-        group_name: Display name of the category group (denormalized for UI).
+        envelope_id: Envelope primary key.
+        envelope_name: Display name of the envelope.
+        rollover: Whether unspent balance carries over to the next month.
+        categories: Categories linked to this envelope.
         budgeted: Amount budgeted for this specific month (centimes).
         activity: Sum of transactions (including virtual) for this month (centimes).
-        available: Cumulative Σ(budgeted - activity) through this month (centimes).
+        available: Available amount (centimes). With rollover=True, cumulative
+            across all months ≤ current. With rollover=False, current month only.
     """
 
-    category_id: int
-    category_name: str
-    group_id: int
-    group_name: str
+    envelope_id: int
+    envelope_name: str
+    rollover: bool
+    categories: list[CategoryRef]
     budgeted: int
     activity: int
     available: int
@@ -107,7 +94,7 @@ class MonthBudgetResponse(BaseModel):
         month: Budget month in YYYY-MM format.
         to_be_budgeted: Income received this month minus total amount budgeted.
             Goal is 0 (every centime assigned to an envelope).
-        envelopes: Per-category envelope list ordered by group/category sort_order.
+        envelopes: Envelope list ordered by sort_order.
     """
 
     month: str

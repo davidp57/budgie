@@ -24,6 +24,7 @@ from budgie.api import (
     categorize,
     category_groups,
     category_rules,
+    envelopes,
     imports,
     payees,
     transactions,
@@ -94,6 +95,7 @@ app.include_router(category_groups.router)
 app.include_router(categories.router)
 app.include_router(payees.router)
 app.include_router(transactions.router)
+app.include_router(envelopes.router)
 app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)

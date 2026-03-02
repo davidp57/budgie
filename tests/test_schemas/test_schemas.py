@@ -229,32 +229,34 @@ def test_split_transaction_create():
 
 
 def test_budget_allocation_create():
-    from budgie.schemas.budget import BudgetAllocationCreate
+    from budgie.schemas.budget import BudgetLineInput
 
-    alloc = BudgetAllocationCreate(category_id=1, month="2026-01", budgeted=15000)
-    assert alloc.budgeted == 15000
+    line = BudgetLineInput(envelope_id=1, budgeted=15000)
+    assert line.budgeted == 15000
 
 
 def test_budget_allocation_invalid_month_format():
-    from budgie.schemas.budget import BudgetAllocationCreate
+    from budgie.schemas.budget import BudgetLineInput
 
+    # envelope_id is required — omitting it must raise ValidationError
     with pytest.raises(ValidationError):
-        BudgetAllocationCreate(category_id=1, month="January 2026", budgeted=15000)
+        BudgetLineInput(budgeted=15000)  # type: ignore[call-arg]
 
 
 def test_budget_allocation_negative_budget():
-    from budgie.schemas.budget import BudgetAllocationCreate
+    from budgie.schemas.budget import BudgetLineInput
 
     # Negative budgeted amounts should be rejected
     with pytest.raises(ValidationError):
-        BudgetAllocationCreate(category_id=1, month="2026-01", budgeted=-100)
+        BudgetLineInput(envelope_id=1, budgeted=-100)
 
 
 def test_budget_allocation_read():
     from budgie.schemas.budget import BudgetAllocationRead
 
-    alloc = BudgetAllocationRead(id=1, category_id=1, month="2026-01", budgeted=15000)
+    alloc = BudgetAllocationRead(id=1, envelope_id=1, month="2026-01", budgeted=15000)
     assert alloc.id == 1
+    assert alloc.envelope_id == 1
 
 
 # ── CategoryRule schemas ─────────────────────────────────────────
