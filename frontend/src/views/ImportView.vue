@@ -220,7 +220,7 @@ function reset(): void {
                 <template v-if="linkDecisions[i] === -1">
                   <span class="text-base-content/30 text-xs italic">dismissed</span>
                 </template>
-                <template v-else-if="linkDecisions[i] > 0">
+                <template v-else-if="(linkDecisions[i] ?? 0) > 0">
                   <span class="badge badge-success badge-sm gap-1">
                     ✓ linked
                     <button

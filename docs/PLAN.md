@@ -72,6 +72,8 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 
 - [x] `Dockerfile` — multi-stage: (1) Node build of Vue → static files, (2) Python slim runtime
 - [x] `docker-compose.yml` — single service, volume for `data/`, port 8080, health check, `mem_limit: 256m`, `restart: unless-stopped`
+- [x] `entrypoint.sh` — PUID/PGID support (LinuxServer.io pattern) via `gosu` for Synology bind-mount permission handling
+- [x] `scripts/backup.sh` — timestamped SQLite backup with configurable retention (default 7 days)
 
 ---
 
@@ -225,9 +227,9 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Error handling: global error toasts, API error interceptor
 - [x] Loading states: skeleton loaders for data fetching
 - [x] Docker build & test on local machine
+- [x] Backup strategy for SQLite DB file (`scripts/backup.sh`)
 - [ ] Deploy to Synology NAS via Docker Compose
 - [ ] Synology reverse proxy configuration (HTTPS)
-- [ ] Backup strategy for SQLite DB file
 
 ---
 

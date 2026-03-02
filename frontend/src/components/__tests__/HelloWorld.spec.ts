@@ -23,14 +23,14 @@ describe('MonthPicker', () => {
   it('emits next month on next-arrow click', async () => {
     const wrapper = mount(MonthPicker, { props: { modelValue: '2024-03' } })
     const buttons = wrapper.findAll('button')
-    await buttons[2].trigger('click') // next button
+    await buttons[2]!.trigger('click') // next button
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['2024-04'])
   })
 
   it('wraps from December to January of next year', async () => {
     const wrapper = mount(MonthPicker, { props: { modelValue: '2024-12' } })
     const buttons = wrapper.findAll('button')
-    await buttons[2].trigger('click')
+    await buttons[2]!.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['2025-01'])
   })
 })

@@ -7,11 +7,12 @@ services:
       - "8080:8000"
     volumes:
       - ./data:/app/data
-    environment:
-      - DATABASE_URL=sqlite+aiosqlite:///app/data/budgie.db
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - UPLOAD_DIR=/app/data/uploads
-      - DEBUG=false
+    env_file:
+      - .env
+    # Optional: set PUID/PGID to match host user (important on Synology NAS)
+    # environment:
+    #   - PUID=1026
+    #   - PGID=100
     mem_limit: 256m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
