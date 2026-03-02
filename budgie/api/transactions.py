@@ -150,6 +150,7 @@ async def get_transaction_endpoint(
 
 
 @router.put("/{transaction_id}", response_model=TransactionRead)
+@router.patch("/{transaction_id}", response_model=TransactionRead)
 async def update_transaction_endpoint(
     transaction_id: int,
     schema: TransactionUpdate,

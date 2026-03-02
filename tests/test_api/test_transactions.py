@@ -312,3 +312,49 @@ async def test_virtual_unlinked_scoped_to_user(
     resp = await client.get("/api/transactions/virtual/unlinked")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ── PATCH (partial update) ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_patch_transaction_category(auth_client: AsyncClient) -> None:
+    """PATCH /transactions/{id} updates category_id."""
+    account_id = await _create_account(auth_client)
+    create_resp = await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-01-15",
+            "amount": -1500,
+            "payee": "Supermarché",
+        },
+    )
+    assert create_resp.status_code == 201
+    txn_id = create_resp.json()["id"]
+
+    # Create a category group + category to assign
+    group_resp = await auth_client.post("/api/category-groups", json={"name": "Food"})
+    assert group_resp.status_code == 201
+    cat_resp = await auth_client.post(
+        "/api/categories",
+        json={"name": "Groceries", "group_id": group_resp.json()["id"]},
+    )
+    assert cat_resp.status_code == 201
+    cat_id = cat_resp.json()["id"]
+
+    patch_resp = await auth_client.patch(
+        f"/api/transactions/{txn_id}",
+        json={"category_id": cat_id},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["category_id"] == cat_id
+
+
+@pytest.mark.asyncio
+async def test_patch_transaction_not_found(auth_client: AsyncClient) -> None:
+    """PATCH on a non-existent transaction returns 404."""
+    resp = await auth_client.patch(
+        "/api/transactions/99999", json={"category_id": None}
+    )
+    assert resp.status_code == 404
