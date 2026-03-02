@@ -1,9 +1,9 @@
 import client from './client'
-import type { ImportResult, ParsePreviewResponse } from './types'
+import type { ImportedTransaction, ImportResult, ParsePreviewResponse } from './types'
 
 /**
- * Upload a bank file for parsing preview.
- * Returns parsed transactions without saving them.
+ * Parse a bank file and return a preview of transactions (not saved).
+ * file_format is sent as a query param, file as multipart.
  */
 export async function parseFile(
   file: File,
@@ -11,27 +11,27 @@ export async function parseFile(
 ): Promise<ParsePreviewResponse> {
   const form = new FormData()
   form.append('file', file)
-  form.append('format', format)
-  const { data } = await client.post<ParsePreviewResponse>('/api/import/preview', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  const { data } = await client.post<ParsePreviewResponse>(
+    `/api/imports/parse?file_format=${encodeURIComponent(format)}`,
+    form,
+    // Let axios set Content-Type: multipart/form-data with boundary automatically.
+    // The global client default of application/json would otherwise break multipart.
+    { headers: { 'Content-Type': undefined } },
+  )
   return data
 }
 
 /**
- * Confirm import of parsed transactions into an account.
+ * Confirm import: persist a list of already-parsed transactions into an account.
+ * Sends JSON body (not multipart).
  */
 export async function confirmImport(
   accountId: number,
-  file: File,
-  format: string,
+  transactions: ImportedTransaction[],
 ): Promise<ImportResult> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('account_id', String(accountId))
-  form.append('format', format)
-  const { data } = await client.post<ImportResult>('/api/import', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const { data } = await client.post<ImportResult>('/api/imports/confirm', {
+    account_id: accountId,
+    transactions,
   })
   return data
 }

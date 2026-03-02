@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useTheme } from '@/composables/useTheme'
+import ToastContainer from '@/components/ToastContainer.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const { theme, toggle: toggleTheme } = useTheme()
 
 function logout(): void {
   auth.logout()
@@ -39,9 +42,20 @@ function logout(): void {
       <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
       <aside class="bg-base-200 min-h-full w-64 flex flex-col">
         <!-- Logo -->
-        <div class="p-4 border-b border-base-300">
-          <span class="text-xl font-bold">🐦 Budgie</span>
-          <p v-if="auth.username" class="text-sm text-base-content/60 mt-1">{{ auth.username }}</p>
+        <div class="p-4 border-b border-base-300 flex items-center justify-between">
+          <div>
+            <span class="text-xl font-bold">🐦 Budgie</span>
+            <p v-if="auth.username" class="text-sm text-base-content/60 mt-1">{{ auth.username }}</p>
+          </div>
+          <!-- Theme toggle -->
+          <button
+            class="btn btn-ghost btn-sm btn-square"
+            :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+            @click="toggleTheme"
+          >
+            <span v-if="theme === 'dark'">☀️</span>
+            <span v-else>🌙</span>
+          </button>
         </div>
 
         <!-- Navigation -->
@@ -101,4 +115,7 @@ function logout(): void {
       </aside>
     </div>
   </div>
+
+  <!-- Global toast notifications -->
+  <ToastContainer />
 </template>

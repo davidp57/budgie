@@ -13,6 +13,8 @@ from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from budgie.api import (
     accounts,
@@ -96,3 +98,27 @@ app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
+
+# ── Production static file serving ──────────────────────────────────────────
+# When the Vue dist folder exists (Docker production build), serve the SPA.
+# In development, Vite runs its own dev server; this block is skipped.
+_FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+if _FRONTEND_DIST.exists():
+    # Serve compiled assets (JS, CSS, icons)
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_FRONTEND_DIST / "assets")),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        """Catch-all route — serves the Vue SPA index for client-side routing.
+
+        Args:
+            full_path: Any unmatched URL path.
+
+        Returns:
+            The Vue dist/index.html file.
+        """
+        return FileResponse(str(_FRONTEND_DIST / "index.html"))
