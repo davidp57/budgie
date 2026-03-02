@@ -203,7 +203,7 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 ### 6.3 — Reusable components / Composants réutilisables
 
 - [x] `EnvelopeCard.vue` — single envelope display with budget/activity/available
-- [ ] `TransactionRow.vue` — single transaction with inline edit
+- [x] `TransactionRow.vue` — single transaction with inline edit
 - [x] `CategoryPicker.vue` — dropdown with grouped categories
 - [x] `FileUploader.vue` — drag & drop file upload
 - [x] `MonthPicker.vue` — month navigation (prev/next/current)
@@ -212,19 +212,19 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ## Phase 7 — Virtual Transactions / Transactions virtuelles
 
-- [ ] Creation form: toggle "virtual" on transaction form, fields: amount, estimated date, category, description
-- [ ] Linking: on import, suggest matching with existing virtual transactions (similar amount + payee + date range). Linked virtual → marked `realized`, real transaction gets `virtual_linked_id`
-- [ ] Display: virtual transactions shown with distinct style (dashed border, forecast icon) in transaction list. Count toward envelope `available` but not real account balance
+- [x] Creation form: toggle "virtual" on transaction form, fields: amount, estimated date, category, description
+- [x] Linking: on import, suggest matching with existing virtual transactions (similar amount + payee + date range). Linked virtual → marked `realized`, real transaction gets `virtual_linked_id`
+- [x] Display: virtual transactions shown with distinct style (dashed border, forecast icon) in transaction list. Count toward envelope `available` but not real account balance
 
 ---
 
 ## Phase 8 — Polish & Deployment / Finitions & Déploiement
 
-- [ ] Dark/light theme support (DaisyUI themes)
-- [ ] PWA manifest for mobile "install" capability
-- [ ] Error handling: global error toasts, API error interceptor
-- [ ] Loading states: skeleton loaders for data fetching
-- [ ] Docker build & test on local machine
+- [x] Dark/light theme support (DaisyUI themes)
+- [x] PWA manifest for mobile "install" capability
+- [x] Error handling: global error toasts, API error interceptor
+- [x] Loading states: skeleton loaders for data fetching
+- [x] Docker build & test on local machine
 - [ ] Deploy to Synology NAS via Docker Compose
 - [ ] Synology reverse proxy configuration (HTTPS)
 - [ ] Backup strategy for SQLite DB file
@@ -257,5 +257,5 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Phase 4 — Categorization / Catégorisation
 - [x] Phase 5 — Budget engine / Moteur de budget
 - [x] Phase 6 — Frontend
-- [ ] Phase 7 — Virtual transactions / Transactions virtuelles
-- [ ] Phase 8 — Polish & deployment / Finitions & déploiement
+- [x] Phase 7 — Virtual transactions / Transactions virtuelles
+- [x] Phase 8 — Polish & deployment / Finitions & déploiement (code complete; deployment pending)

@@ -1,111 +1,63 @@
 # Budgie 🐦
 
-Personal household budget web app — bank import, envelope budgeting, auto-categorization and virtual transactions.
+> **EN** — Personal household budget web app · **FR** — Application web de gestion de budget personnel
+
+Import bank transactions, budget by envelopes, auto-categorize, plan future purchases.  
+Import de transactions bancaires, budget par enveloppes, catégorisation automatique, prévision d'achats.
 
 ---
 
-## What it does
-
-- **Import** bank transactions from CSV, Excel, QIF and OFX files
-- **Categorize** automatically via payee history and configurable rules
-- **Budget** using the envelope method (allocate every centime to a category)
-- **Plan** future purchases with virtual transactions that affect envelope balances without touching real account balances
-- **Self-hosted** — designed for Docker Compose deployment on a home server (Synology NAS)
-
-## Tech stack
-
-| Layer | Technology |
+| Layer / Couche | Technology / Technologie |
 |---|---|
-| Backend | Python 3.12+, FastAPI, SQLAlchemy 2.0 async, Alembic, SQLite |
-| Frontend | Vue.js 3, TypeScript, Vite, Tailwind CSS + DaisyUI |
+| Backend | Python 3.12+, FastAPI, SQLAlchemy 2.0 (async), Alembic, SQLite |
+| Frontend | Vue.js 3, TypeScript, Vite, Tailwind CSS + DaisyUI 5 |
 | Auth | JWT + bcrypt |
-| Deployment | Docker Compose |
+| Deployment / Déploiement | Docker Compose (Synology NAS) |
+| Testing / Tests | pytest + pytest-asyncio · Vitest |
 
-## Quick start (development)
+---
+
+## Quick start / Démarrage rapide
 
 ```bash
 # Backend
 poetry install
-poetry run uvicorn budgie.main:app --reload
+poetry run uvicorn budgie.main:app --reload   # http://localhost:8000
 
-# Frontend
+# Frontend (separate terminal / terminal séparé)
 cd frontend
 npm install
-npm run dev
+npm run dev                                   # http://localhost:5173
 ```
-
-The API is available at `http://localhost:8000`, the frontend at `http://localhost:5173`.
-
-## Running tests
 
 ```bash
-# Backend (pytest + coverage)
-poetry run pytest --cov=budgie
+# All tests / Tous les tests
+poetry run pytest
+cd frontend && npm run test:unit -- --run
 
-# Frontend
-cd frontend && npm run test
+# Lint + type check / Lint + vérification de types
+poetry run ruff check budgie/ tests/
+poetry run mypy budgie/
+cd frontend && npx tsc --noEmit
 ```
+
+## Docker
+
+```bash
+docker compose up --build     # build + run
+docker compose up -d          # detached / en arrière-plan
+```
+
+Production port: **8080** → `http://localhost:8080`
+
+---
 
 ## Documentation
 
-Detailed documentation is in [`docs/`](docs/):
-
-- [`docs/PLAN.md`](docs/PLAN.md) — full project plan and feature roadmap
-
----
-
----
-
-# Budgie 🐦
-
-Application web de gestion de budget personnel — import bancaire, budget par enveloppes, catégorisation automatique et transactions virtuelles.
-
----
-
-## Fonctionnalités
-
-- **Import** de transactions bancaires depuis des fichiers CSV, Excel, QIF et OFX
-- **Catégorisation** automatique via l'historique des bénéficiaires et des règles configurables
-- **Budget** par enveloppes (chaque centime est affecté à une catégorie)
-- **Prévision** d'achats futurs via des transactions virtuelles qui impactent les enveloppes sans affecter les soldes réels des comptes
-- **Auto-hébergé** — conçu pour un déploiement Docker Compose sur serveur domestique (NAS Synology)
-
-## Stack technique
-
-| Couche | Technologie |
+| Document | Description |
 |---|---|
-| Backend | Python 3.12+, FastAPI, SQLAlchemy 2.0 async, Alembic, SQLite |
-| Frontend | Vue.js 3, TypeScript, Vite, Tailwind CSS + DaisyUI |
-| Auth | JWT + bcrypt |
-| Déploiement | Docker Compose |
-
-## Démarrage rapide (développement)
-
-```bash
-# Backend
-poetry install
-poetry run uvicorn budgie.main:app --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-L'API est disponible sur `http://localhost:8000`, le frontend sur `http://localhost:5173`.
-
-## Lancer les tests
-
-```bash
-# Backend (pytest + couverture)
-poetry run pytest --cov=budgie
-
-# Frontend
-cd frontend && npm run test
-```
-
-## Documentation
-
-La documentation détaillée se trouve dans [`docs/`](docs/) :
-
-- [`docs/PLAN.md`](docs/PLAN.md) — plan complet du projet et feuille de route
+| [docs/USER.md](docs/USER.md) | End-user guide (English) |
+| [docs/UTILISATEUR.md](docs/UTILISATEUR.md) | Guide utilisateur (Français) |
+| [docs/TECHNICAL.md](docs/TECHNICAL.md) | Technical / developer reference (English) |
+| [docs/TECHNIQUE.md](docs/TECHNIQUE.md) | Référence technique développeur (Français) |
+| [docs/PLAN.md](docs/PLAN.md) | Project plan & roadmap / Plan du projet & feuille de route |
