@@ -170,16 +170,16 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ### 5.1 — Envelope calculations / Calculs d'enveloppes
 
-- [ ] `get_month_budget(month)` — for each category:
+- [x] `get_month_budget_view(month)` — for each category:
   - `budgeted`: amount from `BudgetAllocation` for this month
   - `activity`: sum of transactions (incl. virtual) for this month in this category
   - `available`: cumulative sum (`Σ budgeted - Σ spending` over all months ≤ current)
-- [ ] `get_to_be_budgeted(month)` — income received − total budgeted. Goal = 0
-- [ ] Virtual transactions (`is_virtual=True`) reduce envelope `available` but NOT real account balance
+- [x] `get_to_be_budgeted(month)` — income received − total budgeted. Goal = 0
+- [x] Virtual transactions (`is_virtual=True`) reduce envelope `available` but NOT real account balance
 
 ### 5.2 — API endpoint
 
-- [ ] `GET /api/budget/{month}` — returns full month view with all envelopes + to_be_budgeted
+- [x] `GET /api/budget/{month}` — returns full month view with all envelopes + to_be_budgeted
 
 ---
 
@@ -187,26 +187,26 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ### 6.1 — Core setup / Setup de base
 
-- [ ] API client module (`src/api/client.ts`) — axios instance with JWT interceptor
-- [ ] Auth store (Pinia) + login page (`LoginView.vue`)
-- [ ] App layout: sidebar/navbar, responsive menu (DaisyUI drawer)
-- [ ] Vue Router with auth guard
+- [x] API client module (`src/api/client.ts`) — axios instance with JWT interceptor
+- [x] Auth store (Pinia) + login page (`LoginView.vue`)
+- [x] App layout: sidebar/navbar, responsive menu (DaisyUI drawer)
+- [x] Vue Router with auth guard
 
 ### 6.2 — Main views / Vues principales
 
-- [ ] **Dashboard** (`DashboardView.vue`) — month summary, account balances, alerts (negative envelopes), recent transactions
-- [ ] **Transactions** (`TransactionsView.vue`) — paginated table, filters (account, category, date range, virtual/real), inline category editing
-- [ ] **Budget** (`BudgetView.vue`) — monthly grid, editable `budgeted` amounts, `activity`/`available` display with color coding (green/orange/red), month navigation, "to be budgeted" bar
-- [ ] **Import** (`ImportView.vue`) — file upload (drag & drop), format selection, parsed transaction preview table, auto-filled category suggestions, confirm/skip per row, duplicate indicator
-- [ ] **Settings** (`SettingsView.vue`) — accounts CRUD, category groups/categories CRUD, categorization rules CRUD, password change
+- [x] **Dashboard** (`DashboardView.vue`) — month summary, account balances, alerts (negative envelopes), recent transactions
+- [x] **Transactions** (`TransactionsView.vue`) — paginated table, filters (account, category, date range, virtual/real), inline category editing
+- [x] **Budget** (`BudgetView.vue`) — monthly grid, editable `budgeted` amounts, `activity`/`available` display with color coding (green/orange/red), month navigation, "to be budgeted" bar
+- [x] **Import** (`ImportView.vue`) — file upload (drag & drop), format selection, parsed transaction preview table, auto-filled category suggestions, confirm/skip per row, duplicate indicator
+- [x] **Settings** (`SettingsView.vue`) — accounts CRUD, category groups/categories CRUD, categorization rules CRUD, password change
 
 ### 6.3 — Reusable components / Composants réutilisables
 
-- [ ] `EnvelopeCard.vue` — single envelope display with budget/activity/available
+- [x] `EnvelopeCard.vue` — single envelope display with budget/activity/available
 - [ ] `TransactionRow.vue` — single transaction with inline edit
-- [ ] `CategoryPicker.vue` — dropdown with grouped categories
-- [ ] `FileUploader.vue` — drag & drop file upload
-- [ ] `MonthPicker.vue` — month navigation (prev/next/current)
+- [x] `CategoryPicker.vue` — dropdown with grouped categories
+- [x] `FileUploader.vue` — drag & drop file upload
+- [x] `MonthPicker.vue` — month navigation (prev/next/current)
 
 ---
 
@@ -250,12 +250,12 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Plan finalized / Plan finalisé
 - [x] Stack decided / Stack décidée
 - [x] Copilot instructions written / Instructions Copilot rédigées
-- [ ] Phase 0 — Foundations / Fondations
-- [ ] Phase 1 — Data model / Modèle de données
-- [ ] Phase 2 — Auth & API
-- [ ] Phase 3 — Import
-- [ ] Phase 4 — Categorization / Catégorisation
-- [ ] Phase 5 — Budget engine / Moteur de budget
-- [ ] Phase 6 — Frontend
+- [x] Phase 0 — Foundations / Fondations
+- [x] Phase 1 — Data model / Modèle de données
+- [x] Phase 2 — Auth & API
+- [x] Phase 3 — Import
+- [x] Phase 4 — Categorization / Catégorisation
+- [x] Phase 5 — Budget engine / Moteur de budget
+- [x] Phase 6 — Frontend
 - [ ] Phase 7 — Virtual transactions / Transactions virtuelles
 - [ ] Phase 8 — Polish & deployment / Finitions & déploiement
