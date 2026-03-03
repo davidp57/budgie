@@ -58,6 +58,20 @@ const availableClass = computed(() =>
 const categoryLabel = computed(() =>
   props.envelope.categories.map((c) => c.name).join(' · '),
 )
+
+// ── Envelope fill visual ──────────────────────────────────────────
+/** Ratio of envelope fill: 0–1. Negative available → 0 (shown red separately). */
+const fillRatio = computed<number>(() => {
+  const budgeted = props.editedValue ?? props.envelope.budgeted
+  if (budgeted <= 0) return props.envelope.available > 0 ? 1 : 0
+  return Math.max(0, Math.min(1, props.envelope.available / budgeted))
+})
+
+const fillColor = computed<string>(() =>
+  props.envelope.available < 0 ? '#f87272' : '#85BB65',
+)
+
+const clipId = computed(() => `env-clip-${props.envelope.envelope_id}`)
 </script>
 
 <template>
@@ -66,18 +80,60 @@ const categoryLabel = computed(() =>
     :class="selected ? 'bg-primary/10' : 'hover:bg-base-200/50'"
     @click="emit('select', envelope.envelope_id)"
   >
-    <!-- Envelope name + rollover badge + categories -->
-    <div class="min-w-0">
-      <div class="flex items-center gap-1">
-        <span class="text-sm font-medium truncate">{{ envelope.envelope_name }}</span>
-        <span
-          v-if="envelope.rollover"
-          class="badge badge-xs badge-info"
-          title="Rollover: unspent balance carries forward"
-        >↻</span>
-      </div>
-      <div v-if="categoryLabel" class="text-xs text-base-content/40 truncate">
-        {{ categoryLabel }}
+    <!-- Envelope name + SVG icon + rollover badge + categories -->
+    <div class="min-w-0 flex items-center gap-2">
+      <!-- Envelope silhouette SVG -->
+      <svg
+        viewBox="0 0 40 30"
+        width="36"
+        height="27"
+        class="shrink-0"
+        aria-hidden="true"
+      >
+        <defs>
+          <clipPath :id="clipId">
+            <path d="M 1 8 L 20 20 L 39 8 L 39 29 L 1 29 Z" />
+          </clipPath>
+        </defs>
+        <!-- Green fill (clipped to envelope shape, rises from bottom) -->
+        <rect
+          x="1"
+          :y="8 + 21 * (1 - fillRatio)"
+          width="38"
+          :height="21 * fillRatio"
+          :fill="fillColor"
+          :clip-path="`url(#${clipId})`"
+        />
+        <!-- Envelope outline -->
+        <path
+          d="M 1 8 L 20 20 L 39 8 L 39 29 L 1 29 Z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          class="text-base-content/70"
+        />
+        <!-- Flap fold line -->
+        <path
+          d="M 1 8 L 20 20 L 39 8"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1"
+          class="text-base-content/40"
+        />
+      </svg>
+
+      <div class="min-w-0">
+        <div class="flex items-center gap-1">
+          <span class="text-sm font-medium truncate">{{ envelope.envelope_name }}</span>
+          <span
+            v-if="envelope.rollover"
+            class="badge badge-xs badge-info"
+            title="Rollover: unspent balance carries forward"
+          >↻</span>
+        </div>
+        <div v-if="categoryLabel" class="text-xs text-base-content/40 truncate">
+          {{ categoryLabel }}
+        </div>
       </div>
     </div>
 
@@ -89,17 +145,17 @@ const categoryLabel = computed(() =>
           type="number"
           step="0.01"
           class="input input-xs input-bordered w-24 text-right"
+          autofocus
           @blur="commitEdit"
           @keyup.enter="commitEdit"
           @keyup.escape="editing = false"
-          autofocus
         />
       </template>
       <template v-else>
         <button
           class="btn btn-ghost btn-xs tabular-nums font-normal"
-          @click="startEdit"
           :title="'Click to edit budgeted amount'"
+          @click.stop="startEdit"
         >
           {{ formatAmount(editedValue ?? envelope.budgeted) }}
         </button>
