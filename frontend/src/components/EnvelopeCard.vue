@@ -72,6 +72,9 @@ const fillColor = computed<string>(() =>
 )
 
 const clipId = computed(() => `env-clip-${props.envelope.envelope_id}`)
+
+/** Y position of fill rect top edge (fills from bottom) */
+const fillY = computed(() => 44 - 42 * fillRatio.value)
 </script>
 
 <template>
@@ -82,44 +85,73 @@ const clipId = computed(() => `env-clip-${props.envelope.envelope_id}`)
   >
     <!-- Envelope name + SVG icon + rollover badge + categories -->
     <div class="min-w-0 flex items-center gap-2">
-      <!-- Envelope silhouette SVG -->
+      <!-- Envelope SVG — realistic front-view sealed envelope -->
       <svg
-        viewBox="0 0 40 30"
-        width="36"
-        height="27"
+        viewBox="0 0 64 44"
+        width="58"
+        height="40"
         class="shrink-0"
         aria-hidden="true"
       >
         <defs>
+          <!-- Clip to envelope rectangle body -->
           <clipPath :id="clipId">
-            <path d="M 1 8 L 20 20 L 39 8 L 39 29 L 1 29 Z" />
+            <rect x="1" y="1" width="62" height="42" rx="2" />
           </clipPath>
         </defs>
-        <!-- Green fill (clipped to envelope shape, rises from bottom) -->
+
+        <!-- Fill: rises from bottom, clipped to body -->
         <rect
           x="1"
-          :y="8 + 21 * (1 - fillRatio)"
-          width="38"
-          :height="21 * fillRatio"
+          :y="fillY"
+          width="62"
+          :height="42 * fillRatio"
           :fill="fillColor"
           :clip-path="`url(#${clipId})`"
+          opacity="0.85"
         />
-        <!-- Envelope outline -->
-        <path
-          d="M 1 8 L 20 20 L 39 8 L 39 29 L 1 29 Z"
+
+        <!-- Body outline -->
+        <rect
+          x="1" y="1" width="62" height="42" rx="2"
           fill="none"
           stroke="currentColor"
           stroke-width="1.5"
           class="text-base-content/70"
         />
-        <!-- Flap fold line -->
+
+        <!-- Top flap: triangle from top-left → top-right → center -->
         <path
-          d="M 1 8 L 20 20 L 39 8"
+          d="M 1 1 L 63 1 L 32 23 Z"
           fill="none"
           stroke="currentColor"
           stroke-width="1"
-          class="text-base-content/40"
+          class="text-base-content/50"
         />
+
+        <!-- Bottom-left fold line to center -->
+        <line x1="1" y1="43" x2="32" y2="23"
+          stroke="currentColor" stroke-width="0.8"
+          class="text-base-content/30" />
+        <!-- Bottom-right fold line to center -->
+        <line x1="63" y1="43" x2="32" y2="23"
+          stroke="currentColor" stroke-width="0.8"
+          class="text-base-content/30" />
+
+        <!-- Stamp (top-right corner) -->
+        <rect x="50" y="5" width="10" height="13" rx="1"
+          fill="none" stroke="currentColor" stroke-width="1"
+          class="text-base-content/35" />
+        <rect x="52" y="7" width="6" height="9" rx="0.5"
+          fill="currentColor" opacity="0.08" />
+
+        <!-- Address lines (bottom-left area) -->
+        <line x1="7" y1="30" x2="41" y2="30"
+          stroke="currentColor" stroke-width="1"
+          class="text-base-content/25" />
+        <line x1="7" y1="35" x2="32" y2="35"
+          stroke="currentColor" stroke-width="1"
+          class="text-base-content/20" />
       </svg>
 
       <div class="min-w-0">
