@@ -53,14 +53,31 @@ function categoryName(id: number | null): string {
 </script>
 
 <template>
-  <tr :class="txn.is_virtual ? 'opacity-60 border-dashed' : ''">
+  <tr class="group" :class="txn.is_virtual ? 'opacity-60 border-dashed' : ''">
     <td class="tabular-nums">
       <span v-if="txn.is_virtual" class="mr-1" title="Forecast">⏳</span>{{ txn.date }}
     </td>
     <td :class="txn.amount < 0 ? 'text-error' : 'text-success'" class="tabular-nums">
       {{ formatAmount(txn.amount) }}
     </td>
-    <td class="text-base-content/70 max-w-xs truncate">{{ txn.memo ?? '—' }}</td>
+    <td class="max-w-xs">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="truncate text-base-content/70">{{ txn.memo ?? '—' }}</span>
+        <a
+          v-if="txn.memo"
+          :href="`https://duckduckgo.com/?q=${encodeURIComponent(txn.memo)}`"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity btn btn-ghost btn-xs p-0.5"
+          title="Search on DuckDuckGo"
+          @click.stop
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </a>
+      </div>
+    </td>
 
     <!-- Inline category edit -->
     <td>

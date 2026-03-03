@@ -32,7 +32,7 @@ function logout(): void {
       </div>
 
       <!-- Main content area -->
-      <main class="flex-1 p-4 lg:p-6">
+      <main class="flex-1 p-4 lg:p-8">
         <RouterView />
       </main>
     </div>

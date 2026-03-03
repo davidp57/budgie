@@ -177,7 +177,7 @@ async function saveVirtualTransaction(): Promise<void> {
     <div v-if="error" class="alert alert-error mb-4">{{ error }}</div>
 
     <div class="card bg-base-100 shadow overflow-x-auto">
-      <table class="table table-sm">
+      <table class="table">
         <thead>
           <tr>
             <th>Date</th>

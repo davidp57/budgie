@@ -127,4 +127,18 @@ describe('TransactionRow', () => {
     await flushPromises()
     expect(wrapper.emitted('error')).toBeTruthy()
   })
+
+  it('shows DuckDuckGo search link when memo is present', () => {
+    const wrapper = mount(TransactionRow, { props: { txn: baseTxn, groups } })
+    const link = wrapper.find('a[target="_blank"]')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toContain('duckduckgo.com')
+    expect(link.attributes('href')).toContain(encodeURIComponent('Grocery run'))
+  })
+
+  it('does not show search link when memo is null', () => {
+    const noMemo = { ...baseTxn, memo: null }
+    const wrapper = mount(TransactionRow, { props: { txn: noMemo, groups } })
+    expect(wrapper.find('a[target="_blank"]').exists()).toBe(false)
+  })
 })
