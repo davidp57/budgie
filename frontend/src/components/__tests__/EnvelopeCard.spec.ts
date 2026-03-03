@@ -50,8 +50,9 @@ describe('EnvelopeCard', () => {
 
   it('emits edit event with centimes after blur', async () => {
     const wrapper = mount(EnvelopeCard, { props: { envelope: baseEnvelope } })
-    await wrapper.find('button.btn-ghost').trigger('click') // open edit
-    const input = wrapper.find('input')
+    // The budgeted-amount button has class tabular-nums; the ⋮ menu button does not
+    await wrapper.find('button.btn-ghost.tabular-nums').trigger('click') // open edit
+    const input = wrapper.find('input[type="number"]')
     await input.setValue('100.50')
     await input.trigger('blur')
     expect(wrapper.emitted('edit')?.[0]).toEqual([10050])

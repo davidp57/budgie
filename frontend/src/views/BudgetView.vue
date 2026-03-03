@@ -1,9 +1,16 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getMonthBudget, setMonthBudget } from '@/api/budget'
-import { createEnvelope } from '@/api/envelopes'
-import { listTransactions } from '@/api/transactions'
-import { formatAmount, type EnvelopeLine, type MonthBudget, type Transaction } from '@/api/types'
+import { createEnvelope, updateEnvelope } from '@/api/envelopes'
+import { createTransaction, listTransactions } from '@/api/transactions'
+import { listAccounts } from '@/api/accounts'
+import {
+  formatAmount,
+  type Account,
+  type EnvelopeLine,
+  type MonthBudget,
+  type Transaction,
+} from '@/api/types'
 import MonthPicker from '@/components/MonthPicker.vue'
 import EnvelopeCard from '@/components/EnvelopeCard.vue'
 
@@ -105,7 +112,10 @@ async function load(month: string): Promise<void> {
   await loadTransactions()
 }
 
-onMounted(() => load(currentMonth.value))
+onMounted(async () => {
+  accounts.value = await listAccounts()
+  await load(currentMonth.value)
+})
 
 // Reload transactions when envelope selection or month changes
 watch(activeCategoryIds, () => loadTransactions())
@@ -158,6 +168,102 @@ async function submitNewEnvelope(): Promise<void> {
 onUnmounted(() => {
   isDragging.value = false
 })
+
+// ── Accounts (for add-transaction modal) ────────────────────────
+const accounts = ref<Account[]>([])
+
+// ── Add virtual transaction modal ───────────────────────────────
+const addTxnDialogRef = ref<HTMLDialogElement | null>(null)
+const addTxnEnvelope = ref<EnvelopeLine | null>(null)
+const addTxnForm = ref({
+  accountId: 0,
+  date: today.toISOString().slice(0, 10),
+  amountEuros: '',
+  memo: '',
+  categoryId: null as number | null,
+})
+const addTxnSaving = ref(false)
+const addTxnError = ref('')
+
+function onAddTransaction(envelopeId: number): void {
+  if (!budget.value) return
+  const env = budget.value.envelopes.find((e) => e.envelope_id === envelopeId)
+  if (!env) return
+  addTxnEnvelope.value = env
+  addTxnForm.value = {
+    accountId: accounts.value[0]?.id ?? 0,
+    date: today.toISOString().slice(0, 10),
+    amountEuros: '',
+    memo: '',
+    categoryId: env.categories[0]?.id ?? null,
+  }
+  addTxnError.value = ''
+  addTxnDialogRef.value?.showModal()
+}
+
+async function submitAddTxn(): Promise<void> {
+  const euros = parseFloat(String(addTxnForm.value.amountEuros).replace(',', '.'))
+  if (!addTxnForm.value.accountId || isNaN(euros) || euros === 0) {
+    addTxnError.value = 'Account and amount are required.'
+    return
+  }
+  addTxnSaving.value = true
+  addTxnError.value = ''
+  try {
+    await createTransaction({
+      account_id: addTxnForm.value.accountId,
+      date: addTxnForm.value.date,
+      amount: -Math.abs(Math.round(euros * 100)), // expenses are negative
+      memo: addTxnForm.value.memo.trim() || null,
+      category_id: addTxnForm.value.categoryId,
+      is_virtual: true,
+    })
+    addTxnDialogRef.value?.close()
+    await load(currentMonth.value)
+  } catch {
+    addTxnError.value = 'Failed to add transaction.'
+  } finally {
+    addTxnSaving.value = false
+  }
+}
+
+// ── Edit envelope modal ─────────────────────────────────────────
+const editEnvDialogRef = ref<HTMLDialogElement | null>(null)
+const editEnvTarget = ref<EnvelopeLine | null>(null)
+const editEnvForm = ref({ name: '', rollover: false })
+const editEnvSaving = ref(false)
+const editEnvError = ref('')
+
+function onEditEnvelope(envelopeId: number): void {
+  if (!budget.value) return
+  const env = budget.value.envelopes.find((e) => e.envelope_id === envelopeId)
+  if (!env) return
+  editEnvTarget.value = env
+  editEnvForm.value = { name: env.envelope_name, rollover: env.rollover }
+  editEnvError.value = ''
+  editEnvDialogRef.value?.showModal()
+}
+
+async function submitEditEnv(): Promise<void> {
+  if (!editEnvTarget.value || !editEnvForm.value.name.trim()) {
+    editEnvError.value = 'Name is required.'
+    return
+  }
+  editEnvSaving.value = true
+  editEnvError.value = ''
+  try {
+    await updateEnvelope(editEnvTarget.value.envelope_id, {
+      name: editEnvForm.value.name.trim(),
+      rollover: editEnvForm.value.rollover,
+    })
+    editEnvDialogRef.value?.close()
+    await load(currentMonth.value)
+  } catch {
+    editEnvError.value = 'Failed to update envelope.'
+  } finally {
+    editEnvSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -233,6 +339,8 @@ onUnmounted(() => {
               :selected="selectedEnvelopeId === envelope.envelope_id"
               @edit="(v) => onEdit(envelope, v)"
               @select="selectEnvelope"
+              @add-transaction="onAddTransaction"
+              @edit-envelope="onEditEnvelope"
             />
             <div
               v-if="budget.envelopes.length === 0"
@@ -340,5 +448,127 @@ onUnmounted(() => {
         No transactions for this period.
       </div>
     </div>
+
+    <!-- ── Add virtual transaction modal ── -->
+    <dialog ref="addTxnDialogRef" class="modal">
+      <div class="modal-box max-w-sm">
+        <h3 class="font-bold text-lg mb-4">Add planned transaction</h3>
+        <p v-if="addTxnEnvelope" class="text-sm text-base-content/60 mb-4">
+          Envelope: <span class="font-medium text-base-content">{{ addTxnEnvelope.envelope_name }}</span>
+        </p>
+
+        <div class="flex flex-col gap-3">
+          <!-- Account -->
+          <label class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Account</span></div>
+            <select v-model.number="addTxnForm.accountId" class="select select-bordered select-sm">
+              <option value="0" disabled>Select account…</option>
+              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
+                {{ acc.name }}
+              </option>
+            </select>
+          </label>
+
+          <!-- Date -->
+          <label class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Date</span></div>
+            <input v-model="addTxnForm.date" type="date" class="input input-bordered input-sm" />
+          </label>
+
+          <!-- Amount -->
+          <label class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Amount (€)</span></div>
+            <input
+              v-model="addTxnForm.amountEuros"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              class="input input-bordered input-sm"
+            />
+          </label>
+
+          <!-- Category -->
+          <label v-if="addTxnEnvelope && addTxnEnvelope.categories.length > 1" class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Category</span></div>
+            <select v-model.number="addTxnForm.categoryId" class="select select-bordered select-sm">
+              <option v-for="cat in addTxnEnvelope.categories" :key="cat.id" :value="cat.id">
+                {{ cat.name }}
+              </option>
+            </select>
+          </label>
+
+          <!-- Memo -->
+          <label class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Memo (optional)</span></div>
+            <input
+              v-model="addTxnForm.memo"
+              type="text"
+              placeholder="Description…"
+              class="input input-bordered input-sm"
+              @keyup.enter="submitAddTxn"
+            />
+          </label>
+
+          <p v-if="addTxnError" class="text-error text-sm">{{ addTxnError }}</p>
+        </div>
+
+        <div class="modal-action mt-4">
+          <button class="btn btn-ghost btn-sm" @click="addTxnDialogRef?.close()">Cancel</button>
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="addTxnSaving"
+            @click="submitAddTxn"
+          >
+            <span v-if="addTxnSaving" class="loading loading-spinner loading-xs"></span>
+            Add
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- ── Edit envelope modal ── -->
+    <dialog ref="editEnvDialogRef" class="modal">
+      <div class="modal-box max-w-sm">
+        <h3 class="font-bold text-lg mb-4">Edit envelope</h3>
+
+        <div class="flex flex-col gap-3">
+          <!-- Name -->
+          <label class="form-control w-full">
+            <div class="label py-0.5"><span class="label-text text-xs">Name</span></div>
+            <input
+              v-model="editEnvForm.name"
+              type="text"
+              class="input input-bordered input-sm"
+              autofocus
+              @keyup.enter="submitEditEnv"
+              @keyup.escape="editEnvDialogRef?.close()"
+            />
+          </label>
+
+          <!-- Rollover -->
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input v-model="editEnvForm.rollover" type="checkbox" class="checkbox checkbox-sm" />
+            <span class="text-sm">Rollover unspent balance each month</span>
+          </label>
+
+          <p v-if="editEnvError" class="text-error text-sm">{{ editEnvError }}</p>
+        </div>
+
+        <div class="modal-action mt-4">
+          <button class="btn btn-ghost btn-sm" @click="editEnvDialogRef?.close()">Cancel</button>
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="editEnvSaving"
+            @click="submitEditEnv"
+          >
+            <span v-if="editEnvSaving" class="loading loading-spinner loading-xs"></span>
+            Save
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
   </div>
 </template>
