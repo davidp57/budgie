@@ -1,13 +1,17 @@
 import client from './client'
 import type { Transaction, TransactionCreate, TransactionUpdate } from './types'
 
-export async function listTransactions(
-  accountId?: number,
-  isVirtual?: boolean,
-): Promise<Transaction[]> {
+export async function listTransactions(options?: {
+  accountId?: number
+  isVirtual?: boolean
+  month?: string
+  categoryIds?: number[]
+}): Promise<Transaction[]> {
   const params: Record<string, unknown> = {}
-  if (accountId !== undefined) params.account_id = accountId
-  if (isVirtual !== undefined) params.is_virtual = isVirtual
+  if (options?.accountId !== undefined) params.account_id = options.accountId
+  if (options?.isVirtual !== undefined) params.is_virtual = options.isVirtual
+  if (options?.month !== undefined) params.month = options.month
+  if (options?.categoryIds?.length) params.category_ids = options.categoryIds
   const { data } = await client.get<Transaction[]>('/api/transactions', { params })
   return data
 }

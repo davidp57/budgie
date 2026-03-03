@@ -49,7 +49,7 @@ async function load(): Promise<void> {
     const [acc, grps, txns] = await Promise.all([
       listAccounts(),
       listGroupsWithCategories(),
-      listTransactions(selectedAccountId.value ?? undefined, isVirtual),
+      listTransactions({ accountId: selectedAccountId.value ?? undefined, isVirtual }),
     ])
     accounts.value = acc
     groups.value = grps

@@ -1,6 +1,6 @@
 """Transaction CRUD service."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.models.account import Account
@@ -13,6 +13,8 @@ async def get_transactions(
     user_id: int,
     account_id: int | None = None,
     is_virtual: bool | None = None,
+    month: str | None = None,
+    category_ids: list[int] | None = None,
 ) -> list[Transaction]:
     """Return transactions for a user, optionally filtered by account or type.
 
@@ -21,6 +23,10 @@ async def get_transactions(
         user_id: Owner user ID (for authorization via account ownership).
         account_id: If provided, filter to this account only.
         is_virtual: If provided, filter to virtual or real transactions only.
+        month: If provided, filter to transactions in this YYYY-MM month only.
+        category_ids: If provided, filter to transactions whose category_id is
+            in this list. Pass an empty list to return uncategorised transactions
+            only.
 
     Returns:
         List of Transaction instances ordered by date descending.
@@ -35,6 +41,10 @@ async def get_transactions(
         query = query.where(Transaction.account_id == account_id)
     if is_virtual is not None:
         query = query.where(Transaction.is_virtual == is_virtual)
+    if month is not None:
+        query = query.where(func.strftime("%Y-%m", Transaction.date) == month)
+    if category_ids is not None:
+        query = query.where(Transaction.category_id.in_(category_ids))
 
     result = await db.execute(query)
     return list(result.scalars().all())

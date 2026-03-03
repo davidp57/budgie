@@ -1,6 +1,8 @@
 """Transactions CRUD router."""
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.schemas.transaction import (
@@ -86,6 +88,8 @@ async def list_transactions(
     current_user: CurrentUser,
     account_id: int | None = None,
     is_virtual: bool | None = None,
+    month: str | None = None,
+    category_ids: Annotated[list[int] | None, Query()] = None,
 ) -> list[TransactionRead]:
     """List transactions for the authenticated user.
 
@@ -94,11 +98,17 @@ async def list_transactions(
         current_user: JWT-authenticated user.
         account_id: Optional account filter.
         is_virtual: Optional filter — True for virtual only, False for real only.
+        month: Optional YYYY-MM month filter.
+        category_ids: Optional list of category IDs to filter by (repeatable
+            query param: ?category_ids=1&category_ids=2).
 
     Returns:
         List of transaction data.
     """
-    txns = await get_transactions(db, current_user.id, account_id, is_virtual)
+    cat_filter: list[int] | None = category_ids or None
+    txns = await get_transactions(
+        db, current_user.id, account_id, is_virtual, month, cat_filter
+    )
     return [TransactionRead.model_validate(t) for t in txns]
 
 

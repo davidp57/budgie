@@ -15,10 +15,12 @@ import { formatAmount, type EnvelopeLine } from '@/api/types'
 const props = defineProps<{
   envelope: EnvelopeLine
   editedValue?: number
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
   edit: [value: number]
+  select: [envelopeId: number]
 }>()
 
 const editing = ref(false)
@@ -60,7 +62,9 @@ const categoryLabel = computed(() =>
 
 <template>
   <div
-    class="grid grid-cols-[1fr_120px_120px_120px] gap-2 items-center py-1 border-b border-base-300/50 last:border-0"
+    class="grid grid-cols-[1fr_120px_120px_120px] gap-2 items-center py-1 border-b border-base-300/50 last:border-0 cursor-pointer rounded transition-colors"
+    :class="selected ? 'bg-primary/10' : 'hover:bg-base-200/50'"
+    @click="emit('select', envelope.envelope_id)"
   >
     <!-- Envelope name + rollover badge + categories -->
     <div class="min-w-0">
