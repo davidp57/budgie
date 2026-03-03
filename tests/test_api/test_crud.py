@@ -382,3 +382,29 @@ async def test_get_budget_month_to_be_budgeted(auth_client: AsyncClient) -> None
     response = await auth_client.get("/api/budget/2026-01")
     assert response.status_code == 200
     assert response.json()["to_be_budgeted"] == 200000  # 300000 - 100000
+
+
+async def test_create_envelope_with_categories(auth_client: AsyncClient) -> None:
+    """Creating an envelope with category_ids returns group_name on categories.
+
+    Regression test: the service must eagerly load Category.group so that
+    _to_envelope_read() can access c.group.name without triggering async
+    lazy-loading (which raises MissingGreenlet / 500 in production).
+    """
+    group = await auth_client.post("/api/category-groups", json={"name": "Household"})
+    group_id = group.json()["id"]
+    cat = await auth_client.post(
+        "/api/categories", json={"group_id": group_id, "name": "Groceries"}
+    )
+    cat_id = cat.json()["id"]
+
+    response = await auth_client.post(
+        "/api/envelopes",
+        json={"name": "Food", "category_ids": [cat_id]},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "Food"
+    assert len(data["categories"]) == 1
+    assert data["categories"][0]["name"] == "Groceries"
+    assert data["categories"][0]["group_name"] == "Household"

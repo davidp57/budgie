@@ -21,7 +21,7 @@ async def get_envelopes(db: AsyncSession, user_id: int) -> list[Envelope]:
     """
     result = await db.execute(
         select(Envelope)
-        .options(selectinload(Envelope.categories))
+        .options(selectinload(Envelope.categories).selectinload(Category.group))
         .where(Envelope.user_id == user_id)
         .order_by(Envelope.sort_order, Envelope.id)
     )
@@ -43,7 +43,7 @@ async def get_envelope(
     """
     result = await db.execute(
         select(Envelope)
-        .options(selectinload(Envelope.categories))
+        .options(selectinload(Envelope.categories).selectinload(Category.group))
         .where(Envelope.id == envelope_id, Envelope.user_id == user_id)
     )
     return result.scalar_one_or_none()
