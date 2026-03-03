@@ -120,6 +120,7 @@ export interface EnvelopeLine {
 export interface MonthBudget {
   month: string // YYYY-MM
   to_be_budgeted: number // centimes
+  total_available: number // centimes — sum of all envelope available amounts
   envelopes: EnvelopeLine[]
 }
 

@@ -323,6 +323,7 @@ async def test_get_budget_month(auth_client: AsyncClient) -> None:
     data = response.json()
     assert data["month"] == "2026-01"
     assert "to_be_budgeted" in data
+    assert "total_available" in data
     assert any(e["budgeted"] == 20000 for e in data["envelopes"])
 
 
@@ -332,6 +333,7 @@ async def test_get_budget_month_empty(auth_client: AsyncClient) -> None:
     data = response.json()
     assert data["month"] == "2026-06"
     assert data["to_be_budgeted"] == 0
+    assert data["total_available"] == 0
     assert data["envelopes"] == []
 
 
@@ -382,6 +384,7 @@ async def test_get_budget_month_to_be_budgeted(auth_client: AsyncClient) -> None
     response = await auth_client.get("/api/budget/2026-01")
     assert response.status_code == 200
     assert response.json()["to_be_budgeted"] == 200000  # 300000 - 100000
+    assert response.json()["total_available"] == 100000  # 0 budgeted available = 100000
 
 
 async def test_create_envelope_with_categories(auth_client: AsyncClient) -> None:

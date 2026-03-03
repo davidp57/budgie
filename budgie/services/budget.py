@@ -54,7 +54,9 @@ async def get_month_budget_view(
     envelopes = list(env_result.scalars().all())
 
     if not envelopes:
-        return MonthBudgetResponse(month=month, to_be_budgeted=0, envelopes=[])
+        return MonthBudgetResponse(
+            month=month, to_be_budgeted=0, total_available=0, envelopes=[]
+        )
 
     env_ids = [env.id for env in envelopes]
 
@@ -181,9 +183,12 @@ async def get_month_budget_view(
             )
         )
 
+    total_available = sum(line.available for line in envelope_lines)
+
     return MonthBudgetResponse(
         month=month,
         to_be_budgeted=income - total_budgeted,
+        total_available=total_available,
         envelopes=envelope_lines,
     )
 

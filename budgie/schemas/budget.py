@@ -94,9 +94,13 @@ class MonthBudgetResponse(BaseModel):
         month: Budget month in YYYY-MM format.
         to_be_budgeted: Income received this month minus total amount budgeted.
             Goal is 0 (every centime assigned to an envelope).
+        total_available: Sum of all envelope available amounts this month.
+            Positive means money is available across envelopes; negative means
+            envelopes are collectively over-spent.
         envelopes: Envelope list ordered by sort_order.
     """
 
     month: str
     to_be_budgeted: int
+    total_available: int
     envelopes: list[EnvelopeLineRead]

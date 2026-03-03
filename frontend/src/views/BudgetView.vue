@@ -104,14 +104,30 @@ async function submitNewEnvelope(): Promise<void> {
       </div>
     </div>
 
-    <!-- To be budgeted banner -->
-    <div
-      v-if="budget"
-      class="alert mb-4"
-      :class="budget.to_be_budgeted >= 0 ? 'alert-success' : 'alert-error'"
-    >
-      <span class="font-semibold">To be budgeted:</span>
-      {{ formatAmount(budget.to_be_budgeted) }}
+    <!-- Summary banner -->
+    <div v-if="budget" class="flex flex-wrap gap-2 mb-4">
+      <!-- Total available across all envelopes -->
+      <div
+        class="alert flex-1 min-w-40"
+        :class="budget.total_available >= 0 ? 'alert-success' : 'alert-error'"
+      >
+        <span class="font-semibold">Available:</span>
+        {{ formatAmount(budget.total_available) }}
+      </div>
+      <!-- To be budgeted (income vs allocated) -->
+      <div
+        class="alert flex-1 min-w-40"
+        :class="
+          budget.to_be_budgeted > 0
+            ? 'alert-warning'
+            : budget.to_be_budgeted < 0
+              ? 'alert-error'
+              : 'alert-success'
+        "
+      >
+        <span class="font-semibold">To budget:</span>
+        {{ formatAmount(budget.to_be_budgeted) }}
+      </div>
     </div>
 
     <div v-if="loading" class="flex justify-center py-12">
