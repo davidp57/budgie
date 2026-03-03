@@ -14,6 +14,8 @@ from budgie.models.transaction import Transaction
 from budgie.schemas.budget import (
     BudgetAllocationUpdate,
     EnvelopeLineRead,
+    IncomeProposal,
+    IncomeProposalsResponse,
     MonthBudgetResponse,
 )
 from budgie.schemas.envelope import CategoryRef
@@ -252,3 +254,78 @@ async def get_budget_month(
         .where(BudgetAllocation.month == month, Envelope.user_id == user_id)
     )
     return list(result.scalars().all())
+
+
+def _previous_month(month: str) -> str:
+    """Return the previous month in YYYY-MM format.
+
+    Args:
+        month: Current month string in YYYY-MM format.
+
+    Returns:
+        Previous month as YYYY-MM string.
+    """
+    year, m = int(month[:4]), int(month[5:7])
+    return f"{year - 1}-12" if m == 1 else f"{year}-{m - 1:02d}"
+
+
+async def get_income_proposals(
+    db: AsyncSession,
+    month: str,
+    user_id: int,
+    threshold_centimes: int = 200_000,
+) -> IncomeProposalsResponse:
+    """Return income proposals drawn from positive transactions of M-1.
+
+    Queries all positive transactions in the previous month from accounts owned
+    by the user with an amount >= threshold_centimes, ordered by amount descending.
+    These are candidates to be repeated as virtual income transactions in the
+    current month.
+
+    Args:
+        db: Async database session.
+        month: Current budget month in YYYY-MM format.
+        user_id: Owner user ID.
+        threshold_centimes: Minimum amount to include a transaction (default 200 000
+            centimes = 2 000.00 €).
+
+    Returns:
+        IncomeProposalsResponse with list of candidate income transactions.
+    """
+    prev = _previous_month(month)
+
+    result = await db.execute(
+        select(
+            Transaction.id,
+            Transaction.date,
+            Transaction.amount,
+            Transaction.memo,
+            Transaction.account_id,
+        )
+        .join(Account, Transaction.account_id == Account.id)
+        .where(
+            Account.user_id == user_id,
+            Transaction.amount >= threshold_centimes,
+            func.strftime("%Y-%m", Transaction.date) == prev,
+        )
+        .order_by(Transaction.amount.desc())
+    )
+    rows = result.all()
+
+    proposals = [
+        IncomeProposal(
+            transaction_id=row[0],
+            date=str(row[1]),
+            amount=row[2],
+            memo=row[3],
+            account_id=row[4],
+        )
+        for row in rows
+    ]
+
+    return IncomeProposalsResponse(
+        month=month,
+        previous_month=prev,
+        threshold_centimes=threshold_centimes,
+        proposals=proposals,
+    )

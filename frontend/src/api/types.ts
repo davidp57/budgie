@@ -129,6 +129,21 @@ export interface BudgetLineInput {
   budgeted: number // centimes
 }
 
+export interface IncomeProposal {
+  transaction_id: number
+  date: string // YYYY-MM-DD (from M-1)
+  amount: number // centimes (always positive)
+  memo: string | null
+  account_id: number
+}
+
+export interface IncomeProposalsResponse {
+  month: string // YYYY-MM
+  previous_month: string // YYYY-MM
+  threshold_centimes: number
+  proposals: IncomeProposal[]
+}
+
 // ── Envelopes ────────────────────────────────────────────────────
 
 export interface Envelope {

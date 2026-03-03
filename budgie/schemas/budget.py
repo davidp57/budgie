@@ -104,3 +104,41 @@ class MonthBudgetResponse(BaseModel):
     to_be_budgeted: int
     total_available: int
     envelopes: list[EnvelopeLineRead]
+
+
+class IncomeProposal(BaseModel):
+    """A single income proposal drawn from M-1 transactions.
+
+    Represents a positive transaction from the previous month that may be
+    repeated as a planned (virtual) income transaction for the current month.
+    Amounts are in integer centimes.
+
+    Attributes:
+        transaction_id: Source transaction ID from M-1.
+        date: Original transaction date (YYYY-MM-DD).
+        amount: Amount in centimes (always positive).
+        memo: Optional transaction memo.
+        account_id: Source account ID.
+    """
+
+    transaction_id: int
+    date: str
+    amount: int
+    memo: str | None
+    account_id: int
+
+
+class IncomeProposalsResponse(BaseModel):
+    """Response for GET /api/budget/{month}/income-proposals.
+
+    Attributes:
+        month: The current budget month (YYYY-MM).
+        previous_month: Previous month from which proposals are drawn (YYYY-MM).
+        threshold_centimes: Minimum amount used to filter proposals.
+        proposals: List of income proposals ordered by amount descending.
+    """
+
+    month: str
+    previous_month: str
+    threshold_centimes: int
+    proposals: list[IncomeProposal]

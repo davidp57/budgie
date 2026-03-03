@@ -7,11 +7,41 @@ from budgie.schemas.budget import (
     BudgetAllocationRead,
     BudgetAllocationUpdate,
     BudgetLineInput,
+    IncomeProposalsResponse,
     MonthBudgetResponse,
 )
-from budgie.services.budget import get_month_budget_view, upsert_allocation
+from budgie.services.budget import (
+    get_income_proposals,
+    get_month_budget_view,
+    upsert_allocation,
+)
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
+
+
+@router.get("/{month}/income-proposals", response_model=IncomeProposalsResponse)
+async def list_income_proposals(
+    month: str,
+    db: DBSession,
+    current_user: CurrentUser,
+    threshold_centimes: int = 200_000,
+) -> IncomeProposalsResponse:
+    """Return income proposal candidates drawn from M-1 positive transactions.
+
+    Returns all positive transactions from the previous month with amount >=
+    threshold_centimes. These can be used to plan virtual income transactions
+    for the current month.
+
+    Args:
+        month: Current budget month in YYYY-MM format.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        threshold_centimes: Minimum amount to include (default 200 000 = 2 000.00 €).
+
+    Returns:
+        Income proposals ordered by amount descending.
+    """
+    return await get_income_proposals(db, month, current_user.id, threshold_centimes)
 
 
 @router.get("/{month}", response_model=MonthBudgetResponse)

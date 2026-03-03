@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { getMonthBudget, setMonthBudget } from '@/api/budget'
+import { getIncomeProposals, getMonthBudget, setMonthBudget } from '@/api/budget'
 import { createEnvelope, updateEnvelope } from '@/api/envelopes'
 import { createTransaction, listTransactions } from '@/api/transactions'
 import { listAccounts } from '@/api/accounts'
@@ -8,6 +8,7 @@ import {
   formatAmount,
   type Account,
   type EnvelopeLine,
+  type IncomeProposal,
   type MonthBudget,
   type Transaction,
 } from '@/api/types'
@@ -172,6 +173,96 @@ onUnmounted(() => {
 // ── Accounts (for add-transaction modal) ────────────────────────
 const accounts = ref<Account[]>([])
 
+// ── Income proposals modal ───────────────────────────────────────────────────
+const incomeDialogRef = ref<HTMLDialogElement | null>(null)
+const incomeProposals = ref<IncomeProposal[]>([])
+const incomeChecked = ref<Set<number>>(new Set())
+const incomePrevMonth = ref('')
+const incomeThreshold = ref(200_000) // centimes, default 2 000.00 €
+const incomeThresholdEuros = ref('2000.00')
+const incomeLoading = ref(false)
+const incomeSaving = ref(false)
+const incomeError = ref('')
+
+async function openIncomeModal(): Promise<void> {
+  incomeLoading.value = true
+  incomeError.value = ''
+  incomeChecked.value = new Set()
+  incomeThresholdEuros.value = (incomeThreshold.value / 100).toFixed(2)
+  try {
+    const result = await getIncomeProposals(currentMonth.value, incomeThreshold.value)
+    incomeProposals.value = result.proposals
+    incomePrevMonth.value = result.previous_month
+    incomeChecked.value = new Set(result.proposals.map((p) => p.transaction_id))
+  } catch {
+    incomeError.value = 'Failed to load income proposals.'
+  } finally {
+    incomeLoading.value = false
+  }
+  incomeDialogRef.value?.showModal()
+}
+
+async function applyIncomeThreshold(): Promise<void> {
+  const euros = parseFloat(String(incomeThresholdEuros.value).replace(',', '.'))
+  if (!isNaN(euros) && euros >= 0) {
+    incomeThreshold.value = Math.round(euros * 100)
+  }
+  incomeLoading.value = true
+  incomeError.value = ''
+  try {
+    const result = await getIncomeProposals(currentMonth.value, incomeThreshold.value)
+    incomeProposals.value = result.proposals
+    incomePrevMonth.value = result.previous_month
+    incomeChecked.value = new Set(result.proposals.map((p) => p.transaction_id))
+  } catch {
+    incomeError.value = 'Failed to reload proposals.'
+  } finally {
+    incomeLoading.value = false
+  }
+}
+
+function toggleIncomeCheck(id: number): void {
+  if (incomeChecked.value.has(id)) {
+    incomeChecked.value.delete(id)
+  } else {
+    incomeChecked.value.add(id)
+  }
+}
+
+async function submitIncomePlan(): Promise<void> {
+  const selected = incomeProposals.value.filter((p) =>
+    incomeChecked.value.has(p.transaction_id),
+  )
+  if (selected.length === 0) {
+    incomeDialogRef.value?.close()
+    return
+  }
+  incomeSaving.value = true
+  incomeError.value = ''
+  // Planned income = first day of current month, virtual, uncategorised (counts as income)
+  const incomeDate = `${currentMonth.value}-01`
+  try {
+    await Promise.all(
+      selected.map((p) =>
+        createTransaction({
+          account_id: p.account_id,
+          date: incomeDate,
+          amount: p.amount,
+          memo: p.memo ?? undefined,
+          category_id: null,
+          is_virtual: true,
+        }),
+      ),
+    )
+    incomeDialogRef.value?.close()
+    await load(currentMonth.value)
+  } catch {
+    incomeError.value = 'Failed to plan income transactions.'
+  } finally {
+    incomeSaving.value = false
+  }
+}
+
 // ── Add virtual transaction modal ───────────────────────────────
 const addTxnDialogRef = ref<HTMLDialogElement | null>(null)
 const addTxnEnvelope = ref<EnvelopeLine | null>(null)
@@ -308,6 +399,13 @@ async function submitEditEnv(): Promise<void> {
           <span class="font-semibold">To budget:</span>
           {{ formatAmount(budget.to_be_budgeted) }}
         </div>
+        <button
+          class="btn btn-outline btn-sm self-center whitespace-nowrap"
+          title="Plan income from last month's transactions"
+          @click="openIncomeModal"
+        >
+          ↑ Plan income
+        </button>
       </div>
 
       <div v-if="loading" class="flex justify-center py-12">
@@ -565,6 +663,82 @@ async function submitEditEnv(): Promise<void> {
           >
             <span v-if="editEnvSaving" class="loading loading-spinner loading-xs"></span>
             Save
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- ── Plan income modal ── -->
+    <dialog ref="incomeDialogRef" class="modal">
+      <div class="modal-box max-w-lg">
+        <h3 class="font-bold text-lg mb-1">Plan income</h3>
+        <p class="text-sm text-base-content/60 mb-4">
+          Transactions from <span class="font-medium text-base-content">{{ incomePrevMonth }}</span>
+          above the threshold will be duplicated as virtual income for
+          <span class="font-medium text-base-content">{{ currentMonth }}</span>.
+        </p>
+
+        <!-- Threshold filter -->
+        <div class="flex items-center gap-2 mb-4">
+          <span class="text-sm text-base-content/70 shrink-0">Min amount (€):</span>
+          <input
+            v-model="incomeThresholdEuros"
+            type="number"
+            step="100"
+            min="0"
+            class="input input-bordered input-sm w-28"
+            @keyup.enter="applyIncomeThreshold"
+          />
+          <button class="btn btn-outline btn-sm" @click="applyIncomeThreshold">Apply</button>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="incomeLoading" class="flex justify-center py-6">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <!-- Proposals list -->
+        <template v-else>
+          <div v-if="incomeProposals.length === 0" class="text-center text-base-content/40 py-6 text-sm">
+            No transactions found above {{ formatAmount(incomeThreshold) }} in {{ incomePrevMonth }}.
+          </div>
+          <div v-else class="flex flex-col gap-1 max-h-64 overflow-y-auto pr-1">
+            <label
+              v-for="proposal in incomeProposals"
+              :key="proposal.transaction_id"
+              class="flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-base-200/60 select-none"
+            >
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm checkbox-success"
+                :checked="incomeChecked.has(proposal.transaction_id)"
+                @change="toggleIncomeCheck(proposal.transaction_id)"
+              />
+              <span class="text-xs text-base-content/50 shrink-0">{{ proposal.date }}</span>
+              <span class="flex-1 text-sm truncate">{{ proposal.memo ?? '—' }}</span>
+              <span class="text-sm tabular-nums font-medium text-success shrink-0">
+                +{{ formatAmount(proposal.amount) }}
+              </span>
+            </label>
+          </div>
+
+          <p class="text-xs text-base-content/50 mt-2">
+            {{ incomeChecked.size }} of {{ incomeProposals.length }} selected
+          </p>
+        </template>
+
+        <p v-if="incomeError" class="text-error text-sm mt-2">{{ incomeError }}</p>
+
+        <div class="modal-action mt-4">
+          <button class="btn btn-ghost btn-sm" @click="incomeDialogRef?.close()">Cancel</button>
+          <button
+            class="btn btn-success btn-sm"
+            :disabled="incomeSaving || incomeChecked.size === 0"
+            @click="submitIncomePlan"
+          >
+            <span v-if="incomeSaving" class="loading loading-spinner loading-xs"></span>
+            Plan {{ incomeChecked.size > 0 ? incomeChecked.size : '' }} income
           </button>
         </div>
       </div>
