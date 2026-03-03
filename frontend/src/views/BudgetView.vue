@@ -184,6 +184,15 @@ const incomeLoading = ref(false)
 const incomeSaving = ref(false)
 const incomeError = ref('')
 
+/** Sum of amounts for checked proposals (centimes) — reactive to checkbox changes */
+const incomeTotalSelected = computed<number>(() => {
+  // Access .size to ensure Vue tracks Set mutations
+  void incomeChecked.value.size
+  return incomeProposals.value
+    .filter((p) => incomeChecked.value.has(p.transaction_id))
+    .reduce((sum, p) => sum + p.amount, 0)
+})
+
 async function openIncomeModal(): Promise<void> {
   incomeLoading.value = true
   incomeError.value = ''
@@ -723,9 +732,18 @@ async function submitEditEnv(): Promise<void> {
             </label>
           </div>
 
-          <p class="text-xs text-base-content/50 mt-2">
-            {{ incomeChecked.size }} of {{ incomeProposals.length }} selected
-          </p>
+          <!-- Running total -->
+          <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300">
+            <span class="text-xs text-base-content/50">
+              {{ incomeChecked.size }} of {{ incomeProposals.length }} selected
+            </span>
+            <span
+              class="text-base font-bold tabular-nums"
+              :class="incomeTotalSelected > 0 ? 'text-success' : 'text-base-content/40'"
+            >
+              +{{ formatAmount(incomeTotalSelected) }}
+            </span>
+          </div>
         </template>
 
         <p v-if="incomeError" class="text-error text-sm mt-2">{{ incomeError }}</p>
