@@ -125,8 +125,8 @@ budgetizer/
 | HTTP client | Axios | JWT + error-toast interceptors |
 | Auth | JWT + bcrypt | 24 h token, `localStorage` |
 | Containerization | Docker Compose | Multi-stage build, port 8080 |
-| Backend tests | pytest + pytest-asyncio | 155 tests |
-| Frontend tests | Vitest + Vue Test Utils | 18 component tests |
+| Backend tests | pytest + pytest-asyncio | 159 tests |
+| Frontend tests | Vitest + Vue Test Utils | 39 tests (4 store, 35 component) |
 | Linting | ruff (Python), ESLint (TS) | Zero warnings policy |
 | Type checking | mypy (Python), tsc (TS) | Strict, zero errors |
 | Formatting | ruff format (Python), Prettier (TS) | |
@@ -508,7 +508,7 @@ Module-level singleton `ref<'emerald'|'night'>`. On first call:
 ### Backend (pytest)
 
 ```bash
-poetry run pytest                      # all 155 tests
+poetry run pytest                      # all 159 tests
 poetry run pytest --cov=budgie         # with coverage report
 poetry run pytest -x                   # stop on first failure
 poetry run pytest tests/test_api/      # API layer
@@ -534,6 +534,15 @@ npm run test:unit             # watch mode
 
 Tests in `src/components/__tests__/*.spec.ts` use Vue Test Utils `mount()` and `flushPromises()`.
 
+| Spec file | Tests | Coverage |
+|---|---|---|
+| `EnvelopeCard.spec.ts` | 7 | Rendering, rollover badge, available color, inline budget edit |
+| `EnvelopeManager.spec.ts` | 11 | List, empty state, create, edit, cancel, delete |
+| `MonthPicker.spec.ts` | 5 | Navigation, month wrap-around |
+| `TransactionRow.spec.ts` | 12 | Rendering, amount color, category name, edit flow, emits |
+
+Store tests are in `src/stores/__tests__/auth.test.ts` (4 tests).
+
 ---
 
 ## Code Quality
@@ -543,7 +552,7 @@ Tests in `src/components/__tests__/*.spec.ts` use Vue Test Utils `mount()` and `
 ```bash
 poetry run ruff check budgie/ tests/    # lint (zero warnings)
 poetry run ruff format budgie/ tests/   # format
-poetry run mypy budgie/                 # type check (zero errors, 52 source files)
+poetry run mypy budgie/ tests/          # type check (zero errors, 73 source files)
 ```
 
 Rules:

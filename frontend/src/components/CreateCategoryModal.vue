@@ -26,7 +26,7 @@ const emit = defineEmits<{
 
 const categoryName = ref(props.initialName)
 const selectedGroupId = ref<number | 'new' | null>(
-  props.groups.length ? props.groups[0].id : 'new',
+  props.groups.length ? props.groups[0]!.id : 'new',
 )
 const newGroupName = ref('')
 const saving = ref(false)

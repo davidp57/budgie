@@ -125,8 +125,8 @@ budgetizer/
 | Client HTTP | Axios | Intercepteurs JWT + toast d'erreur |
 | Auth | JWT + bcrypt | Token 24 h, `localStorage` |
 | Conteneurisation | Docker Compose | Build multi-stage, port 8080 |
-| Tests backend | pytest + pytest-asyncio | 155 tests |
-| Tests frontend | Vitest + Vue Test Utils | 18 tests de composants |
+| Tests backend | pytest + pytest-asyncio | 159 tests |
+| Tests frontend | Vitest + Vue Test Utils | 39 tests (4 store, 35 composants) |
 | Linting | ruff (Python), ESLint (TS) | Politique zéro avertissement |
 | Typage | mypy (Python), tsc (TS) | Strict, zéro erreur |
 | Formatage | ruff format (Python), Prettier (TS) | |
@@ -508,7 +508,7 @@ Singleton de niveau module `ref<'emerald'|'night'>`. Au premier appel :
 ### Backend (pytest)
 
 ```bash
-poetry run pytest                       # 155 tests
+poetry run pytest                       # 159 tests
 poetry run pytest --cov=budgie          # avec rapport de couverture
 poetry run pytest -x                    # s'arrête au premier échec
 poetry run pytest tests/test_api/       # couche API
@@ -534,6 +534,15 @@ npm run test:unit             # mode watch
 
 Tests dans `src/components/__tests__/*.spec.ts` avec Vue Test Utils `mount()` et `flushPromises()`.
 
+| Fichier spec | Tests | Couverture |
+|---|---|---|
+| `EnvelopeCard.spec.ts` | 7 | Rendu, badge rollover, couleur disponible, édition budget en ligne |
+| `EnvelopeManager.spec.ts` | 11 | Liste, état vide, création, édition, annulation, suppression |
+| `MonthPicker.spec.ts` | 5 | Navigation, passage de mois |
+| `TransactionRow.spec.ts` | 12 | Rendu, couleur montant, nom catégorie, flux d'édition, émissions |
+
+Les tests de store sont dans `src/stores/__tests__/auth.test.ts` (4 tests).
+
 ---
 
 ## Qualité du code
@@ -543,7 +552,7 @@ Tests dans `src/components/__tests__/*.spec.ts` avec Vue Test Utils `mount()` et
 ```bash
 poetry run ruff check budgie/ tests/    # lint (zéro avertissement)
 poetry run ruff format budgie/ tests/   # formatage
-poetry run mypy budgie/                 # typage (zéro erreur, 52 fichiers source)
+poetry run mypy budgie/ tests/          # typage (zéro erreur, 73 fichiers source)
 ```
 
 Règles :
