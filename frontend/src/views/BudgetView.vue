@@ -183,6 +183,13 @@ const incomeThresholdEuros = ref('2000.00')
 const incomeLoading = ref(false)
 const incomeSaving = ref(false)
 const incomeError = ref('')
+/** 'n1' = plan for the current budget month (N+1 relative to proposals); 'n' = plan for the proposals source month */
+const incomePlanMode = ref<'n1' | 'n'>('n1')
+
+/** Target month for virtual income transactions */
+const incomeTargetMonth = computed<string>(() =>
+  incomePlanMode.value === 'n1' ? currentMonth.value : incomePrevMonth.value,
+)
 
 /** Sum of amounts for checked proposals (centimes) — reactive to checkbox changes */
 const incomeTotalSelected = computed<number>(() => {
@@ -248,8 +255,8 @@ async function submitIncomePlan(): Promise<void> {
   }
   incomeSaving.value = true
   incomeError.value = ''
-  // Planned income = first day of current month, virtual, uncategorised (counts as income)
-  const incomeDate = `${currentMonth.value}-01`
+  // Planned income = first day of target month, virtual, uncategorised (counts as income)
+  const incomeDate = `${incomeTargetMonth.value}-01`
   try {
     await Promise.all(
       selected.map((p) =>
@@ -682,11 +689,29 @@ async function submitEditEnv(): Promise<void> {
     <dialog ref="incomeDialogRef" class="modal">
       <div class="modal-box max-w-lg">
         <h3 class="font-bold text-lg mb-1">Plan income</h3>
-        <p class="text-sm text-base-content/60 mb-4">
+        <p class="text-sm text-base-content/60 mb-2">
           Transactions from <span class="font-medium text-base-content">{{ incomePrevMonth }}</span>
           above the threshold will be duplicated as virtual income for
-          <span class="font-medium text-base-content">{{ currentMonth }}</span>.
+          <span class="font-medium text-base-content">{{ incomeTargetMonth }}</span>.
         </p>
+
+        <!-- Target month toggle -->
+        <div class="join mb-4">
+          <button
+            class="join-item btn btn-xs"
+            :class="incomePlanMode === 'n1' ? 'btn-primary' : 'btn-outline'"
+            @click="incomePlanMode = 'n1'"
+          >
+            Plan for {{ currentMonth }} (N+1)
+          </button>
+          <button
+            class="join-item btn btn-xs"
+            :class="incomePlanMode === 'n' ? 'btn-primary' : 'btn-outline'"
+            @click="incomePlanMode = 'n'"
+          >
+            Plan for {{ incomePrevMonth }} (N)
+          </button>
+        </div>
 
         <!-- Threshold filter -->
         <div class="flex items-center gap-2 mb-4">
