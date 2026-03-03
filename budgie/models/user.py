@@ -24,6 +24,9 @@ class User(Base):
         id: Primary key.
         username: Unique username for login.
         hashed_password: Bcrypt-hashed password.
+        budget_mode: Budgeting mode — ``n1`` (N+1, default: income from M-1 feeds
+            current month) or ``n`` (prévisionnel: virtual transactions created
+            for income expected in the current month).
         created_at: Timestamp of account creation.
     """
 
@@ -32,6 +35,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    budget_mode: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="n1", server_default="n1"
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

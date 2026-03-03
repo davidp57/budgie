@@ -1,8 +1,6 @@
 """Tests for GET /api/budget/{month}/income-proposals endpoint."""
 
-
 from httpx import AsyncClient
-
 
 
 async def test_income_proposals_empty(auth_client: AsyncClient) -> None:
@@ -14,7 +12,6 @@ async def test_income_proposals_empty(auth_client: AsyncClient) -> None:
     assert data["previous_month"] == "2026-02"
     assert data["threshold_centimes"] == 200_000
     assert data["proposals"] == []
-
 
 
 async def test_income_proposals_returns_qualifying_transactions(
@@ -87,7 +84,6 @@ async def test_income_proposals_returns_qualifying_transactions(
     assert "date" in first
 
 
-
 async def test_income_proposals_custom_threshold(auth_client: AsyncClient) -> None:
     """Custom threshold_centimes query parameter filters correctly."""
     account = await auth_client.post(
@@ -119,7 +115,6 @@ async def test_income_proposals_custom_threshold(auth_client: AsyncClient) -> No
     assert r_low.json()["threshold_centimes"] == 50_000
 
 
-
 async def test_income_proposals_january_wraps_to_december(
     auth_client: AsyncClient,
 ) -> None:
@@ -128,7 +123,6 @@ async def test_income_proposals_january_wraps_to_december(
     assert response.status_code == 200
     data = response.json()
     assert data["previous_month"] == "2025-12"
-
 
 
 async def test_income_proposals_scoped_to_user(

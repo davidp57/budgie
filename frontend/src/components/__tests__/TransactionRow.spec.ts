@@ -28,6 +28,7 @@ const baseTxn: Transaction = {
   cleared: 'cleared',
   is_virtual: false,
   virtual_linked_id: null,
+  income_for_month: null,
   import_hash: null,
   created_at: '2026-01-15T00:00:00',
 }

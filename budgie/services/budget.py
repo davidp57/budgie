@@ -132,15 +132,21 @@ async def get_month_budget_view(
     )
     cum_budgeted: dict[int, int] = {row[0]: row[1] for row in cum_budgeted_result.all()}
 
-    # 6. Income this month: positive uncategorised transactions in user's accounts
+    # 6. Income this month:
+    #    a) positive uncategorised transactions dated in this month, OR
+    #    b) transactions from any date marked with income_for_month = month
+    #       (N+1 mode: real income from M-1 assigned to this month)
     income_row = await db.execute(
         select(func.coalesce(func.sum(Transaction.amount), 0))
         .join(Account, Transaction.account_id == Account.id)
         .where(
             Transaction.category_id.is_(None),
             Transaction.amount > 0,
-            func.strftime("%Y-%m", Transaction.date) == month,
             Account.user_id == user_id,
+            (
+                (func.strftime("%Y-%m", Transaction.date) == month)
+                | (Transaction.income_for_month == month)
+            ),
         )
     )
     income: int = income_row.scalar_one()
@@ -267,6 +273,46 @@ def _previous_month(month: str) -> str:
     """
     year, m = int(month[:4]), int(month[5:7])
     return f"{year - 1}-12" if m == 1 else f"{year}-{m - 1:02d}"
+
+
+async def assign_income_to_month(
+    db: AsyncSession,
+    transaction_ids: list[int],
+    month: str,
+    user_id: int,
+) -> int:
+    """Mark real transactions as income for a specific budget month (N+1 mode).
+
+    Instead of creating virtual transactions, this tags existing transactions
+    from M-1 so their amount is counted in the target month ``to_be_budgeted``.
+    Existing ``income_for_month`` tags on those transactions are replaced.
+
+    Args:
+        db: Async database session.
+        transaction_ids: IDs of transactions to tag.
+        month: Target budget month (YYYY-MM).
+        user_id: Must own the account of each transaction (security check).
+
+    Returns:
+        Number of transactions updated.
+    """
+    if not transaction_ids:
+        return 0
+
+    result = await db.execute(
+        select(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .where(
+            Transaction.id.in_(transaction_ids),
+            Account.user_id == user_id,
+        )
+    )
+    transactions = list(result.scalars().all())
+    for txn in transactions:
+        txn.income_for_month = month
+        db.add(txn)
+    await db.commit()
+    return len(transactions)
 
 
 async def get_income_proposals(

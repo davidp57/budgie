@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { getIncomeProposals, getMonthBudget, setMonthBudget } from '@/api/budget'
+import { assignIncome, getIncomeProposals, getMonthBudget, setMonthBudget } from '@/api/budget'
 import { createEnvelope, updateEnvelope } from '@/api/envelopes'
 import { createTransaction, listTransactions } from '@/api/transactions'
 import { listAccounts } from '@/api/accounts'
+import { getPreferences } from '@/api/users'
 import {
   formatAmount,
   type Account,
@@ -115,6 +116,8 @@ async function load(month: string): Promise<void> {
 
 onMounted(async () => {
   accounts.value = await listAccounts()
+  const prefs = await getPreferences()
+  budgetMode.value = prefs.budget_mode
   await load(currentMonth.value)
 })
 
@@ -183,13 +186,8 @@ const incomeThresholdEuros = ref('2000.00')
 const incomeLoading = ref(false)
 const incomeSaving = ref(false)
 const incomeError = ref('')
-/** 'n1' = plan for the current budget month (N+1 relative to proposals); 'n' = plan for the proposals source month */
-const incomePlanMode = ref<'n1' | 'n'>('n1')
-
-/** Target month for virtual income transactions */
-const incomeTargetMonth = computed<string>(() =>
-  incomePlanMode.value === 'n1' ? currentMonth.value : incomePrevMonth.value,
-)
+/** Budget mode loaded from user preferences: 'n1' (N+1) or 'n' (prévisionnel) */
+const budgetMode = ref<'n1' | 'n'>('n1')
 
 /** Sum of amounts for checked proposals (centimes) — reactive to checkbox changes */
 const incomeTotalSelected = computed<number>(() => {
@@ -255,25 +253,34 @@ async function submitIncomePlan(): Promise<void> {
   }
   incomeSaving.value = true
   incomeError.value = ''
-  // Planned income = first day of target month, virtual, uncategorised (counts as income)
-  const incomeDate = `${incomeTargetMonth.value}-01`
   try {
-    await Promise.all(
-      selected.map((p) =>
-        createTransaction({
-          account_id: p.account_id,
-          date: incomeDate,
-          amount: p.amount,
-          memo: p.memo ?? undefined,
-          category_id: null,
-          is_virtual: true,
-        }),
-      ),
-    )
+    if (budgetMode.value === 'n1') {
+      // N+1 mode: tag the real M-1 transactions as income for this month
+      // (no virtual transaction created)
+      await assignIncome(
+        currentMonth.value,
+        selected.map((p) => p.transaction_id),
+      )
+    } else {
+      // Prévisionnel mode: create virtual income transactions in current month
+      const incomeDate = `${currentMonth.value}-01`
+      await Promise.all(
+        selected.map((p) =>
+          createTransaction({
+            account_id: p.account_id,
+            date: incomeDate,
+            amount: p.amount,
+            memo: p.memo ?? undefined,
+            category_id: null,
+            is_virtual: true,
+          }),
+        ),
+      )
+    }
     incomeDialogRef.value?.close()
     await load(currentMonth.value)
   } catch {
-    incomeError.value = 'Failed to plan income transactions.'
+    incomeError.value = 'Failed to plan income.'
   } finally {
     incomeSaving.value = false
   }
@@ -689,29 +696,21 @@ async function submitEditEnv(): Promise<void> {
     <dialog ref="incomeDialogRef" class="modal">
       <div class="modal-box max-w-lg">
         <h3 class="font-bold text-lg mb-1">Plan income</h3>
-        <p class="text-sm text-base-content/60 mb-2">
+        <p class="text-sm text-base-content/60 mb-4">
           Transactions from <span class="font-medium text-base-content">{{ incomePrevMonth }}</span>
-          above the threshold will be duplicated as virtual income for
-          <span class="font-medium text-base-content">{{ incomeTargetMonth }}</span>.
+          above the threshold —
+          <template v-if="budgetMode === 'n1'">
+            their income will be counted toward
+            <span class="font-medium text-base-content">{{ currentMonth }}</span>
+            without creating virtual transactions
+            <span class="badge badge-xs badge-ghost">N+1</span>.
+          </template>
+          <template v-else>
+            a virtual income transaction will be created in
+            <span class="font-medium text-base-content">{{ currentMonth }}</span>
+            <span class="badge badge-xs badge-ghost">Prévisionnel</span>.
+          </template>
         </p>
-
-        <!-- Target month toggle -->
-        <div class="join mb-4">
-          <button
-            class="join-item btn btn-xs"
-            :class="incomePlanMode === 'n1' ? 'btn-primary' : 'btn-outline'"
-            @click="incomePlanMode = 'n1'"
-          >
-            Plan for {{ currentMonth }} (N+1)
-          </button>
-          <button
-            class="join-item btn btn-xs"
-            :class="incomePlanMode === 'n' ? 'btn-primary' : 'btn-outline'"
-            @click="incomePlanMode = 'n'"
-          >
-            Plan for {{ incomePrevMonth }} (N)
-          </button>
-        </div>
 
         <!-- Threshold filter -->
         <div class="flex items-center gap-2 mb-4">

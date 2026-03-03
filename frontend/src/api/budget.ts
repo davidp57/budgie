@@ -27,3 +27,10 @@ export async function getIncomeProposals(
   )
   return data
 }
+
+export async function assignIncome(
+  month: string,
+  transactionIds: number[],
+): Promise<void> {
+  await client.post(`/api/budget/${month}/assign-income`, { transaction_ids: transactionIds })
+}

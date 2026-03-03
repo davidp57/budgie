@@ -28,6 +28,7 @@ from budgie.api import (
     imports,
     payees,
     transactions,
+    users,
 )
 from budgie.config import BASE_DIR, settings
 
@@ -90,6 +91,7 @@ async def health_check() -> dict[str, str]:
 
 # Register all API routers
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(accounts.router)
 app.include_router(category_groups.router)
 app.include_router(categories.router)

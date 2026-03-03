@@ -12,6 +12,7 @@ import {
   deleteCategoryGroup,
   listGroupsWithCategories,
 } from '@/api/categories'
+import { getPreferences, updatePreferences } from '@/api/users'
 import EnvelopeManager from '@/components/EnvelopeManager.vue'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
 
@@ -40,7 +41,25 @@ async function loadAll(): Promise<void> {
   }
 }
 
-onMounted(loadAll)
+// ── Budgeting preferences ─────────────────────────────────────────────────
+const budgetMode = ref<'n1' | 'n'>('n1')
+const prefError = ref('')
+
+async function setBudgetMode(mode: 'n1' | 'n'): Promise<void> {
+  prefError.value = ''
+  try {
+    const updated = await updatePreferences({ budget_mode: mode })
+    budgetMode.value = updated.budget_mode
+  } catch {
+    prefError.value = 'Failed to save preference.'
+  }
+}
+
+onMounted(async () => {
+  const prefs = await getPreferences()
+  budgetMode.value = prefs.budget_mode
+  await loadAll()
+})
 
 async function addAccount(): Promise<void> {
   accountError.value = ''
@@ -217,6 +236,66 @@ async function removeCategory(id: number): Promise<void> {
           balance forward to the next month.
         </p>
         <EnvelopeManager :groups="groups" />
+      </div>
+    </section>
+
+    <!-- Budgeting preferences section -->
+    <section class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Budgeting</h2>
+        <p class="text-sm text-base-content/60 mb-4">
+          Choose how income is planned each month.
+        </p>
+
+        <div class="flex flex-col gap-3">
+          <label
+            class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+            :class="budgetMode === 'n1' ? 'border-primary bg-primary/5' : 'border-base-300 hover:bg-base-200/50'"
+            @click="setBudgetMode('n1')"
+          >
+            <input
+              type="radio"
+              name="budget_mode"
+              value="n1"
+              class="radio radio-sm radio-primary mt-0.5"
+              :checked="budgetMode === 'n1'"
+              @change="setBudgetMode('n1')"
+            />
+            <div>
+              <div class="font-medium">N+1 <span class="badge badge-xs badge-ghost">défaut</span></div>
+              <div class="text-sm text-base-content/60">
+                Le salaire de février est budgétisé en mars. Aucune transaction
+                virtuelle n’est créée — la transaction réelle existante est
+                simplement affectée au mois suivant.
+              </div>
+            </div>
+          </label>
+
+          <label
+            class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+            :class="budgetMode === 'n' ? 'border-primary bg-primary/5' : 'border-base-300 hover:bg-base-200/50'"
+            @click="setBudgetMode('n')"
+          >
+            <input
+              type="radio"
+              name="budget_mode"
+              value="n"
+              class="radio radio-sm radio-primary mt-0.5"
+              :checked="budgetMode === 'n'"
+              @change="setBudgetMode('n')"
+            />
+            <div>
+              <div class="font-medium">Prévisionnel</div>
+              <div class="text-sm text-base-content/60">
+                Le salaire de mars est budgétisé en mars avant de l’avoir reçu.
+                Une transaction virtuelle est créée pour planifier les dépenses
+                à l’avance.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <p v-if="prefError" class="text-error text-sm mt-2">{{ prefError }}</p>
       </div>
     </section>
   </div>

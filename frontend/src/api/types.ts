@@ -76,6 +76,7 @@ export interface Transaction {
   cleared: ClearedStatus
   is_virtual: boolean
   virtual_linked_id: number | null
+  income_for_month: string | null // YYYY-MM — N+1 mode: counts income toward this month
   import_hash: string | null
   created_at: string
 }
@@ -142,6 +143,16 @@ export interface IncomeProposalsResponse {
   previous_month: string // YYYY-MM
   threshold_centimes: number
   proposals: IncomeProposal[]
+}
+
+export interface UserPreferences {
+  /**
+   * 'n1' = N+1 (default): income received in M-1 is assigned to current month
+   *   without creating virtual transactions.
+   * 'n' = Prévisionnel: a virtual income transaction is created in the current
+   *   month for income expected before it arrives.
+   */
+  budget_mode: 'n1' | 'n'
 }
 
 // ── Envelopes ────────────────────────────────────────────────────

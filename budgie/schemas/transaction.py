@@ -58,6 +58,7 @@ class TransactionUpdate(BaseModel):
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus | None = None
     is_virtual: bool | None = None
+    income_for_month: str | None = None
 
 
 class TransactionRead(BaseModel):
@@ -74,6 +75,7 @@ class TransactionRead(BaseModel):
         cleared: Cleared status.
         is_virtual: Whether virtual.
         virtual_linked_id: Linked transaction ID.
+        income_for_month: Budget month this income is assigned to (YYYY-MM), if any.
         import_hash: Import deduplication hash.
         created_at: Creation timestamp.
     """
@@ -90,6 +92,7 @@ class TransactionRead(BaseModel):
     cleared: str
     is_virtual: bool
     virtual_linked_id: int | None
+    income_for_month: str | None = None
     import_hash: str | None
     created_at: datetime.datetime
 

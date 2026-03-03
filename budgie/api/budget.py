@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.schemas.budget import (
+    AssignIncomeRequest,
     BudgetAllocationRead,
     BudgetAllocationUpdate,
     BudgetLineInput,
@@ -11,12 +12,34 @@ from budgie.schemas.budget import (
     MonthBudgetResponse,
 )
 from budgie.services.budget import (
+    assign_income_to_month,
     get_income_proposals,
     get_month_budget_view,
     upsert_allocation,
 )
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
+
+
+@router.post("/{month}/assign-income", status_code=204)
+async def assign_income(
+    month: str,
+    payload: AssignIncomeRequest,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> None:
+    """Tag real transactions from M-1 as income for this budget month (N+1 mode).
+
+    Does not create virtual transactions. Instead marks existing transactions
+    so their amounts count toward ``to_be_budgeted`` for the given month.
+
+    Args:
+        month: Target budget month (YYYY-MM).
+        payload: List of transaction IDs to tag.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+    """
+    await assign_income_to_month(db, payload.transaction_ids, month, current_user.id)
 
 
 @router.get("/{month}/income-proposals", response_model=IncomeProposalsResponse)

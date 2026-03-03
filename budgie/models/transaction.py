@@ -40,6 +40,8 @@ class Transaction(Base):
         cleared: Status — uncleared, cleared, or reconciled.
         is_virtual: Whether this is a planned future transaction.
         virtual_linked_id: Links a virtual transaction to its real counterpart.
+        income_for_month: When set (YYYY-MM), this real transaction income is
+            counted toward that month ``to_be_budgeted`` (N+1 mode).
         import_hash: Unique hash for deduplication during import.
         created_at: Timestamp of record creation.
     """
@@ -63,6 +65,9 @@ class Transaction(Base):
     is_virtual: Mapped[bool] = mapped_column(Boolean, default=False)
     virtual_linked_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("transactions.id"), nullable=True, default=None
+    )
+    income_for_month: Mapped[str | None] = mapped_column(
+        String(7), nullable=True, default=None
     )
     import_hash: Mapped[str | None] = mapped_column(
         String(64), unique=True, nullable=True, default=None

@@ -106,6 +106,20 @@ class MonthBudgetResponse(BaseModel):
     envelopes: list[EnvelopeLineRead]
 
 
+class AssignIncomeRequest(BaseModel):
+    """Request body for POST /api/budget/{month}/assign-income.
+
+    Used in N+1 budgeting mode: marks existing transactions from M-1 as
+    counting toward the target month's ``to_be_budgeted``.
+
+    Attributes:
+        transaction_ids: IDs of the real transactions to tag with
+            ``income_for_month``.
+    """
+
+    transaction_ids: list[int]
+
+
 class IncomeProposal(BaseModel):
     """A single income proposal drawn from M-1 transactions.
 
