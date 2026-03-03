@@ -55,9 +55,7 @@ def upgrade() -> None:
     # 3. Refactor budget_allocations: replace category_id with envelope_id.
     #    Use batch_alter_table for SQLite compatibility (requires full table rebuild).
     #    Existing allocations are deleted because there are no envelopes yet.
-    with op.batch_alter_table(
-        "budget_allocations", recreate="always"
-    ) as batch_op:
+    with op.batch_alter_table("budget_allocations", recreate="always") as batch_op:
         batch_op.drop_constraint("uq_category_month", type_="unique")
         batch_op.drop_column("category_id")
         batch_op.add_column(
@@ -69,18 +67,16 @@ def upgrade() -> None:
             ["envelope_id"],
             ["id"],
         )
-        batch_op.create_unique_constraint(
-            "uq_envelope_month", ["envelope_id", "month"]
-        )
+        batch_op.create_unique_constraint("uq_envelope_month", ["envelope_id", "month"])
 
 
 def downgrade() -> None:
     """Downgrade schema: restore category_id, drop envelopes tables."""
-    with op.batch_alter_table(
-        "budget_allocations", recreate="always"
-    ) as batch_op:
+    with op.batch_alter_table("budget_allocations", recreate="always") as batch_op:
         batch_op.drop_constraint("uq_envelope_month", type_="unique")
-        batch_op.drop_constraint("fk_budget_allocations_envelope_id", type_="foreignkey")
+        batch_op.drop_constraint(
+            "fk_budget_allocations_envelope_id", type_="foreignkey"
+        )
         batch_op.drop_column("envelope_id")
         batch_op.add_column(
             sa.Column("category_id", sa.Integer(), nullable=False, server_default="0")
@@ -91,9 +87,7 @@ def downgrade() -> None:
             ["category_id"],
             ["id"],
         )
-        batch_op.create_unique_constraint(
-            "uq_category_month", ["category_id", "month"]
-        )
+        batch_op.create_unique_constraint("uq_category_month", ["category_id", "month"])
 
     op.drop_table("envelope_categories")
     op.drop_table("envelopes")

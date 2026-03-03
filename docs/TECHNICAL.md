@@ -32,6 +32,7 @@ budgetizer/
 │   │   ├── category_groups.py
 │   │   ├── category_rules.py
 │   │   ├── categorize.py
+│   │   ├── envelopes.py
 │   │   ├── imports.py
 │   │   ├── payees.py
 │   │   └── transactions.py
@@ -46,6 +47,7 @@ budgetizer/
 │   ├── services/                # All business logic
 │   │   ├── budget.py
 │   │   ├── categorizer.py
+│   │   ├── envelope.py
 │   │   ├── importer.py
 │   │   └── transaction.py
 │   ├── config.py                # Pydantic Settings
@@ -60,11 +62,14 @@ budgetizer/
 │   │   │   ├── types.ts         # Shared TypeScript interfaces
 │   │   │   ├── accounts.ts
 │   │   │   ├── categories.ts
+│   │   │   ├── envelopes.ts
 │   │   │   ├── imports.ts
 │   │   │   └── transactions.ts
 │   │   ├── components/
 │   │   │   ├── CategoryPicker.vue
+│   │   │   ├── CreateCategoryModal.vue
 │   │   │   ├── EnvelopeCard.vue
+│   │   │   ├── EnvelopeManager.vue
 │   │   │   ├── FileUploader.vue
 │   │   │   ├── MonthPicker.vue
 │   │   │   ├── SkeletonRow.vue
@@ -296,6 +301,15 @@ All endpoints require `Authorization: Bearer <token>` except `/api/auth/*`.
 | `POST` | `/api/categories` |
 | `PUT/DELETE` | `/api/categories/{id}` |
 
+### Envelopes
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/envelopes` | List all envelopes with their assigned categories |
+| `POST` | `/api/envelopes` | Create envelope `{name, rollover?, category_ids?}` |
+| `PUT` | `/api/envelopes/{id}` | Update name, rollover flag, or assigned categories |
+| `DELETE` | `/api/envelopes/{id}` | Delete envelope and its budget allocations |
+
 ---
 
 ## Import Pipeline
@@ -371,14 +385,22 @@ After categorization, the payee record is updated with `auto_category_id` for fu
 
 Entry point: `services/budget.py` → `get_budget_month(session, user_id, month)`
 
-### Per-category calculation
+### Per-envelope calculation
+
+The budget grid is organized by **envelopes**. Each envelope aggregates the transactions of all its assigned categories.
 
 ```
-budgeted  = BudgetAllocation.budgeted WHERE month = target_month  (0 if missing)
-activity  = SUM(Transaction.amount) WHERE category_id = X
-            AND month(date) = target_month
-            AND user_id = current_user          ← includes is_virtual=True
-available = SUM(budgeted - activity) over all months ≤ target_month
+For each envelope:
+  budgeted  = BudgetAllocation.budgeted WHERE envelope_id = X AND month = target_month
+              (0 if no allocation exists)
+  activity  = SUM(Transaction.amount) WHERE category_id IN envelope.category_ids
+              AND month(date) = target_month
+              AND user_id = current_user          ← includes is_virtual=True
+
+  IF envelope.rollover:
+    available = SUM(budgeted_m - activity_m) over all months m ≤ target_month
+  ELSE:
+    available = budgeted + activity  (current month only; activity is negative for expenses)
 ```
 
 ### Top-level calculation
@@ -432,9 +454,11 @@ If a match is accepted, `virtual_linked_id` is set on the `ImportedTransaction` 
 
 | Component | Props | Emits | Notes |
 |---|---|---|---|
-| `TransactionRow` | `txn: Transaction`, `groups: CategoryGroupWithCategories[]` | `category-saved({id, category_id})`, `error(string)` | Self-contained `<tr>`; owns its own edit state |
-| `CategoryPicker` | `modelValue: number\|null`, `groups` | `update:modelValue` | Searchable dropdown |
-| `EnvelopeCard` | `envelope: EnvelopeRow` | — | Budget grid cell |
+| `TransactionRow` | `txn: Transaction`, `groups: CategoryGroupWithCategories[]` | `category-saved({id, category_id})`, `error(string)`, `category-created(Category)` | Self-contained `<tr>`; owns its own edit state; forwards new categories to parent |
+| `CategoryPicker` | `modelValue: number\|null`, `groups` | `update:modelValue`, `category-created(Category)` | Searchable combobox; opens `CreateCategoryModal` when the user types a new name |
+| `CreateCategoryModal` | `initialName?: string`, `groups` | `created(Category)`, `close` | Modal for creating a new category inline |
+| `EnvelopeCard` | `envelope: EnvelopeLine` | `edit-budgeted(envelope_id, centimes)` | Budget grid cell; shows envelope name, category chips, rollover badge |
+| `EnvelopeManager` | `groups: CategoryGroupWithCategories[]` | — | Settings panel — full CRUD for envelopes with inline edit forms |
 | `FileUploader` | — | `file-selected(File)` | Drag-and-drop + click |
 | `MonthPicker` | `modelValue: string` (YYYY-MM) | `update:modelValue` | |
 | `SkeletonRow` | `rows?: number` (default 5), `cols?: number` (default 5) | — | Loading placeholder `<tr>` |

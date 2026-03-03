@@ -29,7 +29,7 @@ Elle suit la méthode du **budget par enveloppes** : chaque centime de revenu es
 |---|---|
 | Import bancaire | Importez des fichiers CSV, Excel, QIF ou OFX exportés depuis votre banque |
 | Catégorisation automatique | Les transactions sont catégorisées automatiquement selon l'historique des bénéficiaires et les règles que vous définissez |
-| Budget par enveloppes | Attribuez un budget à chaque catégorie chaque mois ; suivez ce qui est disponible |
+| Budget par enveloppes | Regroupez les catégories en enveloppes ; allouez un budget à chaque enveloppe chaque mois ; activez le report pour reporter le solde non dépensé au mois suivant |
 | Transactions virtuelles | Planifiez des achats futurs pour voir leur impact sur le budget avant qu'ils ne se produisent |
 | Historique des transactions | Filtrez par compte, type (réel / prévision) et recherche |
 | Thème sombre / clair | Bascule automatiquement selon les préférences système, ou changez manuellement |
@@ -49,8 +49,9 @@ Ouvrez `http://VOTRE_SERVEUR:8080` dans votre navigateur (ou `http://localhost:5
 
 1. **Créer les comptes** — vos comptes bancaires, épargne, etc.
 2. **Créer les groupes de catégories et les catégories** — ex. groupe *Logement* avec les catégories *Loyer*, *Électricité*, *Internet*
-3. **Importer votre premier fichier bancaire**
-4. **Définir votre budget** pour le mois en cours
+3. **Créer les enveloppes** (dans **Paramètres → Enveloppes**) — chaque enveloppe regroupe des catégories dans une même zone de budget (ex. enveloppe *Logement* contenant *Loyer* + *Électricité*)
+4. **Importer votre premier fichier bancaire**
+5. **Définir votre budget** pour le mois en cours
 
 ---
 
@@ -152,25 +153,43 @@ Allez dans **Budget**.
 
 ### Comment ça marche
 
-Chaque catégorie a trois valeurs pour le mois en cours :
+Budgie utilise la méthode du **budget par enveloppes** : l'argent est affecté à des **enveloppes** nommées avant d'être dépensé. Chaque enveloppe regroupe une ou plusieurs catégories de dépenses. Par exemple, une enveloppe *Logement* peut contenir les catégories *Loyer*, *Électricité* et *Internet*.
+
+Créez et gérez les enveloppes dans **Paramètres → Enveloppes**.
+
+Chaque enveloppe affiche trois valeurs pour le mois en cours :
 
 | Valeur | Signification |
 |---|---|
-| **Budgété** | Le montant que vous avez décidé d'allouer à cette catégorie ce mois |
-| **Activité** | Le total de toutes les transactions (y compris les prévisions) dans cette catégorie ce mois |
-| **Disponible** | Budgété − Activité, reporté des mois précédents |
+| **Budgété** | Le montant que vous avez décidé d'allouer à cette enveloppe ce mois |
+| **Activité** | Le total de toutes les transactions (y compris les prévisions) dans toutes les catégories de cette enveloppe ce mois |
+| **Disponible** | Budgété − Activité |
 
-Un **Disponible positif** signifie qu'il vous reste de l'argent à dépenser. Un **Disponible négatif** signifie que vous avez dépassé le budget.
+Un **Disponible positif** signifie qu'il vous reste de l'argent à dépenser dans cette enveloppe. Un **Disponible négatif** signifie que vous avez dépassé le budget.
+
+### Report (Rollover)
+
+Lorsque vous activez le **Report** sur une enveloppe, le solde non dépensé est reporté au mois suivant. Le Disponible reflète alors la somme cumulative de (Budgété − Activité) sur tous les mois jusqu'au mois en cours.
+
+Le report est utile pour les dépenses irrégulières (ex. *Réparations voiture*) où vous économisez un peu chaque mois.
 
 ### À budgéter
 
-En haut de la page budget, **À budgéter** montre votre revenu total moins tout ce que vous avez déjà affecté aux catégories. L'objectif est **zéro** — chaque centime doit être affecté quelque part.
+En haut de la page budget, **À budgéter** montre votre revenu total moins tout ce que vous avez déjà affecté aux enveloppes. L'objectif est **zéro** — chaque centime doit être affecté quelque part.
 
 ### Allocations mensuelles
 
-Cliquez sur la cellule **Budgété** d'une catégorie pour saisir le montant à allouer pour ce mois. Les modifications sont sauvegardées automatiquement.
+Cliquez sur la cellule **Budgété** d'une enveloppe pour saisir le montant à allouer pour ce mois. Les modifications sont sauvegardées automatiquement.
 
 > **Conseil** : Les prévisions (transactions virtuelles) réduisent le montant Disponible même avant que la vraie transaction n'arrive. C'est intentionnel — cela vous permet de voir l'impact réel des dépenses planifiées.
+
+### Gérer les enveloppes (Paramètres → Enveloppes)
+
+Dans **Paramètres → Enveloppes** vous pouvez :
+- **Créer** une nouvelle enveloppe avec un nom et l'option de report
+- **Affecter des catégories** à une enveloppe (une catégorie ne peut appartenir qu'à une seule enveloppe)
+- **Modifier** le nom, le flag de report ou les catégories d'une enveloppe existante
+- **Supprimer** une enveloppe (ses allocations de budget sont également supprimées)
 
 ---
 

@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { updateTransaction } from '@/api/transactions'
-import { formatAmount, type CategoryGroupWithCategories, type Transaction } from '@/api/types'
+import {
+  formatAmount,
+  type Category,
+  type CategoryGroupWithCategories,
+  type Transaction,
+} from '@/api/types'
 import CategoryPicker from './CategoryPicker.vue'
 
 const props = defineProps<{
@@ -12,6 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'category-saved', txn: Transaction, categoryId: number | null): void
   (e: 'error', message: string): void
+  (e: 'category-created', category: Category): void
 }>()
 
 const editing = ref(false)
@@ -60,7 +66,11 @@ function categoryName(id: number | null): string {
     <td>
       <template v-if="editing">
         <div class="flex gap-1 items-center">
-          <CategoryPicker v-model="editCategoryId" :groups="groups" />
+          <CategoryPicker
+            v-model="editCategoryId"
+            :groups="groups"
+            @category-created="(cat) => emit('category-created', cat)"
+          />
           <button class="btn btn-xs btn-success" @click="saveEdit">✓</button>
           <button class="btn btn-xs btn-ghost" @click="cancelEdit">✕</button>
         </div>

@@ -47,9 +47,7 @@ async def get_month_budget_view(
     # 1. All envelopes for the user, ordered for UI display, categories eagerly loaded
     env_result = await db.execute(
         select(Envelope)
-        .options(
-            selectinload(Envelope.categories).selectinload(Category.group)
-        )
+        .options(selectinload(Envelope.categories).selectinload(Category.group))
         .where(Envelope.user_id == user_id)
         .order_by(Envelope.sort_order, Envelope.id)
     )
@@ -128,9 +126,7 @@ async def get_month_budget_view(
         )
         .group_by(BudgetAllocation.envelope_id)
     )
-    cum_budgeted: dict[int, int] = {
-        row[0]: row[1] for row in cum_budgeted_result.all()
-    }
+    cum_budgeted: dict[int, int] = {row[0]: row[1] for row in cum_budgeted_result.all()}
 
     # 6. Income this month: positive uncategorised transactions in user's accounts
     income_row = await db.execute(
@@ -251,5 +247,3 @@ async def get_budget_month(
         .where(BudgetAllocation.month == month, Envelope.user_id == user_id)
     )
     return list(result.scalars().all())
-
-

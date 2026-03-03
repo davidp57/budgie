@@ -77,6 +77,10 @@ function onCategorySaved(txn: Transaction, categoryId: number | null): void {
   txn.category_id = categoryId
 }
 
+async function reloadGroups(): Promise<void> {
+  groups.value = await listGroupsWithCategories()
+}
+
 function openVirtualModal(): void {
   virtualForm.value = {
     account_id: selectedAccountId.value ?? accounts.value[0]?.id ?? null,
@@ -197,6 +201,7 @@ async function saveVirtualTransaction(): Promise<void> {
               :txn="txn"
               :groups="groups"
               @category-saved="onCategorySaved"
+              @category-created="reloadGroups"
               @error="error = $event"
             />
           </template>
@@ -235,7 +240,11 @@ async function saveVirtualTransaction(): Promise<void> {
 
         <div class="form-control mb-3">
           <label class="label"><span class="label-text">Category (optional)</span></label>
-          <CategoryPicker v-model="virtualForm.category_id" :groups="groups" />
+          <CategoryPicker
+            v-model="virtualForm.category_id"
+            :groups="groups"
+            @category-created="reloadGroups"
+          />
         </div>
 
         <div class="form-control mb-4">

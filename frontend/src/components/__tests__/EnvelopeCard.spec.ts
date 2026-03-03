@@ -4,19 +4,35 @@ import EnvelopeCard from '../EnvelopeCard.vue'
 import type { EnvelopeLine } from '@/api/types'
 
 const baseEnvelope: EnvelopeLine = {
-  category_id: 1,
-  category_name: 'Groceries',
-  group_id: 10,
-  group_name: 'Food',
+  envelope_id: 1,
+  envelope_name: 'Food',
+  rollover: false,
+  categories: [{ id: 1, name: 'Groceries', group_name: 'Food' }],
   budgeted: 20000, // 200.00 €
   activity: -5000, // -50.00 €
   available: 15000, // 150.00 €
 }
 
 describe('EnvelopeCard', () => {
-  it('renders category name', () => {
+  it('renders envelope name', () => {
+    const wrapper = mount(EnvelopeCard, { props: { envelope: baseEnvelope } })
+    expect(wrapper.text()).toContain('Food')
+  })
+
+  it('renders category chips as subtitle', () => {
     const wrapper = mount(EnvelopeCard, { props: { envelope: baseEnvelope } })
     expect(wrapper.text()).toContain('Groceries')
+  })
+
+  it('shows rollover badge when rollover is true', () => {
+    const withRollover = { ...baseEnvelope, rollover: true }
+    const wrapper = mount(EnvelopeCard, { props: { envelope: withRollover } })
+    expect(wrapper.text()).toContain('↻')
+  })
+
+  it('does not show rollover badge when rollover is false', () => {
+    const wrapper = mount(EnvelopeCard, { props: { envelope: baseEnvelope } })
+    expect(wrapper.text()).not.toContain('↻')
   })
 
   it('shows available in green when positive', () => {

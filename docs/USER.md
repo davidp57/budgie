@@ -29,7 +29,7 @@ It follows the **envelope budgeting** method: every centime of income is assigne
 |---|---|
 | Bank import | Upload CSV, Excel, QIF or OFX files exported from your bank |
 | Auto-categorization | Transactions are categorized automatically based on payee history and rules you define |
-| Envelope budgeting | Assign a budget to each category each month; track what's available |
+| Envelope budgeting | Group categories into envelopes; assign a budget to each envelope each month; enable rollover to carry unspent balance forward |
 | Virtual transactions | Plan future purchases to see their impact on your budget before they happen |
 | Transaction history | Filter by account, type (real / forecast) and search |
 | Dark / light theme | Switches automatically based on your system preference, or toggle manually |
@@ -49,8 +49,9 @@ On your first visit, click **Register** to create your account.
 
 1. **Create accounts** — your bank accounts, savings, etc.
 2. **Create category groups and categories** — e.g. group *Housing* with categories *Rent*, *Electricity*, *Internet*
-3. **Import your first bank file**
-4. **Assign your budget** for the current month
+3. **Create envelopes** (in **Settings → Envelopes**) — each envelope groups categories into a single budget area (e.g. *Housing* envelope containing *Rent* + *Electricity*)
+4. **Import your first bank file**
+5. **Assign your budget** for the current month
 
 ---
 
@@ -152,25 +153,43 @@ Go to **Budget**.
 
 ### How it works
 
-Each category has three values for the current month:
+Budgie uses **envelope budgeting**: money is assigned to named **envelopes** before it is spent. Each envelope groups one or more spending categories. For example, a *Housing* envelope might contain the categories *Rent*, *Electricity* and *Internet*.
+
+Create and manage envelopes in **Settings → Envelopes**.
+
+Each envelope shows three values for the current month:
 
 | Value | Meaning |
 |---|---|
-| **Budgeted** | The amount you decided to assign to this category this month |
-| **Activity** | The total of all transactions (including forecasts) in this category this month |
-| **Available** | Budgeted − Activity, carried forward from previous months |
+| **Budgeted** | The amount you decided to assign to this envelope this month |
+| **Activity** | The total of all transactions (including forecasts) across all categories in this envelope this month |
+| **Available** | Budgeted − Activity |
 
-A **positive** Available means you have money left to spend. A **negative** Available means you have overspent.
+A **positive** Available means you have money left to spend in that envelope. A **negative** Available means you have overspent.
+
+### Rollover
+
+When you enable **Rollover** on an envelope, unspent balance is carried forward to the following month. The Available figure then reflects the cumulative sum of (Budgeted − Activity) across all months up to the current one.
+
+Rollover is useful for irregular expenses (e.g. *Car repairs*) where you save a little each month.
 
 ### To be budgeted
 
-At the top of the budget page, **To be budgeted** shows your total income minus everything you have already assigned to categories. The goal is **zero** — every centime should be assigned somewhere.
+At the top of the budget page, **To be budgeted** shows your total income minus everything you have already assigned to envelopes. The goal is **zero** — every centime should be assigned somewhere.
 
 ### Monthly allocations
 
-Click on the **Budgeted** cell of any category to enter the amount you want to allocate for that month. Changes are saved automatically.
+Click on the **Budgeted** cell of any envelope to enter the amount you want to allocate for that month. Changes are saved automatically.
 
 > **Tip**: Forecasts (virtual transactions) reduce the Available amount even before the real transaction happens. This is intentional — it lets you see the true impact of planned spending.
+
+### Managing envelopes (Settings → Envelopes)
+
+In **Settings → Envelopes** you can:
+- **Create** a new envelope with a name and optional rollover flag
+- **Assign categories** to an envelope (a category can belong to only one envelope)
+- **Edit** an existing envelope's name, rollover flag, or assigned categories
+- **Delete** an envelope (its budget allocations are also removed)
 
 ---
 

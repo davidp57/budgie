@@ -299,9 +299,7 @@ async def test_delete_transaction(auth_client: AsyncClient):
 
 
 async def test_set_budget_allocation(auth_client: AsyncClient):
-    envelope = await auth_client.post(
-        "/api/envelopes", json={"name": "Bills"}
-    )
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Bills"})
     env_id = envelope.json()["id"]
     response = await auth_client.put(
         "/api/budget/2026-01",
@@ -314,9 +312,7 @@ async def test_set_budget_allocation(auth_client: AsyncClient):
 
 
 async def test_get_budget_month(auth_client: AsyncClient) -> None:
-    envelope = await auth_client.post(
-        "/api/envelopes", json={"name": "Bills"}
-    )
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Bills"})
     env_id = envelope.json()["id"]
     await auth_client.put(
         "/api/budget/2026-01",
@@ -364,9 +360,7 @@ async def test_get_budget_month_envelope_fields(auth_client: AsyncClient) -> Non
 
 async def test_get_budget_month_to_be_budgeted(auth_client: AsyncClient) -> None:
     """to_be_budgeted reflects income minus total budgeted."""
-    envelope = await auth_client.post(
-        "/api/envelopes", json={"name": "Bills"}
-    )
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Bills"})
     account = await auth_client.post(
         "/api/accounts",
         json={"name": "Checking", "account_type": "checking", "on_budget": True},

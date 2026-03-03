@@ -92,17 +92,13 @@ async def _make_envelope(
     sort_order: int = 0,
 ) -> Envelope:
     """Create and persist an envelope (with no categories)."""
-    env = Envelope(
-        user_id=user_id, name=name, rollover=rollover, sort_order=sort_order
-    )
+    env = Envelope(user_id=user_id, name=name, rollover=rollover, sort_order=sort_order)
     db.add(env)
     await db.flush()
     return env
 
 
-async def _link_category(
-    db: AsyncSession, envelope_id: int, category_id: int
-) -> None:
+async def _link_category(db: AsyncSession, envelope_id: int, category_id: int) -> None:
     """Link a category to an envelope via the association table."""
     await db.execute(
         envelope_categories.insert(),
@@ -115,9 +111,7 @@ async def _make_allocation(
     db: AsyncSession, envelope_id: int, month: str, budgeted: int
 ) -> BudgetAllocation:
     """Create and persist a budget allocation for an envelope."""
-    alloc = BudgetAllocation(
-        envelope_id=envelope_id, month=month, budgeted=budgeted
-    )
+    alloc = BudgetAllocation(envelope_id=envelope_id, month=month, budgeted=budgeted)
     db.add(alloc)
     await db.flush()
     return alloc
@@ -339,9 +333,7 @@ async def test_available_rollover_cumulative_across_months(
 
     user = await _make_user(db_session)
     cat, _ = await _make_category(db_session, user.id)
-    env = await _make_envelope(
-        db_session, user.id, "Emergency Fund", rollover=True
-    )
+    env = await _make_envelope(db_session, user.id, "Emergency Fund", rollover=True)
     await _link_category(db_session, env.id, cat.id)
     account = await _make_account(db_session, user.id)
 
@@ -392,9 +384,7 @@ async def test_to_be_budgeted_income_minus_total_budgeted(
     account = await _make_account(db_session, user.id)
 
     # Income (positive, no category)
-    await _make_transaction(
-        db_session, account.id, datetime.date(2026, 1, 1), 200000
-    )
+    await _make_transaction(db_session, account.id, datetime.date(2026, 1, 1), 200000)
     await _make_allocation(db_session, env.id, "2026-01", budgeted=150000)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
@@ -557,9 +547,7 @@ async def test_to_be_budgeted_only_current_month_income(
     account = await _make_account(db_session, user.id)
 
     # December income — should NOT be counted in January
-    await _make_transaction(
-        db_session, account.id, datetime.date(2025, 12, 31), 300000
-    )
+    await _make_transaction(db_session, account.id, datetime.date(2025, 12, 31), 300000)
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
 
