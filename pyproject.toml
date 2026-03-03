@@ -93,5 +93,13 @@ module = [
     "aiosqlite.*",
     "jose.*",
     "bcrypt.*",
+    "openpyxl",
+    "openpyxl.*",
 ]
 ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["tests", "tests.*", "tests.*.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

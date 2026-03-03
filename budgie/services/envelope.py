@@ -136,7 +136,7 @@ async def _set_categories(
     if not category_ids:
         # Delete all existing links for this envelope
         await db.execute(
-            envelope_categories.delete().where(  # type: ignore[attr-defined]
+            envelope_categories.delete().where(
                 envelope_categories.c.envelope_id == envelope.id
             )
         )
@@ -144,14 +144,14 @@ async def _set_categories(
 
     # Remove these categories from any other envelope
     await db.execute(
-        envelope_categories.delete().where(  # type: ignore[attr-defined]
+        envelope_categories.delete().where(
             envelope_categories.c.category_id.in_(category_ids),
             envelope_categories.c.envelope_id != envelope.id,
         )
     )
     # Remove existing links for this envelope that are NOT in the new list
     await db.execute(
-        envelope_categories.delete().where(  # type: ignore[attr-defined]
+        envelope_categories.delete().where(
             envelope_categories.c.envelope_id == envelope.id,
             envelope_categories.c.category_id.notin_(category_ids),
         )
@@ -176,4 +176,4 @@ async def _set_categories(
         if cid in valid_ids and cid not in existing_ids
     ]
     if new_links:
-        await db.execute(envelope_categories.insert(), new_links)  # type: ignore[attr-defined]
+        await db.execute(envelope_categories.insert(), new_links)

@@ -7,7 +7,7 @@ import hashlib
 from decimal import Decimal
 from typing import IO
 
-from ofxtools import OFXTree  # type: ignore[attr-defined]
+from ofxtools import OFXTree
 
 from budgie.importers.base import BaseImporter, ImportedTransaction
 
