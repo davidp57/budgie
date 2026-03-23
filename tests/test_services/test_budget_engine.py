@@ -69,7 +69,7 @@ async def _make_transaction(
     date: datetime.date,
     amount: int,
     category_id: int | None = None,
-    is_virtual: bool = False,
+    status: str = "real",
 ) -> Transaction:
     """Create and persist a test transaction."""
     txn = Transaction(
@@ -77,7 +77,7 @@ async def _make_transaction(
         date=date,
         amount=amount,
         category_id=category_id,
-        is_virtual=is_virtual,
+        status=status,
     )
     db.add(txn)
     await db.flush()
@@ -205,7 +205,7 @@ async def test_activity_includes_virtual_transactions(db_session: AsyncSession) 
         datetime.date(2026, 1, 1),
         -80000,
         cat.id,
-        is_virtual=True,
+        status="planned",
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)

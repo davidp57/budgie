@@ -42,6 +42,10 @@ def _to_envelope_read(env: object) -> EnvelopeRead:
     return EnvelopeRead(
         id=env.id,
         name=env.name,
+        envelope_type=env.envelope_type,
+        period=env.period,
+        target_amount=env.target_amount,
+        stop_on_target=env.stop_on_target,
         rollover=env.rollover,
         sort_order=env.sort_order,
         categories=cats,

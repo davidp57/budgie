@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-AccountType = Literal["checking", "savings", "credit", "cash"]
+AccountType = Literal["checking", "savings", "credit", "cash", "wallet"]
 
 
 class AccountCreate(BaseModel):

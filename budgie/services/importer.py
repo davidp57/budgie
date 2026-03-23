@@ -37,7 +37,7 @@ async def confirm_import(
     receives accurate counts.
 
     When a transaction carries a ``virtual_linked_id``, the corresponding
-    virtual transaction is marked as ``cleared='reconciled'`` and the
+    planned transaction is marked as ``status='reconciled'`` and the
     new real transaction records the link.
 
     Args:
@@ -66,22 +66,21 @@ async def confirm_import(
             amount=txn.amount,
             memo=txn.description,
             import_hash=txn.import_hash,
-            cleared="uncleared",
-            virtual_linked_id=txn.virtual_linked_id,
+            status="real",
         )
         db.add(db_txn)
 
-        # If linked to a virtual transaction, mark it as realized
+        # If linked to a planned transaction, mark it as realized
         if txn.virtual_linked_id is not None:
-            virtual_result = await db.execute(
+            planned_result = await db.execute(
                 select(Transaction).where(
                     Transaction.id == txn.virtual_linked_id,
-                    Transaction.is_virtual == True,  # noqa: E712
+                    Transaction.status == "planned",
                 )
             )
-            virtual_txn = virtual_result.scalar_one_or_none()
-            if virtual_txn is not None:
-                virtual_txn.cleared = "reconciled"
+            planned_txn = planned_result.scalar_one_or_none()
+            if planned_txn is not None:
+                planned_txn.status = "reconciled"
 
         imported += 1
 

@@ -67,16 +67,18 @@ class EnvelopeLineRead(BaseModel):
     Attributes:
         envelope_id: Envelope primary key.
         envelope_name: Display name of the envelope.
+        envelope_type: Type of envelope (regular/cumulative/reserve).
         rollover: Whether unspent balance carries over to the next month.
         categories: Categories linked to this envelope.
         budgeted: Amount budgeted for this specific month (centimes).
-        activity: Sum of transactions (including virtual) for this month (centimes).
+        activity: Sum of transactions for this month (centimes).
         available: Available amount (centimes). With rollover=True, cumulative
             across all months ≤ current. With rollover=False, current month only.
     """
 
     envelope_id: int
     envelope_name: str
+    envelope_type: str = "regular"
     rollover: bool
     categories: list[CategoryRef]
     budgeted: int

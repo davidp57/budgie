@@ -68,6 +68,10 @@ async def create_envelope(
     envelope = Envelope(
         user_id=user_id,
         name=schema.name,
+        envelope_type=schema.envelope_type,
+        period=schema.period,
+        target_amount=schema.target_amount,
+        stop_on_target=schema.stop_on_target,
         rollover=schema.rollover,
         sort_order=schema.sort_order,
     )
@@ -98,6 +102,14 @@ async def update_envelope(
     """
     if schema.name is not None:
         envelope.name = schema.name
+    if schema.envelope_type is not None:
+        envelope.envelope_type = schema.envelope_type
+    if schema.period is not None:
+        envelope.period = schema.period
+    if schema.target_amount is not None:
+        envelope.target_amount = schema.target_amount
+    if schema.stop_on_target is not None:
+        envelope.stop_on_target = schema.stop_on_target
     if schema.rollover is not None:
         envelope.rollover = schema.rollover
     if schema.sort_order is not None:

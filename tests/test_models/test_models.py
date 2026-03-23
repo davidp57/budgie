@@ -215,8 +215,6 @@ async def test_create_transaction(db_session: AsyncSession):
         category_id=cat.id,
         amount=-5050,  # -50.50€ in centimes
         memo="Weekly groceries",
-        cleared="cleared",
-        is_virtual=False,
     )
     db_session.add(txn)
     await db_session.commit()
@@ -224,10 +222,7 @@ async def test_create_transaction(db_session: AsyncSession):
 
     assert txn.id is not None
     assert txn.amount == -5050
-    assert txn.cleared == "cleared"
-    assert txn.is_virtual is False
     assert txn.import_hash is None
-    assert txn.virtual_linked_id is None
 
 
 async def test_transaction_import_hash_unique(db_session: AsyncSession):
@@ -249,7 +244,6 @@ async def test_transaction_import_hash_unique(db_session: AsyncSession):
         account_id=account.id,
         date=datetime.date(2026, 1, 15),
         amount=-1000,
-        cleared="uncleared",
         import_hash="abc123",
     )
     db_session.add(txn1)
@@ -259,7 +253,6 @@ async def test_transaction_import_hash_unique(db_session: AsyncSession):
         account_id=account.id,
         date=datetime.date(2026, 1, 16),
         amount=-2000,
-        cleared="uncleared",
         import_hash="abc123",
     )
     db_session.add(txn2)
@@ -286,13 +279,12 @@ async def test_transaction_defaults(db_session: AsyncSession):
         account_id=account.id,
         date=datetime.date(2026, 2, 1),
         amount=-500,
-        cleared="uncleared",
     )
     db_session.add(txn)
     await db_session.commit()
     await db_session.refresh(txn)
 
-    assert txn.is_virtual is False
+    assert txn.status == "real"
     assert txn.created_at is not None
 
 
@@ -325,7 +317,6 @@ async def test_create_split_transaction(db_session: AsyncSession):
         account_id=account.id,
         date=datetime.date(2026, 1, 15),
         amount=-10000,  # -100€
-        cleared="cleared",
     )
     db_session.add(parent)
     await db_session.commit()
@@ -483,3 +474,231 @@ async def test_category_rules_ordered_by_priority(db_session: AsyncSession):
     rules = result.scalars().all()
     assert rules[0].priority == 100
     assert rules[1].priority == 1
+
+
+# ── Envelope type / period / target tests (v2) ───────────────────
+
+
+async def test_envelope_type_default_regular(db_session: AsyncSession):
+    """New envelopes should default to type='regular'."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(user_id=user.id, name="Courses")
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.envelope_type == "regular"
+
+
+async def test_envelope_type_cumulative(db_session: AsyncSession):
+    """Cumulative envelopes accumulate unspent budget."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(
+        user_id=user.id, name="Jeux", envelope_type="cumulative"
+    )
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.envelope_type == "cumulative"
+
+
+async def test_envelope_type_reserve(db_session: AsyncSession):
+    """Reserve envelopes have no periodic allocation."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(
+        user_id=user.id, name="Putes", envelope_type="reserve"
+    )
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.envelope_type == "reserve"
+
+
+async def test_envelope_period_default_monthly(db_session: AsyncSession):
+    """Default period should be 'monthly'."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(user_id=user.id, name="Courses")
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.period == "monthly"
+
+
+async def test_envelope_target_amount(db_session: AsyncSession):
+    """Cumulative envelopes can have an optional target amount."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(
+        user_id=user.id,
+        name="Vacances",
+        envelope_type="cumulative",
+        target_amount=300000,  # 3000€
+        stop_on_target=True,
+    )
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.target_amount == 300000
+    assert envelope.stop_on_target is True
+
+
+async def test_envelope_target_defaults_none(db_session: AsyncSession):
+    """Without target, target_amount is None and stop_on_target is False."""
+    from budgie.models.envelope import Envelope
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    envelope = Envelope(user_id=user.id, name="Courses")
+    db_session.add(envelope)
+    await db_session.commit()
+    await db_session.refresh(envelope)
+
+    assert envelope.target_amount is None
+    assert envelope.stop_on_target is False
+
+
+# ── Transaction status field (v2) ────────────────────────────────
+
+
+async def test_transaction_status_default_real(db_session: AsyncSession):
+    """New transactions should default to status='real'."""
+    from budgie.models.account import Account
+    from budgie.models.transaction import Transaction
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    account = Account(
+        user_id=user.id, name="Checking", account_type="checking", on_budget=True
+    )
+    db_session.add(account)
+    await db_session.commit()
+
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 15),
+        amount=-2500,
+    )
+    db_session.add(txn)
+    await db_session.commit()
+    await db_session.refresh(txn)
+
+    assert txn.status == "real"
+
+
+async def test_transaction_status_planned(db_session: AsyncSession):
+    """Planned transactions can be created with status='planned'."""
+    from budgie.models.account import Account
+    from budgie.models.transaction import Transaction
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    account = Account(
+        user_id=user.id, name="Checking", account_type="checking", on_budget=True
+    )
+    db_session.add(account)
+    await db_session.commit()
+
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 4, 1),
+        amount=-15000,
+        status="planned",
+    )
+    db_session.add(txn)
+    await db_session.commit()
+    await db_session.refresh(txn)
+
+    assert txn.status == "planned"
+
+
+async def test_transaction_status_reconciled(db_session: AsyncSession):
+    """Reconciled transactions have status='reconciled'."""
+    from budgie.models.account import Account
+    from budgie.models.transaction import Transaction
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    account = Account(
+        user_id=user.id, name="Checking", account_type="checking", on_budget=True
+    )
+    db_session.add(account)
+    await db_session.commit()
+
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-5000,
+        status="reconciled",
+    )
+    db_session.add(txn)
+    await db_session.commit()
+    await db_session.refresh(txn)
+
+    assert txn.status == "reconciled"
+
+
+# ── Account wallet type (v2) ─────────────────────────────────────
+
+
+async def test_account_type_wallet(db_session: AsyncSession):
+    """Wallet accounts represent physical cash wallets."""
+    from budgie.models.account import Account
+    from budgie.models.user import User
+
+    user = User(username="alice", hashed_password="hash")
+    db_session.add(user)
+    await db_session.commit()
+
+    account = Account(
+        user_id=user.id, name="Portefeuille", account_type="wallet", on_budget=True
+    )
+    db_session.add(account)
+    await db_session.commit()
+    await db_session.refresh(account)
+
+    assert account.account_type == "wallet"
