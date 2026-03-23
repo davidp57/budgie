@@ -69,8 +69,8 @@ const SHOP_EMOJIS: Record<string, string> = {
 }
 
 function getPlaceEmoji(tags: Record<string, string>): string {
-  if (tags.shop && SHOP_EMOJIS[tags.shop]) return SHOP_EMOJIS[tags.shop]
-  if (tags.amenity && AMENITY_EMOJIS[tags.amenity]) return AMENITY_EMOJIS[tags.amenity]
+  if (tags.shop && SHOP_EMOJIS[tags.shop]) return SHOP_EMOJIS[tags.shop]!
+  if (tags.amenity && AMENITY_EMOJIS[tags.amenity]) return AMENITY_EMOJIS[tags.amenity]!
   if (tags.shop) return '🏪'
   if (tags.amenity) return '📍'
   return '📍'
@@ -161,7 +161,7 @@ export function useNearbyPlaces(radius = 500) {
       }
 
       places.value = data.elements
-        .filter((el) => el.tags?.name)
+        .filter((el): el is typeof el & { tags: { name: string } } => Boolean(el.tags?.name))
         .map((el) => ({
           id: el.id,
           name: el.tags.name,

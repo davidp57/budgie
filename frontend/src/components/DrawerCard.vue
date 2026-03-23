@@ -63,7 +63,7 @@ const emit = defineEmits<{
 // Pick color from palette based on envelope_id
 const colors = computed<CardColors>(() => {
   const idx = props.colorIndex ?? (props.line.envelope_id - 1)
-  return COLOR_PALETTE[((idx % COLOR_PALETTE.length) + COLOR_PALETTE.length) % COLOR_PALETTE.length]
+  return COLOR_PALETTE[((idx % COLOR_PALETTE.length) + COLOR_PALETTE.length) % COLOR_PALETTE.length]!
 })
 
 const drawerType = computed<EnvelopeType>(() => props.line.envelope_type ?? 'regular')
@@ -121,7 +121,7 @@ const moneyItems = computed(() => {
   }
   // Ensure at least 3 items for visual impact
   while (items.length > 0 && items.length < 3) {
-    items.push(items[items.length - 1])
+    items.push(items[items.length - 1]!)
   }
   return items.slice(0, 8)
 })

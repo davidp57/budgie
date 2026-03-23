@@ -191,12 +191,16 @@ const swipeState = ref<{
 }>({ txnId: null, startX: 0, offsetX: 0 })
 
 function onTouchStart(txnId: number, e: TouchEvent): void {
-  swipeState.value = { txnId, startX: e.touches[0].clientX, offsetX: 0 }
+  const touch = e.touches[0]
+  if (!touch) return
+  swipeState.value = { txnId, startX: touch.clientX, offsetX: 0 }
 }
 
 function onTouchMove(e: TouchEvent): void {
   if (swipeState.value.txnId === null) return
-  const dx = e.touches[0].clientX - swipeState.value.startX
+  const touch = e.touches[0]
+  if (!touch) return
+  const dx = touch.clientX - swipeState.value.startX
   // Only allow left swipe (negative), cap at -160px
   swipeState.value.offsetX = Math.max(-160, Math.min(0, dx))
 }
@@ -234,7 +238,7 @@ function swipeOffset(txnId: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  const [, m, d] = dateStr.split('-')
+  const [, m = '01', d = '01'] = dateStr.split('-')
   const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
   return `${parseInt(d, 10)} ${months[parseInt(m, 10) - 1]}`
 }

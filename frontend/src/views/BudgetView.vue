@@ -36,7 +36,7 @@ const fullEnvelopes = ref<Envelope[]>([])
 
 // ── Month navigation ─────────────────────────────────────────────
 const monthLabel = computed(() => {
-  const [y, m] = budgetStore.month.split('-')
+  const [y = '2026', m = '01'] = budgetStore.month.split('-')
   const months = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
@@ -49,13 +49,13 @@ const totalAvailable = computed(() =>
 )
 
 function prevMonth(): void {
-  const [y, m] = budgetStore.month.split('-').map(Number)
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
   const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
   budgetStore.loadMonth(prev)
 }
 
 function nextMonth(): void {
-  const [y, m] = budgetStore.month.split('-').map(Number)
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
   budgetStore.loadMonth(next)
 }
@@ -98,12 +98,16 @@ const touchDeltaX = ref(0)
 
 function onTouchStart(e: TouchEvent, envelopeId: number): void {
   if (swipedId.value && swipedId.value !== envelopeId) swipedId.value = null
-  touchStartX.value = e.touches[0].clientX
+  const touch = e.touches[0]
+  if (!touch) return
+  touchStartX.value = touch.clientX
   touchDeltaX.value = 0
 }
 
 function onTouchMove(e: TouchEvent): void {
-  touchDeltaX.value = e.touches[0].clientX - touchStartX.value
+  const touch = e.touches[0]
+  if (!touch) return
+  touchDeltaX.value = touch.clientX - touchStartX.value
 }
 
 function onTouchEnd(envelopeId: number): void {
@@ -339,7 +343,7 @@ function addBudgetKey(key: string): void {
     addBudgetAmount.value += ','
   } else if (key !== ',') {
     const parts = addBudgetAmount.value.split(',')
-    if (parts.length === 2 && parts[1].length >= 2) return
+    if (parts.length === 2 && parts[1]!.length >= 2) return
     addBudgetAmount.value += key
   }
 }

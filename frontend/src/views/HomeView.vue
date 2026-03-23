@@ -26,7 +26,7 @@ function closeExpense(): void {
 
 // Formatted month name in French (e.g. "Mars 2026")
 const monthLabel = computed(() => {
-  const [y, m] = budgetStore.month.split('-')
+  const [y = '2026', m = '01'] = budgetStore.month.split('-')
   const months = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
@@ -41,13 +41,13 @@ const totalAvailable = computed(() =>
 
 // Navigate months
 function prevMonth(): void {
-  const [y, m] = budgetStore.month.split('-').map(Number)
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
   const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
   budgetStore.loadMonth(prev)
 }
 
 function nextMonth(): void {
-  const [y, m] = budgetStore.month.split('-').map(Number)
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
   budgetStore.loadMonth(next)
 }
