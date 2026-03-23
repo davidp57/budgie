@@ -73,15 +73,14 @@ class Envelope(Base):
     envelope_type: Mapped[str] = mapped_column(
         String(20), nullable=False, default="regular"
     )
-    period: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="monthly"
-    )
+    period: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")
     target_amount: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=None
     )
     stop_on_target: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rollover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    emoji: Mapped[str] = mapped_column(String(10), nullable=False, default="📦")
 
     categories: Mapped[list[Category]] = relationship(
         "Category",

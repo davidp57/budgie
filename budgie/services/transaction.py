@@ -15,8 +15,10 @@ async def get_transactions(
     status: str | None = None,
     month: str | None = None,
     category_ids: list[int] | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> list[Transaction]:
-    """Return transactions for a user, optionally filtered by account or status.
+    """Return transactions for a user, optionally filtered and paginated.
 
     Args:
         db: Async database session.
@@ -27,6 +29,8 @@ async def get_transactions(
         category_ids: If provided, filter to transactions whose category_id is
             in this list. Pass an empty list to return uncategorised transactions
             only.
+        limit: Maximum number of rows to return. None means no limit.
+        offset: Number of rows to skip before returning. None means 0.
 
     Returns:
         List of Transaction instances ordered by date descending.
@@ -35,7 +39,7 @@ async def get_transactions(
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
         .where(Account.user_id == user_id)
-        .order_by(Transaction.date.desc())
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
     )
     if account_id is not None:
         query = query.where(Transaction.account_id == account_id)
@@ -45,6 +49,10 @@ async def get_transactions(
         query = query.where(func.strftime("%Y-%m", Transaction.date) == month)
     if category_ids is not None:
         query = query.where(Transaction.category_id.in_(category_ids))
+    if offset is not None:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
 
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -146,11 +154,7 @@ async def create_transaction(
     """
     _DEPRECATED_FIELDS = {"cleared", "is_virtual", "virtual_linked_id"}
 
-    data = {
-        k: v
-        for k, v in schema.model_dump().items()
-        if k not in _DEPRECATED_FIELDS
-    }
+    data = {k: v for k, v in schema.model_dump().items() if k not in _DEPRECATED_FIELDS}
     txn = Transaction(**data)
     db.add(txn)
     await db.commit()

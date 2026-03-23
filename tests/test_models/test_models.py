@@ -505,9 +505,7 @@ async def test_envelope_type_cumulative(db_session: AsyncSession):
     db_session.add(user)
     await db_session.commit()
 
-    envelope = Envelope(
-        user_id=user.id, name="Jeux", envelope_type="cumulative"
-    )
+    envelope = Envelope(user_id=user.id, name="Jeux", envelope_type="cumulative")
     db_session.add(envelope)
     await db_session.commit()
     await db_session.refresh(envelope)
@@ -524,9 +522,7 @@ async def test_envelope_type_reserve(db_session: AsyncSession):
     db_session.add(user)
     await db_session.commit()
 
-    envelope = Envelope(
-        user_id=user.id, name="Putes", envelope_type="reserve"
-    )
+    envelope = Envelope(user_id=user.id, name="Putes", envelope_type="reserve")
     db_session.add(envelope)
     await db_session.commit()
     await db_session.refresh(envelope)

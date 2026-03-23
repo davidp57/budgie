@@ -6,17 +6,17 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.schemas.transaction import (
+    PlannedMatchRequest,
     TransactionCreate,
     TransactionRead,
     TransactionUpdate,
-    PlannedMatchRequest,
 )
 from budgie.services.transaction import (
     create_transaction,
     delete_transaction,
+    get_planned_unlinked,
     get_transaction,
     get_transactions,
-    get_planned_unlinked,
     link_planned,
     update_transaction,
 )
@@ -90,6 +90,8 @@ async def list_transactions(
     transaction_status: str | None = None,
     month: str | None = None,
     category_ids: Annotated[list[int] | None, Query()] = None,
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> list[TransactionRead]:
     """List transactions for the authenticated user.
 
@@ -101,13 +103,22 @@ async def list_transactions(
         month: Optional YYYY-MM month filter.
         category_ids: Optional list of category IDs to filter by (repeatable
             query param: ?category_ids=1&category_ids=2).
+        limit: Maximum number of transactions to return.
+        offset: Number of transactions to skip.
 
     Returns:
         List of transaction data.
     """
     cat_filter: list[int] | None = category_ids or None
     txns = await get_transactions(
-        db, current_user.id, account_id, transaction_status, month, cat_filter
+        db,
+        current_user.id,
+        account_id,
+        transaction_status,
+        month,
+        cat_filter,
+        limit=limit,
+        offset=offset,
     )
     return [TransactionRead.model_validate(t) for t in txns]
 

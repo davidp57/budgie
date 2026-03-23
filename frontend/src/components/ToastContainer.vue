@@ -12,8 +12,8 @@ const alertClass: Record<string, string> = {
 </script>
 
 <template>
-  <!-- Fixed bottom-end stack, above everything -->
-  <div class="toast toast-end toast-bottom z-[9999]">
+  <!-- Fixed top-center stack, above everything -->
+  <div class="toast toast-center toast-top z-[9999] pt-2">
     <TransitionGroup name="toast">
       <div
         v-for="t in toast.toasts"
@@ -37,7 +37,7 @@ const alertClass: Record<string, string> = {
 }
 .toast-enter-from {
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(-12px);
 }
 .toast-leave-to {
   opacity: 0;

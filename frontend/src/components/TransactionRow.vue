@@ -58,7 +58,7 @@ function categoryName(id: number | null): string {
 async function realizeTransaction(): Promise<void> {
   realizing.value = true
   try {
-    await updateTransaction(props.txn.id, { is_virtual: false })
+    await updateTransaction(props.txn.id, { status: 'real' })
     emit('realized', props.txn.id)
   } catch {
     emit('error', 'Failed to realize transaction.')
@@ -81,9 +81,9 @@ async function deleteVirtualTransaction(): Promise<void> {
 </script>
 
 <template>
-  <tr class="group" :class="txn.is_virtual ? 'opacity-60 border-dashed' : ''">
+  <tr class="group" :class="txn.status === 'planned' ? 'opacity-60 border-dashed' : ''">
     <td class="tabular-nums">
-      <span v-if="txn.is_virtual" class="mr-1" title="Forecast">⏳</span>{{ txn.date }}
+      <span v-if="txn.status === 'planned'" class="mr-1" title="Forecast">⏳</span>{{ txn.date }}
     </td>
     <td :class="txn.amount < 0 ? 'text-error' : 'text-success'" class="tabular-nums">
       {{ formatAmount(txn.amount) }}
@@ -131,15 +131,14 @@ async function deleteVirtualTransaction(): Promise<void> {
       <span
         class="badge badge-sm"
         :class="{
-          'badge-ghost': txn.cleared === 'uncleared',
-          'badge-info': txn.cleared === 'cleared',
-          'badge-success': txn.cleared === 'reconciled',
+          'badge-ghost': txn.status === 'real',
+          'badge-warning': txn.status === 'planned',
+          'badge-success': txn.status === 'reconciled',
         }"
       >
-        {{ txn.cleared }}
+        {{ txn.status }}
       </span>
-      <span v-if="txn.is_virtual" class="badge badge-sm badge-warning ml-1">forecast</span>
-      <span v-if="txn.is_virtual" class="inline-flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <span v-if="txn.status === 'planned'" class="inline-flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           class="btn btn-xs btn-success"
           :disabled="realizing || deleting"

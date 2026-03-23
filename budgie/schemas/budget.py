@@ -79,6 +79,7 @@ class EnvelopeLineRead(BaseModel):
     envelope_id: int
     envelope_name: str
     envelope_type: str = "regular"
+    emoji: str = "📦"
     rollover: bool
     categories: list[CategoryRef]
     budgeted: int

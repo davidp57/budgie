@@ -354,3 +354,79 @@ async def test_patch_transaction_not_found(auth_client: AsyncClient) -> None:
         "/api/transactions/99999", json={"category_id": None}
     )
     assert resp.status_code == 404
+
+
+# ── Pagination (limit / offset) ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_with_limit(auth_client: AsyncClient) -> None:
+    """GET /transactions?limit=N returns at most N results."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    resp = await auth_client.get("/api/transactions?limit=3")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 3
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_with_offset(auth_client: AsyncClient) -> None:
+    """GET /transactions?limit=2&offset=2 skips the first 2 rows."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    # Without offset — first page
+    page1 = await auth_client.get("/api/transactions?limit=2&offset=0")
+    assert page1.status_code == 200
+    assert len(page1.json()) == 2
+
+    # Second page
+    page2 = await auth_client.get("/api/transactions?limit=2&offset=2")
+    assert page2.status_code == 200
+    assert len(page2.json()) == 2
+
+    # No overlap between pages
+    ids1 = {t["id"] for t in page1.json()}
+    ids2 = {t["id"] for t in page2.json()}
+    assert ids1.isdisjoint(ids2)
+
+    # Last page (only 1 remaining)
+    page3 = await auth_client.get("/api/transactions?limit=2&offset=4")
+    assert page3.status_code == 200
+    assert len(page3.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_no_limit_returns_all(auth_client: AsyncClient) -> None:
+    """GET /transactions without limit/offset returns all rows (backward compat)."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    resp = await auth_client.get("/api/transactions")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 5

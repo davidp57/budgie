@@ -6,6 +6,7 @@ import type { EnvelopeLine } from '@/api/types'
 const baseEnvelope: EnvelopeLine = {
   envelope_id: 1,
   envelope_name: 'Food',
+  envelope_type: 'regular',
   rollover: false,
   categories: [{ id: 1, name: 'Groceries', group_name: 'Food' }],
   budgeted: 20000, // 200.00 €

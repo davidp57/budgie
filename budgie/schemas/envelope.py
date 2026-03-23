@@ -45,6 +45,7 @@ class EnvelopeCreate(BaseModel):
     stop_on_target: bool = False
     rollover: bool = False
     sort_order: int = 0
+    emoji: str = Field(default="📦", max_length=10)
     category_ids: list[int] = Field(default_factory=list)
 
 
@@ -69,6 +70,7 @@ class EnvelopeUpdate(BaseModel):
     stop_on_target: bool | None = None
     rollover: bool | None = None
     sort_order: int | None = None
+    emoji: str | None = Field(default=None, max_length=10)
     category_ids: list[int] | None = None
 
 
@@ -97,4 +99,5 @@ class EnvelopeRead(BaseModel):
     stop_on_target: bool
     rollover: bool
     sort_order: int
+    emoji: str = "📦"
     categories: list[CategoryRef]
