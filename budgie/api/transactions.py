@@ -6,32 +6,32 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.schemas.transaction import (
+    PlannedMatchRequest,
     TransactionCreate,
     TransactionRead,
     TransactionUpdate,
-    VirtualMatchRequest,
 )
 from budgie.services.transaction import (
     create_transaction,
     delete_transaction,
+    get_planned_unlinked,
     get_transaction,
     get_transactions,
-    get_virtual_unlinked,
-    link_virtual,
+    link_planned,
     update_transaction,
 )
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 
-@router.get("/virtual/unlinked", response_model=list[TransactionRead])
-async def list_virtual_unlinked(
+@router.get("/planned/unlinked", response_model=list[TransactionRead])
+async def list_planned_unlinked(
     db: DBSession,
     current_user: CurrentUser,
 ) -> list[TransactionRead]:
-    """List all unlinked (pending) virtual transactions for the user.
+    """List all unlinked (pending) planned transactions for the user.
 
-    Returns virtual transactions that have not yet been matched to a
+    Returns planned transactions that have not yet been matched to a
     real imported transaction.
 
     Args:
@@ -39,22 +39,22 @@ async def list_virtual_unlinked(
         current_user: JWT-authenticated user.
 
     Returns:
-        List of pending virtual transaction data.
+        List of pending planned transaction data.
     """
-    txns = await get_virtual_unlinked(db, current_user.id)
+    txns = await get_planned_unlinked(db, current_user.id)
     return [TransactionRead.model_validate(t) for t in txns]
 
 
-@router.post("/virtual/match", response_model=TransactionRead)
-async def match_virtual_transaction(
-    schema: VirtualMatchRequest,
+@router.post("/planned/match", response_model=TransactionRead)
+async def match_planned_transaction(
+    schema: PlannedMatchRequest,
     db: DBSession,
     current_user: CurrentUser,
 ) -> TransactionRead:
-    """Link a real transaction to a virtual one, marking the virtual as realized.
+    """Link a real transaction to a planned one, marking the planned as reconciled.
 
     Args:
-        schema: Match request with real and virtual transaction IDs.
+        schema: Match request with real and planned transaction IDs.
         db: Async database session.
         current_user: JWT-authenticated user.
 
@@ -63,7 +63,7 @@ async def match_virtual_transaction(
 
     Raises:
         HTTPException: 404 if either transaction is not found.
-        HTTPException: 400 if the virtual transaction ID is invalid.
+        HTTPException: 400 if the planned transaction ID is invalid.
     """
     real_txn = await get_transaction(db, schema.real_transaction_id, current_user.id)
     if real_txn is None:
@@ -72,8 +72,8 @@ async def match_virtual_transaction(
             detail="Real transaction not found",
         )
     try:
-        updated = await link_virtual(
-            db, real_txn, schema.virtual_transaction_id, current_user.id
+        updated = await link_planned(
+            db, real_txn, schema.planned_transaction_id, current_user.id
         )
     except ValueError as exc:
         raise HTTPException(
@@ -87,9 +87,11 @@ async def list_transactions(
     db: DBSession,
     current_user: CurrentUser,
     account_id: int | None = None,
-    is_virtual: bool | None = None,
+    transaction_status: str | None = None,
     month: str | None = None,
     category_ids: Annotated[list[int] | None, Query()] = None,
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> list[TransactionRead]:
     """List transactions for the authenticated user.
 
@@ -97,17 +99,26 @@ async def list_transactions(
         db: Async database session.
         current_user: JWT-authenticated user.
         account_id: Optional account filter.
-        is_virtual: Optional filter — True for virtual only, False for real only.
+        transaction_status: Optional filter by status (planned/real/reconciled).
         month: Optional YYYY-MM month filter.
         category_ids: Optional list of category IDs to filter by (repeatable
             query param: ?category_ids=1&category_ids=2).
+        limit: Maximum number of transactions to return.
+        offset: Number of transactions to skip.
 
     Returns:
         List of transaction data.
     """
     cat_filter: list[int] | None = category_ids or None
     txns = await get_transactions(
-        db, current_user.id, account_id, is_virtual, month, cat_filter
+        db,
+        current_user.id,
+        account_id,
+        transaction_status,
+        month,
+        cat_filter,
+        limit=limit,
+        offset=offset,
     )
     return [TransactionRead.model_validate(t) for t in txns]
 

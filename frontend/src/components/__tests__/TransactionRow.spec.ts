@@ -25,9 +25,7 @@ const baseTxn: Transaction = {
   category_id: 2,
   amount: -5000,
   memo: 'Grocery run',
-  cleared: 'cleared',
-  is_virtual: false,
-  virtual_linked_id: null,
+  status: 'real',
   income_for_month: null,
   import_hash: null,
   created_at: '2026-01-15T00:00:00',
@@ -77,15 +75,15 @@ describe('TransactionRow', () => {
     expect(wrapper.text()).toContain('—')
   })
 
-  it('shows forecast badge for virtual transactions', () => {
-    const virt = { ...baseTxn, is_virtual: true }
+  it('shows forecast badge for planned transactions', () => {
+    const virt = { ...baseTxn, status: 'planned' as const }
     const wrapper = mount(TransactionRow, { props: { txn: virt, groups } })
-    expect(wrapper.text()).toContain('forecast')
+    expect(wrapper.text()).toContain('planned')
   })
 
-  it('shows cleared status badge', () => {
+  it('shows status badge', () => {
     const wrapper = mount(TransactionRow, { props: { txn: baseTxn, groups } })
-    expect(wrapper.text()).toContain('cleared')
+    expect(wrapper.text()).toContain('real')
   })
 
   it('enters edit mode on category button click', async () => {

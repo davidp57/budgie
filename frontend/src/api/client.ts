@@ -25,13 +25,19 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// On 401: clear token + redirect. On other errors: show toast.
+// On 401: clear token + show toast. On other errors: show toast.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
-      window.location.href = '/login'
+      // Show auth error via toast instead of hard redirect
+      try {
+        const toast = useToastStore()
+        toast.error('Non authentifié — vérifiez la configuration du serveur')
+      } catch {
+        // toast store not yet available
+      }
     } else if (error.response) {
       // Only show a toast for non-401 server errors; callers can still
       // catch the error for their own flow (e.g. form validation).

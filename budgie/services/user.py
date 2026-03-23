@@ -22,6 +22,20 @@ async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+    """Fetch a user by primary key.
+
+    Args:
+        db: Async database session.
+        user_id: User ID to look up.
+
+    Returns:
+        User instance if found, None otherwise.
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+
 async def create_user(db: AsyncSession, schema: UserCreate) -> User:
     """Create a new user with a hashed password.
 

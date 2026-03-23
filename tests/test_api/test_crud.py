@@ -269,10 +269,10 @@ async def test_update_transaction(auth_client: AsyncClient):
     txn_id = txn.json()["id"]
     response = await auth_client.put(
         f"/api/transactions/{txn_id}",
-        json={"cleared": "cleared", "memo": "Updated"},
+        json={"status": "reconciled", "memo": "Updated"},
     )
     assert response.status_code == 200
-    assert response.json()["cleared"] == "cleared"
+    assert response.json()["status"] == "reconciled"
     assert response.json()["memo"] == "Updated"
 
 

@@ -13,7 +13,6 @@ import {
   listGroupsWithCategories,
 } from '@/api/categories'
 import { getPreferences, updatePreferences } from '@/api/users'
-import EnvelopeManager from '@/components/EnvelopeManager.vue'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
 
 // ── Accounts ───────────────────────────────────────────────────
@@ -223,19 +222,6 @@ async function removeCategory(id: number): Promise<void> {
         </div>
 
         <div v-if="categoryError" class="alert alert-error text-sm py-1">{{ categoryError }}</div>
-      </div>
-    </section>
-
-    <!-- Envelopes section -->
-    <section class="card bg-base-100 shadow">
-      <div class="card-body">
-        <h2 class="card-title">Envelopes</h2>
-        <p class="text-sm text-base-content/60 mb-3">
-          Group categories into budget envelopes. Each envelope tracks one spending area with its
-          own budgeted and available balance. Enable <strong>Rollover</strong> to carry unspent
-          balance forward to the next month.
-        </p>
-        <EnvelopeManager :groups="groups" />
       </div>
     </section>
 

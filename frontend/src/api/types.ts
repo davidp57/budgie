@@ -12,7 +12,7 @@ export interface LoginResponse {
 
 // ── Accounts ─────────────────────────────────────────────────────
 
-export type AccountType = 'checking' | 'savings' | 'credit' | 'cash'
+export type AccountType = 'checking' | 'savings' | 'credit' | 'cash' | 'wallet'
 
 export interface Account {
   id: number
@@ -63,7 +63,7 @@ export interface Payee {
 
 // ── Transactions ─────────────────────────────────────────────────
 
-export type ClearedStatus = 'uncleared' | 'cleared' | 'reconciled'
+export type TransactionStatus = 'planned' | 'real' | 'reconciled'
 
 export interface Transaction {
   id: number
@@ -73,10 +73,8 @@ export interface Transaction {
   category_id: number | null
   amount: number // centimes
   memo: string | null
-  cleared: ClearedStatus
-  is_virtual: boolean
-  virtual_linked_id: number | null
-  income_for_month: string | null // YYYY-MM — N+1 mode: counts income toward this month
+  status: TransactionStatus
+  income_for_month: string | null // YYYY-MM
   import_hash: string | null
   created_at: string
 }
@@ -88,17 +86,14 @@ export interface TransactionCreate {
   category_id?: number | null
   amount: number
   memo?: string | null
-  cleared?: ClearedStatus
-  is_virtual?: boolean
-  virtual_linked_id?: number | null
+  status?: TransactionStatus
 }
 
 export interface TransactionUpdate {
   category_id?: number | null
   memo?: string | null
-  cleared?: ClearedStatus
+  status?: TransactionStatus
   payee_id?: number | null
-  is_virtual?: boolean
 }
 
 // ── Budget ───────────────────────────────────────────────────────
@@ -109,9 +104,13 @@ export interface CategoryRef {
   group_name: string
 }
 
+export type EnvelopeType = 'regular' | 'cumulative' | 'reserve'
+
 export interface EnvelopeLine {
   envelope_id: number
   envelope_name: string
+  envelope_type: EnvelopeType
+  emoji: string
   rollover: boolean
   categories: CategoryRef[]
   budgeted: number // centimes
@@ -158,26 +157,43 @@ export interface UserPreferences {
 
 // ── Envelopes ────────────────────────────────────────────────────
 
+export type EnvelopePeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
 export interface Envelope {
   id: number
   name: string
+  emoji: string
   rollover: boolean
   sort_order: number
+  envelope_type: EnvelopeType
+  period: EnvelopePeriod
+  target_amount: number | null
+  stop_on_target: boolean
   categories: CategoryRef[]
 }
 
 export interface EnvelopeCreate {
   name: string
+  emoji?: string
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]
+  envelope_type?: EnvelopeType
+  period?: EnvelopePeriod
+  target_amount?: number | null
+  stop_on_target?: boolean
 }
 
 export interface EnvelopeUpdate {
   name?: string
+  emoji?: string
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]
+  envelope_type?: EnvelopeType
+  period?: EnvelopePeriod
+  target_amount?: number | null
+  stop_on_target?: boolean
 }
 
 // ── Import ───────────────────────────────────────────────────────
@@ -189,7 +205,6 @@ export interface ImportedTransaction {
   payee_name: string | null
   reference: string | null
   import_hash: string
-  virtual_linked_id?: number | null   // set by user during preview matching
 }
 
 export interface ParsePreviewResponse {

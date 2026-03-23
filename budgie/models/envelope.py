@@ -11,6 +11,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+#: Valid envelope types.
+ENVELOPE_TYPES = ("regular", "cumulative", "reserve")
+#: Valid allocation periods.
+ENVELOPE_PERIODS = ("weekly", "monthly", "quarterly", "yearly")
+
 from budgie.database import Base
 
 if TYPE_CHECKING:
@@ -48,6 +53,11 @@ class Envelope(Base):
         id: Primary key.
         user_id: Owner user ID (FK → users.id).
         name: Display name of the envelope.
+        envelope_type: Type of envelope — regular (monthly reset), cumulative
+            (balance carries over) or reserve (no periodic allocation).
+        period: Budget allocation period (weekly/monthly/quarterly/yearly).
+        target_amount: Optional goal amount in centimes (cumulative only).
+        stop_on_target: Stop allocating when target is reached.
         rollover: When True, unspent balance carries over to the next month.
             When False (default), available resets to budgeted each month.
         sort_order: UI display order.
@@ -60,8 +70,17 @@ class Envelope(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    envelope_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="regular"
+    )
+    period: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")
+    target_amount: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    stop_on_target: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rollover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    emoji: Mapped[str] = mapped_column(String(10), nullable=False, default="📦")
 
     categories: Mapped[list[Category]] = relationship(
         "Category",

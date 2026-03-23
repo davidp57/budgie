@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import axios from 'axios'
 import { listAccounts } from '@/api/accounts'
 import { confirmImport, parseFile } from '@/api/imports'
-import { listVirtualUnlinked } from '@/api/transactions'
+import { listPlannedUnlinked } from '@/api/transactions'
 import {
   formatAmount,
   type Account,
@@ -84,7 +84,7 @@ async function onFileSelected(file: File): Promise<void> {
   try {
     const [resp, virtuals] = await Promise.all([
       parseFile(file, selectedFormat.value),
-      listVirtualUnlinked(),
+      listPlannedUnlinked(),
     ])
     preview.value = resp.transactions
     virtualUnlinked.value = virtuals

@@ -24,11 +24,11 @@ async function load(): Promise<void> {
     const [acc, bud, txns] = await Promise.all([
       listAccounts(),
       getMonthBudget(currentMonth.value),
-      listTransactions(),
+      listTransactions({ limit: 10 }),
     ])
     accounts.value = acc
     budget.value = bud
-    recentTransactions.value = txns.slice(0, 10)
+    recentTransactions.value = txns
   } catch {
     error.value = 'Failed to load data.'
   } finally {

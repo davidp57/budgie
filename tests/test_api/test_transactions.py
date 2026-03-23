@@ -1,4 +1,4 @@
-"""Tests for transaction API endpoints, including virtual transaction logic."""
+"""Tests for transaction API endpoints, including planned transaction logic."""
 
 import pytest
 from httpx import AsyncClient
@@ -34,17 +34,15 @@ async def test_create_real_transaction(auth_client: AsyncClient) -> None:
             "date": "2024-01-15",
             "amount": -5000,
             "memo": "Groceries",
-            "is_virtual": False,
         },
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["amount"] == -5000
-    assert data["is_virtual"] is False
-    assert data["virtual_linked_id"] is None
+    assert data["status"] == "real"
 
 
-async def test_create_virtual_transaction(auth_client: AsyncClient) -> None:
+async def test_create_planned_transaction(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
     resp = await auth_client.post(
         "/api/transactions",
@@ -53,16 +51,15 @@ async def test_create_virtual_transaction(auth_client: AsyncClient) -> None:
             "date": "2024-02-01",
             "amount": -12000,
             "memo": "Planned rent payment",
-            "is_virtual": True,
+            "status": "planned",
         },
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data["is_virtual"] is True
-    assert data["cleared"] == "uncleared"
+    assert data["status"] == "planned"
 
 
-# ── is_virtual filter ──────────────────────────────────────────────────────
+# ── transaction_status filter ──────────────────────────────────────────────
 
 
 async def test_filter_real_transactions(auth_client: AsyncClient) -> None:
@@ -73,7 +70,7 @@ async def test_filter_real_transactions(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-01-10",
             "amount": -1000,
-            "is_virtual": False,
+            "status": "real",
         },
     )
     await auth_client.post(
@@ -82,18 +79,18 @@ async def test_filter_real_transactions(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-01-11",
             "amount": -2000,
-            "is_virtual": True,
+            "status": "planned",
         },
     )
 
-    resp = await auth_client.get("/api/transactions?is_virtual=false")
+    resp = await auth_client.get("/api/transactions?transaction_status=real")
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) == 1
-    assert items[0]["is_virtual"] is False
+    assert items[0]["status"] == "real"
 
 
-async def test_filter_virtual_transactions(auth_client: AsyncClient) -> None:
+async def test_filter_planned_transactions(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
     await auth_client.post(
         "/api/transactions",
@@ -101,7 +98,7 @@ async def test_filter_virtual_transactions(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-01-10",
             "amount": -1000,
-            "is_virtual": False,
+            "status": "real",
         },
     )
     await auth_client.post(
@@ -110,37 +107,37 @@ async def test_filter_virtual_transactions(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-01-11",
             "amount": -2000,
-            "is_virtual": True,
+            "status": "planned",
         },
     )
 
-    resp = await auth_client.get("/api/transactions?is_virtual=true")
+    resp = await auth_client.get("/api/transactions?transaction_status=planned")
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) == 1
-    assert items[0]["is_virtual"] is True
+    assert items[0]["status"] == "planned"
 
 
-# ── Virtual unlinked endpoint ───────────────────────────────────────────────
+# ── Planned unlinked endpoint ───────────────────────────────────────────────
 
 
-async def test_list_virtual_unlinked_empty(auth_client: AsyncClient) -> None:
-    response = await auth_client.get("/api/transactions/virtual/unlinked")
+async def test_list_planned_unlinked_empty(auth_client: AsyncClient) -> None:
+    response = await auth_client.get("/api/transactions/planned/unlinked")
     assert response.status_code == 200
     assert response.json() == []
 
 
-async def test_list_virtual_unlinked_returns_pending(auth_client: AsyncClient) -> None:
+async def test_list_planned_unlinked_returns_pending(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
 
-    # Create a virtual transaction (unlinked)
+    # Create a planned transaction (unlinked)
     await auth_client.post(
         "/api/transactions",
         json={
             "account_id": account_id,
             "date": "2024-03-01",
             "amount": -9900,
-            "is_virtual": True,
+            "status": "planned",
             "memo": "City gym",
         },
     )
@@ -151,31 +148,31 @@ async def test_list_virtual_unlinked_returns_pending(auth_client: AsyncClient) -
             "account_id": account_id,
             "date": "2024-03-02",
             "amount": -500,
-            "is_virtual": False,
+            "status": "real",
         },
     )
 
-    resp = await auth_client.get("/api/transactions/virtual/unlinked")
+    resp = await auth_client.get("/api/transactions/planned/unlinked")
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) == 1
     assert items[0]["memo"] == "City gym"
-    assert items[0]["is_virtual"] is True
+    assert items[0]["status"] == "planned"
 
 
-# ── Virtual match endpoint ──────────────────────────────────────────────────
+# ── Planned match endpoint ──────────────────────────────────────────────────
 
 
-async def test_match_virtual_transaction(auth_client: AsyncClient) -> None:
+async def test_match_planned_transaction(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
 
-    virtual = await auth_client.post(
+    planned = await auth_client.post(
         "/api/transactions",
         json={
             "account_id": account_id,
             "date": "2024-04-01",
             "amount": -5000,
-            "is_virtual": True,
+            "status": "planned",
             "memo": "Planned",
         },
     )
@@ -185,34 +182,33 @@ async def test_match_virtual_transaction(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-04-03",
             "amount": -5000,
-            "is_virtual": False,
+            "status": "real",
             "memo": "Real",
         },
     )
 
-    virtual_id = virtual.json()["id"]
+    planned_id = planned.json()["id"]
     real_id = real.json()["id"]
 
     resp = await auth_client.post(
-        "/api/transactions/virtual/match",
-        json={"real_transaction_id": real_id, "virtual_transaction_id": virtual_id},
+        "/api/transactions/planned/match",
+        json={"real_transaction_id": real_id, "planned_transaction_id": planned_id},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["id"] == real_id
-    assert data["virtual_linked_id"] == virtual_id
 
 
-async def test_match_marks_virtual_reconciled(auth_client: AsyncClient) -> None:
+async def test_match_marks_planned_reconciled(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
 
-    virtual = await auth_client.post(
+    planned = await auth_client.post(
         "/api/transactions",
         json={
             "account_id": account_id,
             "date": "2024-05-01",
             "amount": -7500,
-            "is_virtual": True,
+            "status": "planned",
         },
     )
     real = await auth_client.post(
@@ -221,45 +217,45 @@ async def test_match_marks_virtual_reconciled(auth_client: AsyncClient) -> None:
             "account_id": account_id,
             "date": "2024-05-02",
             "amount": -7500,
-            "is_virtual": False,
+            "status": "real",
         },
     )
 
-    virtual_id = virtual.json()["id"]
+    planned_id = planned.json()["id"]
     real_id = real.json()["id"]
 
     await auth_client.post(
-        "/api/transactions/virtual/match",
-        json={"real_transaction_id": real_id, "virtual_transaction_id": virtual_id},
+        "/api/transactions/planned/match",
+        json={"real_transaction_id": real_id, "planned_transaction_id": planned_id},
     )
 
-    # Virtual should no longer appear in unlinked list
-    unlinked = await auth_client.get("/api/transactions/virtual/unlinked")
+    # Planned should no longer appear in unlinked list
+    unlinked = await auth_client.get("/api/transactions/planned/unlinked")
     assert unlinked.status_code == 200
-    assert all(t["id"] != virtual_id for t in unlinked.json())
+    assert all(t["id"] != planned_id for t in unlinked.json())
 
 
 async def test_match_not_found_real_transaction(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
-    virtual = await auth_client.post(
+    planned = await auth_client.post(
         "/api/transactions",
         json={
             "account_id": account_id,
             "date": "2024-06-01",
             "amount": -1000,
-            "is_virtual": True,
+            "status": "planned",
         },
     )
-    virtual_id = virtual.json()["id"]
+    planned_id = planned.json()["id"]
 
     resp = await auth_client.post(
-        "/api/transactions/virtual/match",
-        json={"real_transaction_id": 99999, "virtual_transaction_id": virtual_id},
+        "/api/transactions/planned/match",
+        json={"real_transaction_id": 99999, "planned_transaction_id": planned_id},
     )
     assert resp.status_code == 404
 
 
-async def test_match_not_found_virtual_transaction(auth_client: AsyncClient) -> None:
+async def test_match_not_found_planned_transaction(auth_client: AsyncClient) -> None:
     account_id = await _create_account(auth_client)
     real = await auth_client.post(
         "/api/transactions",
@@ -267,14 +263,14 @@ async def test_match_not_found_virtual_transaction(auth_client: AsyncClient) -> 
             "account_id": account_id,
             "date": "2024-06-02",
             "amount": -1000,
-            "is_virtual": False,
+            "status": "real",
         },
     )
     real_id = real.json()["id"]
 
     resp = await auth_client.post(
-        "/api/transactions/virtual/match",
-        json={"real_transaction_id": real_id, "virtual_transaction_id": 99999},
+        "/api/transactions/planned/match",
+        json={"real_transaction_id": real_id, "planned_transaction_id": 99999},
     )
     assert resp.status_code == 400
 
@@ -283,10 +279,10 @@ async def test_match_not_found_virtual_transaction(auth_client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-async def test_virtual_unlinked_scoped_to_user(
+async def test_planned_unlinked_scoped_to_user(
     client: AsyncClient, auth_client: AsyncClient
 ) -> None:
-    """Virtual transactions from another user must not appear."""
+    """Planned transactions from another user must not appear."""
     account_id = await _create_account(auth_client)
     await auth_client.post(
         "/api/transactions",
@@ -294,7 +290,7 @@ async def test_virtual_unlinked_scoped_to_user(
             "account_id": account_id,
             "date": "2024-07-01",
             "amount": -3000,
-            "is_virtual": True,
+            "status": "planned",
         },
     )
 
@@ -309,7 +305,7 @@ async def test_virtual_unlinked_scoped_to_user(
     )
     client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
 
-    resp = await client.get("/api/transactions/virtual/unlinked")
+    resp = await client.get("/api/transactions/planned/unlinked")
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -358,3 +354,79 @@ async def test_patch_transaction_not_found(auth_client: AsyncClient) -> None:
         "/api/transactions/99999", json={"category_id": None}
     )
     assert resp.status_code == 404
+
+
+# ── Pagination (limit / offset) ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_with_limit(auth_client: AsyncClient) -> None:
+    """GET /transactions?limit=N returns at most N results."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    resp = await auth_client.get("/api/transactions?limit=3")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 3
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_with_offset(auth_client: AsyncClient) -> None:
+    """GET /transactions?limit=2&offset=2 skips the first 2 rows."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    # Without offset — first page
+    page1 = await auth_client.get("/api/transactions?limit=2&offset=0")
+    assert page1.status_code == 200
+    assert len(page1.json()) == 2
+
+    # Second page
+    page2 = await auth_client.get("/api/transactions?limit=2&offset=2")
+    assert page2.status_code == 200
+    assert len(page2.json()) == 2
+
+    # No overlap between pages
+    ids1 = {t["id"] for t in page1.json()}
+    ids2 = {t["id"] for t in page2.json()}
+    assert ids1.isdisjoint(ids2)
+
+    # Last page (only 1 remaining)
+    page3 = await auth_client.get("/api/transactions?limit=2&offset=4")
+    assert page3.status_code == 200
+    assert len(page3.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_no_limit_returns_all(auth_client: AsyncClient) -> None:
+    """GET /transactions without limit/offset returns all rows (backward compat)."""
+    account_id = await _create_account(auth_client)
+    for i in range(5):
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": f"2024-01-{10 + i:02d}",
+                "amount": -1000 * (i + 1),
+            },
+        )
+
+    resp = await auth_client.get("/api/transactions")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 5

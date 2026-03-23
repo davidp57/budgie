@@ -7,23 +7,30 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from budgie.config import Settings
 from budgie.database import get_db
 from budgie.models.user import User
 from budgie.services.auth import decode_token
-from budgie.services.user import get_user_by_username
+from budgie.services.user import get_user_by_id, get_user_by_username
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
+_settings = Settings()
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(security)
+    ] = None,
 ) -> User:
     """Validate JWT token and return the current authenticated user.
 
+    In MVP mode (``mvp_mode=True`` in settings), authentication is
+    bypassed and user with id=1 is returned directly.
+
     Args:
-        credentials: Bearer token credentials from Authorization header.
         db: Async database session.
+        credentials: Bearer token credentials from Authorization header.
 
     Returns:
         Authenticated User instance.
@@ -31,11 +38,22 @@ async def get_current_user(
     Raises:
         HTTPException: 401 if the token is invalid or user not found.
     """
+    if _settings.mvp_mode:
+        user = await get_user_by_id(db, 1)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="MVP user (id=1) not found. Create a user first.",
+            )
+        return user
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if credentials is None:
+        raise credentials_exception
     try:
         payload = decode_token(credentials.credentials)
         username: object = payload.get("sub")

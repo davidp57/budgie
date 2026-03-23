@@ -12,21 +12,25 @@ async def get_transactions(
     db: AsyncSession,
     user_id: int,
     account_id: int | None = None,
-    is_virtual: bool | None = None,
+    status: str | None = None,
     month: str | None = None,
     category_ids: list[int] | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
 ) -> list[Transaction]:
-    """Return transactions for a user, optionally filtered by account or type.
+    """Return transactions for a user, optionally filtered and paginated.
 
     Args:
         db: Async database session.
         user_id: Owner user ID (for authorization via account ownership).
         account_id: If provided, filter to this account only.
-        is_virtual: If provided, filter to virtual or real transactions only.
+        status: If provided, filter by transaction status (planned/real/reconciled).
         month: If provided, filter to transactions in this YYYY-MM month only.
         category_ids: If provided, filter to transactions whose category_id is
             in this list. Pass an empty list to return uncategorised transactions
             only.
+        limit: Maximum number of rows to return. None means no limit.
+        offset: Number of rows to skip before returning. None means 0.
 
     Returns:
         List of Transaction instances ordered by date descending.
@@ -35,45 +39,47 @@ async def get_transactions(
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
         .where(Account.user_id == user_id)
-        .order_by(Transaction.date.desc())
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
     )
     if account_id is not None:
         query = query.where(Transaction.account_id == account_id)
-    if is_virtual is not None:
-        query = query.where(Transaction.is_virtual == is_virtual)
+    if status is not None:
+        query = query.where(Transaction.status == status)
     if month is not None:
         query = query.where(func.strftime("%Y-%m", Transaction.date) == month)
     if category_ids is not None:
         query = query.where(Transaction.category_id.in_(category_ids))
+    if offset is not None:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
 
     result = await db.execute(query)
     return list(result.scalars().all())
 
 
-async def get_virtual_unlinked(
+async def get_planned_unlinked(
     db: AsyncSession,
     user_id: int,
 ) -> list[Transaction]:
-    """Return all unlinked (pending) virtual transactions for a user.
+    """Return all unlinked (pending) planned transactions for a user.
 
-    These are virtual transactions that have not yet been matched to a
-    real imported transaction (virtual_linked_id is None and not
-    reconciled).
+    These are planned transactions that have not yet been matched to a
+    real imported transaction.
 
     Args:
         db: Async database session.
         user_id: Owner user ID.
 
     Returns:
-        List of pending virtual Transaction instances ordered by date.
+        List of pending planned Transaction instances ordered by date.
     """
     query = (
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
         .where(
             Account.user_id == user_id,
-            Transaction.is_virtual == True,  # noqa: E712
-            Transaction.cleared != "reconciled",
+            Transaction.status == "planned",
         )
         .order_by(Transaction.date.asc())
     )
@@ -81,35 +87,33 @@ async def get_virtual_unlinked(
     return list(result.scalars().all())
 
 
-async def link_virtual(
+async def link_planned(
     db: AsyncSession,
     real_txn: Transaction,
-    virtual_id: int,
+    planned_id: int,
     user_id: int,
 ) -> Transaction:
-    """Link a real transaction to a virtual one, marking the virtual as realized.
+    """Link a real transaction to a planned one, marking the planned as reconciled.
 
-    Sets ``virtual_linked_id`` on the real transaction and marks the
-    virtual transaction as ``cleared='reconciled'``.
+    Marks the planned transaction as ``status='reconciled'``.
 
     Args:
         db: Async database session.
-        real_txn: The real (imported) transaction to update.
-        virtual_id: ID of the virtual transaction to mark as realized.
+        real_txn: The real (imported) transaction.
+        planned_id: ID of the planned transaction to mark as realized.
         user_id: Owner user ID (for authorization).
 
     Returns:
         Updated real Transaction instance.
 
     Raises:
-        ValueError: If the virtual transaction is not found or not owned by user.
+        ValueError: If the planned transaction is not found or not owned by user.
     """
-    virtual_txn = await get_transaction(db, virtual_id, user_id)
-    if virtual_txn is None or not virtual_txn.is_virtual:
-        raise ValueError(f"Virtual transaction {virtual_id} not found")
+    planned_txn = await get_transaction(db, planned_id, user_id)
+    if planned_txn is None or planned_txn.status != "planned":
+        raise ValueError(f"Planned transaction {planned_id} not found")
 
-    real_txn.virtual_linked_id = virtual_id
-    virtual_txn.cleared = "reconciled"
+    planned_txn.status = "reconciled"
     await db.commit()
     await db.refresh(real_txn)
     return real_txn
@@ -148,7 +152,10 @@ async def create_transaction(
     Returns:
         Newly created Transaction instance.
     """
-    txn = Transaction(**schema.model_dump())
+    _DEPRECATED_FIELDS = {"cleared", "is_virtual", "virtual_linked_id"}
+
+    data = {k: v for k, v in schema.model_dump().items() if k not in _DEPRECATED_FIELDS}
+    txn = Transaction(**data)
     db.add(txn)
     await db.commit()
     await db.refresh(txn)
@@ -168,8 +175,10 @@ async def update_transaction(
     Returns:
         Updated Transaction instance.
     """
+    _DEPRECATED = {"cleared", "is_virtual", "virtual_linked_id"}
     for field, value in schema.model_dump(exclude_unset=True).items():
-        setattr(txn, field, value)
+        if field not in _DEPRECATED:
+            setattr(txn, field, value)
     await db.commit()
     await db.refresh(txn)
     return txn

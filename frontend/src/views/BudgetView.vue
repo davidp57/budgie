@@ -1,790 +1,891 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { assignIncome, getIncomeProposals, getMonthBudget, setMonthBudget } from '@/api/budget'
-import { createEnvelope, updateEnvelope } from '@/api/envelopes'
-import { createTransaction, listTransactions } from '@/api/transactions'
-import { listAccounts } from '@/api/accounts'
-import { getPreferences } from '@/api/users'
-import {
-  formatAmount,
-  type Account,
-  type EnvelopeLine,
-  type IncomeProposal,
-  type MonthBudget,
-  type Transaction,
-} from '@/api/types'
-import MonthPicker from '@/components/MonthPicker.vue'
-import EnvelopeCard from '@/components/EnvelopeCard.vue'
+/**
+ * BudgetView — Manage budget envelopes with DrawerCard tiles.
+ *
+ * Mobile-first, same visual as HomeView but with inline editing:
+ * - DrawerCard tiles (same appearance as Tiroirs view)
+ * - Tap emoji → cycle through presets
+ * - Tap name → inline edit
+ * - Tap amount → inline edit budgeted amount
+ * - "⋯" button → full edit dialog
+ * - Swipe left → delete
+ * - FAB "+" → create new envelope
+ * - Cumulative envelopes: "+€" → numpad to add budget
+ */
 
-const today = new Date()
-const currentMonth = ref(
-  `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`,
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useBudgetStore } from '@/stores/budget'
+import { listGroupsWithCategories } from '@/api/categories'
+import { createEnvelope, deleteEnvelope, listEnvelopes, updateEnvelope } from '@/api/envelopes'
+import { setMonthBudget } from '@/api/budget'
+import DrawerCard from '@/components/DrawerCard.vue'
+import type {
+  CategoryGroupWithCategories,
+  Envelope,
+  EnvelopeLine,
+  EnvelopePeriod,
+  EnvelopeType,
+} from '@/api/types'
+import { formatAmount } from '@/api/types'
+
+const budgetStore = useBudgetStore()
+
+// ── Supplementary data ───────────────────────────────────────────
+const groups = ref<CategoryGroupWithCategories[]>([])
+const fullEnvelopes = ref<Envelope[]>([])
+
+// ── Month navigation ─────────────────────────────────────────────
+const monthLabel = computed(() => {
+  const [y = '2026', m = '01'] = budgetStore.month.split('-')
+  const months = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+  ]
+  return `${months[parseInt(m, 10) - 1]} ${y}`
+})
+
+const totalAvailable = computed(() =>
+  budgetStore.envelopeLines.reduce((sum, l) => sum + l.available, 0),
 )
 
-const budget = ref<MonthBudget | null>(null)
-const loading = ref(true)
-const saving = ref(false)
-const error = ref('')
-
-// Track edits: envelope_id â†’ new budgeted value (centimes)
-const edits = ref<Record<number, number>>({})
-
-// New envelope creation
-const addingEnvelope = ref(false)
-const newEnvelopeName = ref('')
-const newEnvelopeRollover = ref(false)
-const creatingEnvelope = ref(false)
-
-// â”€â”€ Envelope selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const selectedEnvelopeId = ref<number | null>(null)
-
-function selectEnvelope(id: number): void {
-  selectedEnvelopeId.value = selectedEnvelopeId.value === id ? null : id
+function prevMonth(): void {
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
+  const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+  budgetStore.loadMonth(prev)
 }
 
-/** Category IDs for the selected envelope (or all categories if none selected) */
-const activeCategoryIds = computed<number[] | undefined>(() => {
-  if (!budget.value || selectedEnvelopeId.value === null) return undefined
-  const env = budget.value.envelopes.find((e) => e.envelope_id === selectedEnvelopeId.value)
-  return env ? env.categories.map((c) => c.id) : undefined
-})
+function nextMonth(): void {
+  const [y = 0, m = 0] = budgetStore.month.split('-').map(Number)
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+  budgetStore.loadMonth(next)
+}
 
-// â”€â”€ Category name lookup map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const categoryMap = computed<Map<number, string>>(() => {
-  const m = new Map<number, string>()
-  if (!budget.value) return m
-  for (const env of budget.value.envelopes) {
-    for (const cat of env.categories) m.set(cat.id, cat.name)
+// ── Emoji presets ────────────────────────────────────────────────
+const EMOJI_PRESETS = [
+  '🛒', '🏠', '🚗', '💡', '🎮', '🍽️', '👕', '🏥',
+  '📱', '✈️', '🎓', '💰', '🐱', '🎁', '📦', '🔧',
+]
+
+// ── Helpers ──────────────────────────────────────────────────────
+const COLOR_PALETTE_LENGTH = 8
+
+function toggleCategory(ids: number[], id: number): void {
+  const idx = ids.indexOf(id)
+  if (idx >= 0) ids.splice(idx, 1)
+  else ids.push(id)
+}
+
+function displayEuros(centimes: number): string {
+  return (centimes / 100).toFixed(2).replace('.', ',')
+}
+
+// ── Color cycling on tile tap ───────────────────────────────────────
+const colorOverrides = ref<Record<number, number>>({})
+
+function getColorIndex(line: EnvelopeLine): number {
+  return colorOverrides.value[line.envelope_id] ?? (line.envelope_id - 1)
+}
+
+function cycleColor(line: EnvelopeLine): void {
+  const current = getColorIndex(line)
+  colorOverrides.value[line.envelope_id] = (current + 1) % COLOR_PALETTE_LENGTH
+}
+
+// ── Swipe to delete ──────────────────────────────────────────────
+const swipedId = ref<number | null>(null)
+const touchStartX = ref(0)
+const touchDeltaX = ref(0)
+
+function onTouchStart(e: TouchEvent, envelopeId: number): void {
+  if (swipedId.value && swipedId.value !== envelopeId) swipedId.value = null
+  const touch = e.touches[0]
+  if (!touch) return
+  touchStartX.value = touch.clientX
+  touchDeltaX.value = 0
+}
+
+function onTouchMove(e: TouchEvent): void {
+  const touch = e.touches[0]
+  if (!touch) return
+  touchDeltaX.value = touch.clientX - touchStartX.value
+}
+
+function onTouchEnd(envelopeId: number): void {
+  if (touchDeltaX.value < -60) {
+    swipedId.value = envelopeId
+  } else if (swipedId.value === envelopeId) {
+    swipedId.value = null
   }
-  return m
+  touchDeltaX.value = 0
+}
+
+// ── Inline editing ───────────────────────────────────────────────
+const inlineEdit = ref<{ id: number; field: 'name' | 'amount' } | null>(null)
+const inlineValue = ref('')
+
+async function cycleEmoji(line: EnvelopeLine): Promise<void> {
+  const current = line.emoji || '📦'
+  const idx = EMOJI_PRESETS.indexOf(current)
+  const next = EMOJI_PRESETS[(idx + 1) % EMOJI_PRESETS.length]
+  await updateEnvelope(line.envelope_id, { emoji: next })
+  await reloadAll()
+}
+
+function focusInlineInput(): void {
+  nextTick(() => {
+    const el = document.querySelector<HTMLInputElement>('.inline-edit-input')
+    el?.focus()
+    el?.select()
+  })
+}
+
+function startEditName(line: EnvelopeLine): void {
+  inlineEdit.value = { id: line.envelope_id, field: 'name' }
+  inlineValue.value = line.envelope_name
+  focusInlineInput()
+}
+
+function startEditAmount(line: EnvelopeLine): void {
+  inlineEdit.value = { id: line.envelope_id, field: 'amount' }
+  inlineValue.value = displayEuros(line.budgeted)
+  focusInlineInput()
+}
+
+async function saveInlineName(line: EnvelopeLine): Promise<void> {
+  if (!inlineEdit.value || inlineEdit.value.id !== line.envelope_id) return
+  const name = inlineValue.value.trim()
+  inlineEdit.value = null
+  if (!name || name === line.envelope_name) return
+  await updateEnvelope(line.envelope_id, { name })
+  await reloadAll()
+}
+
+async function saveInlineAmount(line: EnvelopeLine): Promise<void> {
+  if (!inlineEdit.value || inlineEdit.value.id !== line.envelope_id) return
+  const euros = parseFloat(inlineValue.value.replace(',', '.')) || 0
+  const centimes = Math.round(euros * 100)
+  inlineEdit.value = null
+  if (centimes === line.budgeted) return
+  await setMonthBudget(budgetStore.month, [
+    { envelope_id: line.envelope_id, budgeted: centimes },
+  ])
+  await budgetStore.loadMonth()
+}
+
+async function swipeDelete(envelopeId: number): Promise<void> {
+  await deleteEnvelope(envelopeId)
+  swipedId.value = null
+  await reloadAll()
+}
+
+// ── Edit dialog ──────────────────────────────────────────────────
+const editDialogRef = ref<HTMLDialogElement | null>(null)
+const editingLine = ref<EnvelopeLine | null>(null)
+const editForm = ref({
+  name: '',
+  emoji: '📦',
+  envelope_type: 'regular' as EnvelopeType,
+  period: 'monthly' as EnvelopePeriod,
+  rollover: false,
+  category_ids: [] as number[],
+  budgetedEuros: '',
 })
+const editError = ref('')
+const editSaving = ref(false)
 
-// â”€â”€ Transactions panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const transactions = ref<Transaction[]>([])
-const txnLoading = ref(false)
+function openEdit(line: EnvelopeLine): void {
+  editingLine.value = line
+  const full = fullEnvelopes.value.find((e) => e.id === line.envelope_id)
+  editForm.value = {
+    name: line.envelope_name,
+    emoji: line.emoji || '📦',
+    envelope_type: line.envelope_type,
+    period: full?.period ?? 'monthly',
+    rollover: line.rollover,
+    category_ids: line.categories.map((c) => c.id),
+    budgetedEuros: displayEuros(line.budgeted),
+  }
+  editError.value = ''
+  editDialogRef.value?.showModal()
+}
 
-async function loadTransactions(): Promise<void> {
-  txnLoading.value = true
+function closeEdit(): void {
+  editDialogRef.value?.close()
+  editingLine.value = null
+}
+
+async function saveEdit(): Promise<void> {
+  if (!editingLine.value) return
+  editSaving.value = true
+  editError.value = ''
   try {
-    transactions.value = await listTransactions({
-      month: currentMonth.value,
-      categoryIds: activeCategoryIds.value,
+    await updateEnvelope(editingLine.value.envelope_id, {
+      name: editForm.value.name.trim(),
+      emoji: editForm.value.emoji,
+      envelope_type: editForm.value.envelope_type,
+      period: editForm.value.period,
+      rollover: editForm.value.rollover,
+      category_ids: editForm.value.category_ids,
     })
-  } finally {
-    txnLoading.value = false
-  }
-}
-
-// â”€â”€ Resizable panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const panelHeight = ref(220)
-const isDragging = ref(false)
-const dragStartY = ref(0)
-const dragStartHeight = ref(0)
-
-function startDrag(e: PointerEvent): void {
-  isDragging.value = true
-  dragStartY.value = e.clientY
-  dragStartHeight.value = panelHeight.value
-  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-}
-
-function onDrag(e: PointerEvent): void {
-  if (!isDragging.value) return
-  const delta = dragStartY.value - e.clientY
-  panelHeight.value = Math.max(80, Math.min(600, dragStartHeight.value + delta))
-}
-
-function stopDrag(): void {
-  isDragging.value = false
-}
-
-// â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function load(month: string): Promise<void> {
-  loading.value = true
-  error.value = ''
-  edits.value = {}
-  selectedEnvelopeId.value = null
-  try {
-    budget.value = await getMonthBudget(month)
+    const euros = parseFloat(editForm.value.budgetedEuros.replace(',', '.')) || 0
+    const centimes = Math.round(euros * 100)
+    await setMonthBudget(budgetStore.month, [
+      { envelope_id: editingLine.value.envelope_id, budgeted: centimes },
+    ])
+    closeEdit()
+    await reloadAll()
   } catch {
-    error.value = 'Failed to load budget.'
+    editError.value = 'Échec de la sauvegarde.'
   } finally {
-    loading.value = false
+    editSaving.value = false
   }
-  await loadTransactions()
 }
 
+async function confirmDelete(): Promise<void> {
+  if (!editingLine.value) return
+  editSaving.value = true
+  editError.value = ''
+  try {
+    await deleteEnvelope(editingLine.value.envelope_id)
+    closeEdit()
+    await reloadAll()
+  } catch {
+    editError.value = 'Échec de la suppression.'
+  } finally {
+    editSaving.value = false
+  }
+}
+
+// ── Create dialog ────────────────────────────────────────────────
+const createDialogRef = ref<HTMLDialogElement | null>(null)
+const createForm = ref({
+  name: '',
+  emoji: '📦',
+  envelope_type: 'regular' as EnvelopeType,
+  period: 'monthly' as EnvelopePeriod,
+  rollover: false,
+  category_ids: [] as number[],
+  budgetedEuros: '',
+})
+const createError = ref('')
+const createSaving = ref(false)
+
+function openCreate(): void {
+  createForm.value = {
+    name: '',
+    emoji: '📦',
+    envelope_type: 'regular',
+    period: 'monthly',
+    rollover: false,
+    category_ids: [],
+    budgetedEuros: '',
+  }
+  createError.value = ''
+  createDialogRef.value?.showModal()
+}
+
+function closeCreate(): void {
+  createDialogRef.value?.close()
+}
+
+async function saveCreate(): Promise<void> {
+  if (!createForm.value.name.trim()) return
+  createSaving.value = true
+  createError.value = ''
+  try {
+    const envelope = await createEnvelope({
+      name: createForm.value.name.trim(),
+      emoji: createForm.value.emoji,
+      envelope_type: createForm.value.envelope_type,
+      period: createForm.value.period,
+      rollover: createForm.value.rollover,
+      category_ids: createForm.value.category_ids,
+    })
+    const euros = parseFloat(createForm.value.budgetedEuros.replace(',', '.')) || 0
+    if (euros > 0) {
+      await setMonthBudget(budgetStore.month, [
+        { envelope_id: envelope.id, budgeted: Math.round(euros * 100) },
+      ])
+    }
+    closeCreate()
+    await reloadAll()
+  } catch {
+    createError.value = 'Échec de la création.'
+  } finally {
+    createSaving.value = false
+  }
+}
+
+// ── Quick add budget (cumulative) ────────────────────────────────
+const addBudgetDialogRef = ref<HTMLDialogElement | null>(null)
+const addBudgetLine = ref<EnvelopeLine | null>(null)
+const addBudgetAmount = ref('')
+const addBudgetSaving = ref(false)
+const addBudgetError = ref('')
+
+function openAddBudget(line: EnvelopeLine, event: Event): void {
+  event.stopPropagation()
+  addBudgetLine.value = line
+  addBudgetAmount.value = ''
+  addBudgetError.value = ''
+  addBudgetDialogRef.value?.showModal()
+}
+
+function closeAddBudget(): void {
+  addBudgetDialogRef.value?.close()
+  addBudgetLine.value = null
+}
+
+function addBudgetKey(key: string): void {
+  if (key === '⌫') {
+    addBudgetAmount.value = addBudgetAmount.value.slice(0, -1)
+  } else if (key === ',' && !addBudgetAmount.value.includes(',')) {
+    addBudgetAmount.value += ','
+  } else if (key !== ',') {
+    const parts = addBudgetAmount.value.split(',')
+    if (parts.length === 2 && parts[1]!.length >= 2) return
+    addBudgetAmount.value += key
+  }
+}
+
+const addBudgetCentimes = computed(() => {
+  const euros = parseFloat(addBudgetAmount.value.replace(',', '.')) || 0
+  return Math.round(euros * 100)
+})
+
+async function confirmAddBudget(): Promise<void> {
+  if (!addBudgetLine.value || addBudgetCentimes.value <= 0) return
+  addBudgetSaving.value = true
+  addBudgetError.value = ''
+  try {
+    const newBudgeted = addBudgetLine.value.budgeted + addBudgetCentimes.value
+    await setMonthBudget(budgetStore.month, [
+      { envelope_id: addBudgetLine.value.envelope_id, budgeted: newBudgeted },
+    ])
+    closeAddBudget()
+    await budgetStore.loadMonth()
+  } catch {
+    addBudgetError.value = 'Échec.'
+  } finally {
+    addBudgetSaving.value = false
+  }
+}
+
+// ── Reload helper ────────────────────────────────────────────────
+async function reloadAll(): Promise<void> {
+  await Promise.all([
+    budgetStore.loadMonth(),
+    listEnvelopes().then((e) => (fullEnvelopes.value = e)),
+  ])
+}
+
+// ── Init ─────────────────────────────────────────────────────────
 onMounted(async () => {
-  accounts.value = await listAccounts()
-  const prefs = await getPreferences()
-  budgetMode.value = prefs.budget_mode
-  await load(currentMonth.value)
+  await Promise.all([
+    budgetStore.loadMonth(),
+    listGroupsWithCategories().then((g) => (groups.value = g)),
+    listEnvelopes().then((e) => (fullEnvelopes.value = e)),
+  ])
 })
-
-// Reload transactions when envelope selection or month changes
-watch(activeCategoryIds, () => loadTransactions())
-
-function onMonthChange(month: string): void {
-  currentMonth.value = month
-  load(month)
-}
-
-async function saveAll(): Promise<void> {
-  if (!budget.value) return
-  saving.value = true
-  try {
-    const lines = Object.entries(edits.value).map(([id, budgeted]) => ({
-      envelope_id: Number(id),
-      budgeted,
-    }))
-    if (lines.length > 0) {
-      await setMonthBudget(currentMonth.value, lines)
-      await load(currentMonth.value)
-    }
-  } catch {
-    error.value = 'Failed to save budget.'
-  } finally {
-    saving.value = false
-  }
-}
-
-function onEdit(envelope: EnvelopeLine, value: number): void {
-  edits.value[envelope.envelope_id] = value
-}
-
-async function submitNewEnvelope(): Promise<void> {
-  const name = newEnvelopeName.value.trim()
-  if (!name) return
-  creatingEnvelope.value = true
-  try {
-    await createEnvelope({ name, rollover: newEnvelopeRollover.value })
-    newEnvelopeName.value = ''
-    newEnvelopeRollover.value = false
-    addingEnvelope.value = false
-    await load(currentMonth.value)
-  } catch {
-    error.value = 'Failed to create envelope.'
-  } finally {
-    creatingEnvelope.value = false
-  }
-}
-
-onUnmounted(() => {
-  isDragging.value = false
-})
-
-// ── Accounts (for add-transaction modal) ────────────────────────
-const accounts = ref<Account[]>([])
-
-// ── Income proposals modal ───────────────────────────────────────────────────
-const incomeDialogRef = ref<HTMLDialogElement | null>(null)
-const incomeProposals = ref<IncomeProposal[]>([])
-const incomeChecked = ref<Set<number>>(new Set())
-const incomePrevMonth = ref('')
-const incomeThreshold = ref(200_000) // centimes, default 2 000.00 €
-const incomeThresholdEuros = ref('2000.00')
-const incomeLoading = ref(false)
-const incomeSaving = ref(false)
-const incomeError = ref('')
-/** Budget mode loaded from user preferences: 'n1' (N+1) or 'n' (prévisionnel) */
-const budgetMode = ref<'n1' | 'n'>('n1')
-
-/** Sum of amounts for checked proposals (centimes) — reactive to checkbox changes */
-const incomeTotalSelected = computed<number>(() => {
-  // Access .size to ensure Vue tracks Set mutations
-  void incomeChecked.value.size
-  return incomeProposals.value
-    .filter((p) => incomeChecked.value.has(p.transaction_id))
-    .reduce((sum, p) => sum + p.amount, 0)
-})
-
-async function openIncomeModal(): Promise<void> {
-  incomeLoading.value = true
-  incomeError.value = ''
-  incomeChecked.value = new Set()
-  incomeThresholdEuros.value = (incomeThreshold.value / 100).toFixed(2)
-  try {
-    const result = await getIncomeProposals(currentMonth.value, incomeThreshold.value)
-    incomeProposals.value = result.proposals
-    incomePrevMonth.value = result.previous_month
-    incomeChecked.value = new Set(result.proposals.map((p) => p.transaction_id))
-  } catch {
-    incomeError.value = 'Failed to load income proposals.'
-  } finally {
-    incomeLoading.value = false
-  }
-  incomeDialogRef.value?.showModal()
-}
-
-async function applyIncomeThreshold(): Promise<void> {
-  const euros = parseFloat(String(incomeThresholdEuros.value).replace(',', '.'))
-  if (!isNaN(euros) && euros >= 0) {
-    incomeThreshold.value = Math.round(euros * 100)
-  }
-  incomeLoading.value = true
-  incomeError.value = ''
-  try {
-    const result = await getIncomeProposals(currentMonth.value, incomeThreshold.value)
-    incomeProposals.value = result.proposals
-    incomePrevMonth.value = result.previous_month
-    incomeChecked.value = new Set(result.proposals.map((p) => p.transaction_id))
-  } catch {
-    incomeError.value = 'Failed to reload proposals.'
-  } finally {
-    incomeLoading.value = false
-  }
-}
-
-function toggleIncomeCheck(id: number): void {
-  if (incomeChecked.value.has(id)) {
-    incomeChecked.value.delete(id)
-  } else {
-    incomeChecked.value.add(id)
-  }
-}
-
-async function submitIncomePlan(): Promise<void> {
-  const selected = incomeProposals.value.filter((p) =>
-    incomeChecked.value.has(p.transaction_id),
-  )
-  if (selected.length === 0) {
-    incomeDialogRef.value?.close()
-    return
-  }
-  incomeSaving.value = true
-  incomeError.value = ''
-  try {
-    if (budgetMode.value === 'n1') {
-      // N+1 mode: tag the real M-1 transactions as income for this month
-      // (no virtual transaction created)
-      await assignIncome(
-        currentMonth.value,
-        selected.map((p) => p.transaction_id),
-      )
-    } else {
-      // Prévisionnel mode: create virtual income transactions in current month
-      const incomeDate = `${currentMonth.value}-01`
-      await Promise.all(
-        selected.map((p) =>
-          createTransaction({
-            account_id: p.account_id,
-            date: incomeDate,
-            amount: p.amount,
-            memo: p.memo ?? undefined,
-            category_id: null,
-            is_virtual: true,
-          }),
-        ),
-      )
-    }
-    incomeDialogRef.value?.close()
-    await load(currentMonth.value)
-  } catch {
-    incomeError.value = 'Failed to plan income.'
-  } finally {
-    incomeSaving.value = false
-  }
-}
-
-// ── Add virtual transaction modal ───────────────────────────────
-const addTxnDialogRef = ref<HTMLDialogElement | null>(null)
-const addTxnEnvelope = ref<EnvelopeLine | null>(null)
-const addTxnForm = ref({
-  accountId: 0,
-  date: today.toISOString().slice(0, 10),
-  amountEuros: '',
-  memo: '',
-  categoryId: null as number | null,
-})
-const addTxnSaving = ref(false)
-const addTxnError = ref('')
-
-function onAddTransaction(envelopeId: number): void {
-  if (!budget.value) return
-  const env = budget.value.envelopes.find((e) => e.envelope_id === envelopeId)
-  if (!env) return
-  addTxnEnvelope.value = env
-  addTxnForm.value = {
-    accountId: accounts.value[0]?.id ?? 0,
-    date: today.toISOString().slice(0, 10),
-    amountEuros: '',
-    memo: '',
-    categoryId: env.categories[0]?.id ?? null,
-  }
-  addTxnError.value = ''
-  addTxnDialogRef.value?.showModal()
-}
-
-async function submitAddTxn(): Promise<void> {
-  const euros = parseFloat(String(addTxnForm.value.amountEuros).replace(',', '.'))
-  if (!addTxnForm.value.accountId || isNaN(euros) || euros === 0) {
-    addTxnError.value = 'Account and amount are required.'
-    return
-  }
-  addTxnSaving.value = true
-  addTxnError.value = ''
-  try {
-    await createTransaction({
-      account_id: addTxnForm.value.accountId,
-      date: addTxnForm.value.date,
-      amount: -Math.abs(Math.round(euros * 100)), // expenses are negative
-      memo: addTxnForm.value.memo.trim() || null,
-      category_id: addTxnForm.value.categoryId,
-      is_virtual: true,
-    })
-    addTxnDialogRef.value?.close()
-    await load(currentMonth.value)
-  } catch {
-    addTxnError.value = 'Failed to add transaction.'
-  } finally {
-    addTxnSaving.value = false
-  }
-}
-
-// ── Edit envelope modal ─────────────────────────────────────────
-const editEnvDialogRef = ref<HTMLDialogElement | null>(null)
-const editEnvTarget = ref<EnvelopeLine | null>(null)
-const editEnvForm = ref({ name: '', rollover: false })
-const editEnvSaving = ref(false)
-const editEnvError = ref('')
-
-function onEditEnvelope(envelopeId: number): void {
-  if (!budget.value) return
-  const env = budget.value.envelopes.find((e) => e.envelope_id === envelopeId)
-  if (!env) return
-  editEnvTarget.value = env
-  editEnvForm.value = { name: env.envelope_name, rollover: env.rollover }
-  editEnvError.value = ''
-  editEnvDialogRef.value?.showModal()
-}
-
-async function submitEditEnv(): Promise<void> {
-  if (!editEnvTarget.value || !editEnvForm.value.name.trim()) {
-    editEnvError.value = 'Name is required.'
-    return
-  }
-  editEnvSaving.value = true
-  editEnvError.value = ''
-  try {
-    await updateEnvelope(editEnvTarget.value.envelope_id, {
-      name: editEnvForm.value.name.trim(),
-      rollover: editEnvForm.value.rollover,
-    })
-    editEnvDialogRef.value?.close()
-    await load(currentMonth.value)
-  } catch {
-    editEnvError.value = 'Failed to update envelope.'
-  } finally {
-    editEnvSaving.value = false
-  }
-}
 </script>
 
 <template>
-  <div class="flex flex-col" style="min-height: calc(100vh - 6rem)">
-    <!-- â”€â”€ Top: scrollable budget content â”€â”€ -->
-    <div class="flex-1 overflow-auto pb-2">
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold">Budget</h1>
-        <div class="flex gap-2 items-center">
-          <MonthPicker :model-value="currentMonth" @update:model-value="onMonthChange" />
+  <div class="px-4 py-5 pb-24">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🗂️</span>
+        <h1 class="text-xl font-bold">Tiroirs</h1>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>
+        <span class="text-sm font-semibold min-w-[100px] text-center">{{ monthLabel }}</span>
+        <button class="btn btn-ghost btn-xs btn-circle" @click="nextMonth">›</button>
+      </div>
+    </div>
+
+    <p class="text-sm text-base-content/50 mb-5">
+      {{ budgetStore.envelopeLines.length }} tiroir{{
+        budgetStore.envelopeLines.length > 1 ? 's' : ''
+      }}
+      · disponible {{ formatAmount(totalAvailable) }}
+    </p>
+
+    <!-- Loading skeleton -->
+    <div v-if="budgetStore.loading" class="flex flex-col gap-4">
+      <div v-for="i in 4" :key="i" class="skeleton h-36 rounded-2xl" />
+    </div>
+
+    <!-- Empty state -->
+    <div
+      v-else-if="budgetStore.envelopeLines.length === 0"
+      class="text-center py-10 text-base-content/50"
+    >
+      <p class="text-5xl mb-4">📭</p>
+      <p class="font-medium">Aucun tiroir</p>
+    </div>
+
+    <!-- Drawer cards with swipe-to-delete -->
+    <div v-else class="flex flex-col gap-4">
+      <div
+        v-for="line in budgetStore.envelopeLines"
+        :key="line.envelope_id"
+        class="relative overflow-hidden rounded-2xl"
+      >
+        <!-- Delete zone (revealed by swipe) -->
+        <div
+          class="absolute inset-y-0 right-0 w-24 bg-error flex items-center justify-center rounded-r-2xl"
+        >
           <button
-            v-if="Object.keys(edits).length > 0"
-            class="btn btn-primary btn-sm"
-            :disabled="saving"
-            @click="saveAll"
+            class="btn btn-ghost text-white text-2xl"
+            @click.stop="swipeDelete(line.envelope_id)"
           >
-            <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-            Save
+            🗑️
           </button>
         </div>
-      </div>
 
-      <!-- Summary banner -->
-      <div v-if="budget" class="flex flex-wrap gap-2 mb-4">
+        <!-- Card wrapper with touch gestures -->
         <div
-          class="alert flex-1 min-w-40"
-          :class="budget.total_available >= 0 ? 'alert-success' : 'alert-error'"
+          class="relative transition-transform duration-200"
+          :class="{ '-translate-x-24': swipedId === line.envelope_id }"
+          @touchstart="onTouchStart($event, line.envelope_id)"
+          @touchmove="onTouchMove"
+          @touchend="onTouchEnd(line.envelope_id)"
         >
-          <span class="font-semibold">Available:</span>
-          {{ formatAmount(budget.total_available) }}
+          <DrawerCard
+            :line="line"
+            :color-index="getColorIndex(line)"
+            :show-money="false"
+            :show-calendar="false"
+            :show-subtitle="false"
+            @tap="cycleColor(line)"
+          >
+            <!-- Emoji slot: click to cycle -->
+            <template #emoji>
+              <span
+                class="text-3xl drop-shadow-md cursor-pointer active:scale-90 transition-transform"
+                @click.stop="cycleEmoji(line)"
+              >
+                {{ line.emoji || '📦' }}
+              </span>
+            </template>
+
+            <!-- Name slot: inline edit -->
+            <template #name>
+              <input
+                v-if="inlineEdit?.id === line.envelope_id && inlineEdit?.field === 'name'"
+                v-model="inlineValue"
+                type="text"
+                class="inline-edit-input bg-white/30 rounded px-1.5 py-0.5
+                       font-bold text-base text-white tracking-wide
+                       outline-none border border-white/50 focus:border-white
+                       drop-shadow-sm"
+                @click.stop
+                @blur="saveInlineName(line)"
+                @keyup.enter="($event.target as HTMLInputElement).blur()"
+              />
+              <span
+                v-else
+                class="font-bold text-base tracking-wide drop-shadow-sm cursor-pointer"
+                @click.stop="startEditName(line)"
+              >
+                {{ line.envelope_name }}
+              </span>
+            </template>
+
+            <!-- Amount slot: inline edit budgeted -->
+            <template #amount>
+              <input
+                v-if="inlineEdit?.id === line.envelope_id && inlineEdit?.field === 'amount'"
+                v-model="inlineValue"
+                type="text"
+                inputmode="decimal"
+                class="inline-edit-input bg-white/30 rounded px-2 py-1
+                       text-[42px] leading-none font-extrabold tabular-nums tracking-tight
+                       text-white outline-none border border-white/50 focus:border-white
+                       drop-shadow-lg w-48"
+                @click.stop
+                @blur="saveInlineAmount(line)"
+                @keyup.enter="($event.target as HTMLInputElement).blur()"
+              />
+              <span
+                v-else
+                class="text-[42px] leading-none font-extrabold tabular-nums tracking-tight drop-shadow-lg cursor-pointer"
+                @click.stop="startEditAmount(line)"
+              >
+                {{ formatAmount(line.available) }}
+              </span>
+            </template>
+
+            <!-- Actions slot: +€ and ⋯ buttons -->
+            <template #actions>
+              <button
+                v-if="line.envelope_type === 'cumulative'"
+                class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm
+                       flex items-center justify-center
+                       text-xs font-bold text-white/80 hover:text-white hover:bg-white/30
+                       active:scale-90 transition-all shrink-0"
+                @click.stop="openAddBudget(line, $event)"
+              >
+                +€
+              </button>
+              <button
+                class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm
+                       flex items-center justify-center
+                       text-sm font-bold text-white/80 hover:text-white hover:bg-white/30
+                       active:scale-90 transition-all shrink-0"
+                :class="{ 'ml-auto': line.envelope_type !== 'cumulative' && line.envelope_type !== 'reserve' }"
+                @click.stop="openEdit(line)"
+              >
+                ⋯
+              </button>
+            </template>
+          </DrawerCard>
         </div>
-        <div
-          class="alert flex-1 min-w-40"
-          :class="
-            budget.to_be_budgeted > 0
-              ? 'alert-warning'
-              : budget.to_be_budgeted < 0
-                ? 'alert-error'
-                : 'alert-success'
-          "
-        >
-          <span class="font-semibold">To budget:</span>
-          {{ formatAmount(budget.to_be_budgeted) }}
-        </div>
-        <button
-          class="btn btn-outline btn-sm self-center whitespace-nowrap"
-          title="Plan income from last month's transactions"
-          @click="openIncomeModal"
-        >
-          ↑ Plan income
-        </button>
       </div>
+    </div>
 
-      <div v-if="loading" class="flex justify-center py-12">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
+    <!-- Blueprint "add" tile at the bottom -->
+    <button
+      v-if="!budgetStore.loading"
+      class="blueprint-tile w-full rounded-2xl mt-4 min-h-[150px]
+             flex flex-col items-center justify-center gap-2
+             active:scale-[0.97] transition-transform"
+      @click="openCreate"
+    >
+      <span class="text-5xl leading-none opacity-80">+</span>
+      <span class="text-sm font-medium tracking-wide opacity-70">Nouveau tiroir</span>
+    </button>
 
-      <div v-else-if="error" class="alert alert-error">{{ error }}</div>
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Edit Envelope Dialog                                      -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <dialog ref="editDialogRef" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box max-h-[85vh] overflow-y-auto">
+        <h3 class="text-lg font-bold mb-4">Modifier le tiroir</h3>
 
-      <template v-else-if="budget">
-        <!-- Column headers -->
-        <div
-          v-if="budget.envelopes.length > 0"
-          class="hidden sm:grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 mb-1 text-sm text-base-content/50 font-medium"
-        >
-          <span>Envelope</span>
-          <span class="text-right">Budgeted</span>
-          <span class="text-right">Activity</span>
-          <span class="text-right">Available</span>
-        </div>
-
-        <!-- Envelope list -->
-        <div class="card bg-base-100 shadow mb-4">
-          <div class="card-body p-3">
-            <EnvelopeCard
-              v-for="envelope in budget.envelopes"
-              :key="envelope.envelope_id"
-              :envelope="envelope"
-              :edited-value="edits[envelope.envelope_id]"
-              :selected="selectedEnvelopeId === envelope.envelope_id"
-              @edit="(v) => onEdit(envelope, v)"
-              @select="selectEnvelope"
-              @add-transaction="onAddTransaction"
-              @edit-envelope="onEditEnvelope"
-            />
-            <div
-              v-if="budget.envelopes.length === 0"
-              class="text-base-content/50 text-center py-6 text-sm"
+        <!-- Emoji picker -->
+        <div class="mb-4">
+          <label class="text-sm text-base-content/60 mb-1 block">Icône</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="e in EMOJI_PRESETS"
+              :key="e"
+              class="w-10 h-10 text-xl rounded-lg flex items-center justify-center transition-all"
+              :class="
+                editForm.emoji === e
+                  ? 'bg-primary/20 ring-2 ring-primary scale-110'
+                  : 'bg-base-200 hover:bg-base-300'
+              "
+              @click="editForm.emoji = e"
             >
-              No envelopes yet. Create one to start budgeting.
+              {{ e }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Nom</span></label>
+          <input
+            v-model="editForm.name"
+            type="text"
+            class="input input-bordered"
+            placeholder="Courses, Loyer..."
+          />
+        </div>
+
+        <!-- Type + Period -->
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Type</span></label>
+            <select v-model="editForm.envelope_type" class="select select-bordered select-sm">
+              <option value="regular">Régulier</option>
+              <option value="cumulative">Cumulatif</option>
+              <option value="reserve">Réserve</option>
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Période</span></label>
+            <select v-model="editForm.period" class="select select-bordered select-sm">
+              <option value="weekly">Hebdo</option>
+              <option value="monthly">Mensuel</option>
+              <option value="quarterly">Trimestriel</option>
+              <option value="yearly">Annuel</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Budget this month -->
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Budget ce mois (€)</span></label>
+          <input
+            v-model="editForm.budgetedEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="0,00"
+          />
+        </div>
+
+        <!-- Rollover -->
+        <label class="flex items-center gap-2 mb-3 cursor-pointer">
+          <input
+            v-model="editForm.rollover"
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+          />
+          <span class="text-sm">Report du solde au mois suivant</span>
+        </label>
+
+        <!-- Categories -->
+        <div v-if="groups.length > 0" class="mb-4">
+          <label class="text-sm text-base-content/60 mb-2 block">Catégories associées</label>
+          <div class="max-h-40 overflow-y-auto bg-base-200/50 rounded-lg p-2">
+            <div v-for="group in groups" :key="group.id" class="mb-2">
+              <div class="text-xs text-base-content/40 uppercase tracking-wide mb-1">
+                {{ group.name }}
+              </div>
+              <label
+                v-for="cat in group.categories"
+                :key="cat.id"
+                class="flex items-center gap-2 py-0.5 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs checkbox-primary"
+                  :checked="editForm.category_ids.includes(cat.id)"
+                  @change="toggleCategory(editForm.category_ids, cat.id)"
+                />
+                <span class="text-sm">{{ cat.name }}</span>
+              </label>
             </div>
           </div>
         </div>
 
-        <!-- Add envelope -->
-        <div v-if="!addingEnvelope" class="flex justify-start">
-          <button class="btn btn-ghost btn-sm text-primary" @click="addingEnvelope = true">
-            + Add envelope
+        <div v-if="editError" class="alert alert-error text-sm py-2 mb-3">{{ editError }}</div>
+
+        <div class="flex gap-2">
+          <button
+            class="btn btn-primary flex-1"
+            :disabled="editSaving || !editForm.name.trim()"
+            @click="saveEdit"
+          >
+            <span v-if="editSaving" class="loading loading-spinner loading-sm"></span>
+            Enregistrer
           </button>
+          <button class="btn btn-ghost" @click="closeEdit">Annuler</button>
         </div>
-        <div v-else class="card bg-base-100 shadow p-3">
-          <div class="flex flex-wrap gap-2 items-center">
-            <input
-              v-model="newEnvelopeName"
-              type="text"
-              class="input input-bordered input-sm flex-1 min-w-[160px]"
-              placeholder="Envelope name"
-              autofocus
-              @keyup.enter="submitNewEnvelope"
-              @keyup.escape="addingEnvelope = false"
-            />
-            <label class="flex items-center gap-1 text-sm select-none cursor-pointer">
-              <input v-model="newEnvelopeRollover" type="checkbox" class="checkbox checkbox-xs" />
-              Rollover
-            </label>
+
+        <div class="divider text-xs text-base-content/30">zone danger</div>
+        <button
+          class="btn btn-error btn-outline btn-sm w-full"
+          :disabled="editSaving"
+          @click="confirmDelete"
+        >
+          Supprimer ce tiroir
+        </button>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Create Envelope Dialog                                    -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <dialog ref="createDialogRef" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box max-h-[85vh] overflow-y-auto">
+        <h3 class="text-lg font-bold mb-4">Nouveau tiroir</h3>
+
+        <!-- Emoji picker -->
+        <div class="mb-4">
+          <label class="text-sm text-base-content/60 mb-1 block">Icône</label>
+          <div class="flex flex-wrap gap-2">
             <button
-              class="btn btn-primary btn-sm"
-              :disabled="creatingEnvelope || !newEnvelopeName.trim()"
-              @click="submitNewEnvelope"
+              v-for="e in EMOJI_PRESETS"
+              :key="e"
+              class="w-10 h-10 text-xl rounded-lg flex items-center justify-center transition-all"
+              :class="
+                createForm.emoji === e
+                  ? 'bg-primary/20 ring-2 ring-primary scale-110'
+                  : 'bg-base-200 hover:bg-base-300'
+              "
+              @click="createForm.emoji = e"
             >
-              <span v-if="creatingEnvelope" class="loading loading-spinner loading-xs"></span>
-              Create
+              {{ e }}
             </button>
-            <button class="btn btn-ghost btn-sm" @click="addingEnvelope = false">Cancel</button>
           </div>
         </div>
-      </template>
-    </div>
 
-    <!-- â”€â”€ Drag handle â”€â”€ -->
-    <div
-      class="flex items-center justify-center h-3 cursor-row-resize bg-base-300/60 hover:bg-primary/30 transition-colors select-none shrink-0"
-      :class="isDragging ? 'bg-primary/40' : ''"
-      @pointerdown="startDrag"
-      @pointermove="onDrag"
-      @pointerup="stopDrag"
-    >
-      <div class="w-10 h-1 rounded-full bg-base-content/20"></div>
-    </div>
-
-    <!-- â”€â”€ Bottom: transactions panel â”€â”€ -->
-    <div
-      class="bg-base-100 border-t border-base-300 overflow-auto shrink-0"
-      :style="{ height: panelHeight + 'px' }"
-    >
-      <div class="sticky top-0 bg-base-100 z-10 px-4 py-2 border-b border-base-300 flex items-center gap-2">
-        <span class="text-sm font-semibold text-base-content/70">Transactions</span>
-        <span v-if="selectedEnvelopeId !== null" class="badge badge-sm badge-primary">
-          {{
-            budget?.envelopes.find((e) => e.envelope_id === selectedEnvelopeId)?.envelope_name
-          }}
-          <button class="ml-1 opacity-60 hover:opacity-100" @click="selectedEnvelopeId = null">âœ•</button>
-        </span>
-        <span v-else class="text-xs text-base-content/40">â€” click an envelope to filter</span>
-        <span v-if="txnLoading" class="loading loading-spinner loading-xs ml-auto"></span>
-        <span v-else class="text-xs text-base-content/40 ml-auto">{{ transactions.length }} transactions</span>
-      </div>
-
-      <table v-if="transactions.length > 0" class="table table-xs w-full">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Memo</th>
-            <th class="text-right">Amount</th>
-            <th>Category</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="txn in transactions" :key="txn.id" :class="txn.is_virtual ? 'opacity-60' : ''">
-            <td class="tabular-nums whitespace-nowrap">{{ txn.date }}</td>
-            <td class="max-w-xs truncate">{{ txn.memo ?? 'â€”' }}</td>
-            <td
-              class="text-right tabular-nums"
-              :class="txn.amount < 0 ? 'text-error' : 'text-success'"
-            >
-              {{ formatAmount(txn.amount) }}
-            </td>
-            <td class="text-base-content/60 text-xs">
-              {{ txn.category_id !== null ? (categoryMap.get(txn.category_id) ?? '?') : 'â€”' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div
-        v-else-if="!txnLoading"
-        class="text-center text-base-content/40 text-sm py-6"
-      >
-        No transactions for this period.
-      </div>
-    </div>
-
-    <!-- ── Add virtual transaction modal ── -->
-    <dialog ref="addTxnDialogRef" class="modal">
-      <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg mb-4">Add planned transaction</h3>
-        <p v-if="addTxnEnvelope" class="text-sm text-base-content/60 mb-4">
-          Envelope: <span class="font-medium text-base-content">{{ addTxnEnvelope.envelope_name }}</span>
-        </p>
-
-        <div class="flex flex-col gap-3">
-          <!-- Account -->
-          <label class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Account</span></div>
-            <select v-model.number="addTxnForm.accountId" class="select select-bordered select-sm">
-              <option value="0" disabled>Select account…</option>
-              <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
-                {{ acc.name }}
-              </option>
-            </select>
-          </label>
-
-          <!-- Date -->
-          <label class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Date</span></div>
-            <input v-model="addTxnForm.date" type="date" class="input input-bordered input-sm" />
-          </label>
-
-          <!-- Amount -->
-          <label class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Amount (€)</span></div>
-            <input
-              v-model="addTxnForm.amountEuros"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              class="input input-bordered input-sm"
-            />
-          </label>
-
-          <!-- Category -->
-          <label v-if="addTxnEnvelope && addTxnEnvelope.categories.length > 1" class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Category</span></div>
-            <select v-model.number="addTxnForm.categoryId" class="select select-bordered select-sm">
-              <option v-for="cat in addTxnEnvelope.categories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </select>
-          </label>
-
-          <!-- Memo -->
-          <label class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Memo (optional)</span></div>
-            <input
-              v-model="addTxnForm.memo"
-              type="text"
-              placeholder="Description…"
-              class="input input-bordered input-sm"
-              @keyup.enter="submitAddTxn"
-            />
-          </label>
-
-          <p v-if="addTxnError" class="text-error text-sm">{{ addTxnError }}</p>
-        </div>
-
-        <div class="modal-action mt-4">
-          <button class="btn btn-ghost btn-sm" @click="addTxnDialogRef?.close()">Cancel</button>
-          <button
-            class="btn btn-primary btn-sm"
-            :disabled="addTxnSaving"
-            @click="submitAddTxn"
-          >
-            <span v-if="addTxnSaving" class="loading loading-spinner loading-xs"></span>
-            Add
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop"><button>close</button></form>
-    </dialog>
-
-    <!-- ── Edit envelope modal ── -->
-    <dialog ref="editEnvDialogRef" class="modal">
-      <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg mb-4">Edit envelope</h3>
-
-        <div class="flex flex-col gap-3">
-          <!-- Name -->
-          <label class="form-control w-full">
-            <div class="label py-0.5"><span class="label-text text-xs">Name</span></div>
-            <input
-              v-model="editEnvForm.name"
-              type="text"
-              class="input input-bordered input-sm"
-              autofocus
-              @keyup.enter="submitEditEnv"
-              @keyup.escape="editEnvDialogRef?.close()"
-            />
-          </label>
-
-          <!-- Rollover -->
-          <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input v-model="editEnvForm.rollover" type="checkbox" class="checkbox checkbox-sm" />
-            <span class="text-sm">Rollover unspent balance each month</span>
-          </label>
-
-          <p v-if="editEnvError" class="text-error text-sm">{{ editEnvError }}</p>
-        </div>
-
-        <div class="modal-action mt-4">
-          <button class="btn btn-ghost btn-sm" @click="editEnvDialogRef?.close()">Cancel</button>
-          <button
-            class="btn btn-primary btn-sm"
-            :disabled="editEnvSaving"
-            @click="submitEditEnv"
-          >
-            <span v-if="editEnvSaving" class="loading loading-spinner loading-xs"></span>
-            Save
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop"><button>close</button></form>
-    </dialog>
-
-    <!-- ── Plan income modal ── -->
-    <dialog ref="incomeDialogRef" class="modal">
-      <div class="modal-box max-w-lg">
-        <h3 class="font-bold text-lg mb-1">Plan income</h3>
-        <p class="text-sm text-base-content/60 mb-4">
-          Transactions from <span class="font-medium text-base-content">{{ incomePrevMonth }}</span>
-          above the threshold —
-          <template v-if="budgetMode === 'n1'">
-            their income will be counted toward
-            <span class="font-medium text-base-content">{{ currentMonth }}</span>
-            without creating virtual transactions
-            <span class="badge badge-xs badge-ghost">N+1</span>.
-          </template>
-          <template v-else>
-            a virtual income transaction will be created in
-            <span class="font-medium text-base-content">{{ currentMonth }}</span>
-            <span class="badge badge-xs badge-ghost">Prévisionnel</span>.
-          </template>
-        </p>
-
-        <!-- Threshold filter -->
-        <div class="flex items-center gap-2 mb-4">
-          <span class="text-sm text-base-content/70 shrink-0">Min amount (€):</span>
+        <!-- Name -->
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Nom</span></label>
           <input
-            v-model="incomeThresholdEuros"
-            type="number"
-            step="100"
-            min="0"
-            class="input input-bordered input-sm w-28"
-            @keyup.enter="applyIncomeThreshold"
+            v-model="createForm.name"
+            type="text"
+            class="input input-bordered"
+            placeholder="Courses, Loyer..."
+            autofocus
           />
-          <button class="btn btn-outline btn-sm" @click="applyIncomeThreshold">Apply</button>
         </div>
 
-        <!-- Loading -->
-        <div v-if="incomeLoading" class="flex justify-center py-6">
-          <span class="loading loading-spinner loading-md"></span>
+        <!-- Type + Period -->
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Type</span></label>
+            <select v-model="createForm.envelope_type" class="select select-bordered select-sm">
+              <option value="regular">Régulier</option>
+              <option value="cumulative">Cumulatif</option>
+              <option value="reserve">Réserve</option>
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Période</span></label>
+            <select v-model="createForm.period" class="select select-bordered select-sm">
+              <option value="weekly">Hebdo</option>
+              <option value="monthly">Mensuel</option>
+              <option value="quarterly">Trimestriel</option>
+              <option value="yearly">Annuel</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Proposals list -->
-        <template v-else>
-          <div v-if="incomeProposals.length === 0" class="text-center text-base-content/40 py-6 text-sm">
-            No transactions found above {{ formatAmount(incomeThreshold) }} in {{ incomePrevMonth }}.
-          </div>
-          <div v-else class="flex flex-col gap-1 max-h-64 overflow-y-auto pr-1">
-            <label
-              v-for="proposal in incomeProposals"
-              :key="proposal.transaction_id"
-              class="flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-base-200/60 select-none"
-            >
-              <input
-                type="checkbox"
-                class="checkbox checkbox-sm checkbox-success"
-                :checked="incomeChecked.has(proposal.transaction_id)"
-                @change="toggleIncomeCheck(proposal.transaction_id)"
-              />
-              <span class="text-xs text-base-content/50 shrink-0">{{ proposal.date }}</span>
-              <span class="flex-1 text-sm truncate">{{ proposal.memo ?? '—' }}</span>
-              <span class="text-sm tabular-nums font-medium text-success shrink-0">
-                +{{ formatAmount(proposal.amount) }}
-              </span>
-            </label>
-          </div>
+        <!-- Initial budget -->
+        <div class="form-control mb-3">
+          <label class="label"><span class="label-text">Budget initial (€)</span></label>
+          <input
+            v-model="createForm.budgetedEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="0,00"
+          />
+        </div>
 
-          <!-- Running total -->
-          <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-300">
-            <span class="text-xs text-base-content/50">
-              {{ incomeChecked.size }} of {{ incomeProposals.length }} selected
-            </span>
-            <span
-              class="text-base font-bold tabular-nums"
-              :class="incomeTotalSelected > 0 ? 'text-success' : 'text-base-content/40'"
-            >
-              +{{ formatAmount(incomeTotalSelected) }}
-            </span>
+        <!-- Rollover -->
+        <label class="flex items-center gap-2 mb-3 cursor-pointer">
+          <input
+            v-model="createForm.rollover"
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+          />
+          <span class="text-sm">Report du solde au mois suivant</span>
+        </label>
+
+        <!-- Categories -->
+        <div v-if="groups.length > 0" class="mb-4">
+          <label class="text-sm text-base-content/60 mb-2 block">Catégories associées</label>
+          <div class="max-h-40 overflow-y-auto bg-base-200/50 rounded-lg p-2">
+            <div v-for="group in groups" :key="group.id" class="mb-2">
+              <div class="text-xs text-base-content/40 uppercase tracking-wide mb-1">
+                {{ group.name }}
+              </div>
+              <label
+                v-for="cat in group.categories"
+                :key="cat.id"
+                class="flex items-center gap-2 py-0.5 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs checkbox-primary"
+                  :checked="createForm.category_ids.includes(cat.id)"
+                  @change="toggleCategory(createForm.category_ids, cat.id)"
+                />
+                <span class="text-sm">{{ cat.name }}</span>
+              </label>
+            </div>
           </div>
-        </template>
+        </div>
 
-        <p v-if="incomeError" class="text-error text-sm mt-2">{{ incomeError }}</p>
+        <div v-if="createError" class="alert alert-error text-sm py-2 mb-3">{{ createError }}</div>
 
-        <div class="modal-action mt-4">
-          <button class="btn btn-ghost btn-sm" @click="incomeDialogRef?.close()">Cancel</button>
+        <div class="flex gap-2">
           <button
-            class="btn btn-success btn-sm"
-            :disabled="incomeSaving || incomeChecked.size === 0"
-            @click="submitIncomePlan"
+            class="btn btn-primary flex-1"
+            :disabled="createSaving || !createForm.name.trim()"
+            @click="saveCreate"
           >
-            <span v-if="incomeSaving" class="loading loading-spinner loading-xs"></span>
-            Plan {{ incomeChecked.size > 0 ? incomeChecked.size : '' }} income
+            <span v-if="createSaving" class="loading loading-spinner loading-sm"></span>
+            Créer
           </button>
+          <button class="btn btn-ghost" @click="closeCreate">Annuler</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Quick Add Budget Dialog (cumulative envelopes)            -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <dialog ref="addBudgetDialogRef" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold mb-1">Ajouter du budget</h3>
+        <p v-if="addBudgetLine" class="text-sm text-base-content/50 mb-4">
+          {{ addBudgetLine.emoji }} {{ addBudgetLine.envelope_name }}
+          · actuel : {{ formatAmount(addBudgetLine.budgeted) }}
+        </p>
+
+        <!-- Amount display -->
+        <div class="text-center mb-4">
+          <span class="text-4xl font-extrabold tabular-nums">
+            {{ addBudgetAmount || '0' }}
+          </span>
+          <span class="text-2xl text-base-content/40 ml-1">€</span>
+        </div>
+
+        <!-- Quick presets -->
+        <div class="flex gap-2 justify-center mb-4">
+          <button
+            v-for="p in [10, 20, 50, 100]"
+            :key="p"
+            class="btn btn-sm btn-outline"
+            @click="addBudgetAmount = String(p)"
+          >
+            {{ p }}€
+          </button>
+        </div>
+
+        <!-- Numpad -->
+        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4">
+          <button
+            v-for="k in ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', '⌫']"
+            :key="k"
+            class="btn btn-ghost btn-lg text-xl"
+            @click="addBudgetKey(k)"
+          >
+            {{ k }}
+          </button>
+        </div>
+
+        <div v-if="addBudgetError" class="alert alert-error text-sm py-2 mb-3">
+          {{ addBudgetError }}
+        </div>
+
+        <div class="flex gap-2">
+          <button
+            class="btn btn-primary flex-1"
+            :disabled="addBudgetSaving || addBudgetCentimes <= 0"
+            @click="confirmAddBudget"
+          >
+            <span v-if="addBudgetSaving" class="loading loading-spinner loading-sm"></span>
+            Ajouter {{ addBudgetCentimes > 0 ? formatAmount(addBudgetCentimes) : '' }}
+          </button>
+          <button class="btn btn-ghost" @click="closeAddBudget">Annuler</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button>close</button></form>
     </dialog>
   </div>
 </template>
+
+<style scoped>
+.blueprint-tile {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(135deg, #1e3a5f, #1a2f4a);
+  background-size: 20px 20px, 20px 20px, 100% 100%;
+  border: 2px dashed rgba(100, 160, 230, 0.5);
+  color: rgba(140, 190, 255, 0.9);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.15);
+}
+</style>

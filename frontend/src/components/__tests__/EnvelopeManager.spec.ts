@@ -14,15 +14,25 @@ const sampleEnvelopes: Envelope[] = [
   {
     id: 1,
     name: 'Food',
+    emoji: '🍞',
     rollover: false,
     sort_order: 0,
+    envelope_type: 'regular',
+    period: 'monthly',
+    target_amount: null,
+    stop_on_target: false,
     categories: [{ id: 1, name: 'Groceries', group_name: 'Daily' }],
   },
   {
     id: 2,
     name: 'Transport',
+    emoji: '🚗',
     rollover: true,
     sort_order: 1,
+    envelope_type: 'regular',
+    period: 'monthly',
+    target_amount: null,
+    stop_on_target: false,
     categories: [],
   },
 ]
@@ -73,7 +83,7 @@ describe('EnvelopeManager', () => {
 
   it('creates envelope and reloads list', async () => {
     const { createEnvelope, listEnvelopes } = await import('@/api/envelopes')
-    const newEnv: Envelope = { id: 3, name: 'Leisure', rollover: false, sort_order: 2, categories: [] }
+    const newEnv: Envelope = { id: 3, name: 'Leisure', emoji: '🎮', rollover: false, sort_order: 2, envelope_type: 'regular', period: 'monthly', target_amount: null, stop_on_target: false, categories: [] }
 
     // Mount with default list first
     const wrapper = mount(EnvelopeManager, { props: { groups: [] } })

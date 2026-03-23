@@ -183,6 +183,8 @@ async def get_month_budget_view(
             EnvelopeLineRead(
                 envelope_id=env.id,
                 envelope_name=env.name,
+                envelope_type=env.envelope_type,
+                emoji=env.emoji,
                 rollover=env.rollover,
                 categories=cats,
                 budgeted=b,
@@ -318,7 +320,7 @@ async def assign_income_to_month(
     await db.execute(
         delete(Transaction).where(
             Transaction.account_id.in_(account_ids),
-            Transaction.is_virtual.is_(True),
+            Transaction.status == "planned",
             Transaction.category_id.is_(None),
             Transaction.amount > 0,
             func.strftime("%Y-%m", Transaction.date) == month,

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 ClearedStatus = Literal["uncleared", "cleared", "reconciled"]
+TransactionStatus = Literal["planned", "real", "reconciled"]
 
 
 class TransactionCreate(BaseModel):
@@ -35,6 +36,7 @@ class TransactionCreate(BaseModel):
     cleared: ClearedStatus = "uncleared"
     is_virtual: bool = False
     virtual_linked_id: int | None = None
+    status: TransactionStatus = "real"
     import_hash: str | None = None
 
 
@@ -58,6 +60,7 @@ class TransactionUpdate(BaseModel):
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus | None = None
     is_virtual: bool | None = None
+    status: TransactionStatus | None = None
     income_for_month: str | None = None
 
 
@@ -72,9 +75,10 @@ class TransactionRead(BaseModel):
         category_id: Category ID.
         amount: Amount in integer centimes.
         memo: Memo text.
-        cleared: Cleared status.
-        is_virtual: Whether virtual.
-        virtual_linked_id: Linked transaction ID.
+        status: Transaction status (planned/real/reconciled).
+        cleared: Deprecated — kept for backward compatibility.
+        is_virtual: Deprecated — kept for backward compatibility.
+        virtual_linked_id: Deprecated — kept for backward compatibility.
         income_for_month: Budget month this income is assigned to (YYYY-MM), if any.
         import_hash: Import deduplication hash.
         created_at: Creation timestamp.
@@ -89,11 +93,12 @@ class TransactionRead(BaseModel):
     category_id: int | None
     amount: int
     memo: str | None
-    cleared: str
-    is_virtual: bool
-    virtual_linked_id: int | None
+    status: str = "real"
+    cleared: str = "uncleared"
+    is_virtual: bool = False
+    virtual_linked_id: int | None = None
     income_for_month: str | None = None
-    import_hash: str | None
+    import_hash: str | None = None
     created_at: datetime.datetime
 
 
@@ -131,13 +136,13 @@ class SplitTransactionRead(BaseModel):
     memo: str | None
 
 
-class VirtualMatchRequest(BaseModel):
-    """Schema for linking a real transaction to a virtual one.
+class PlannedMatchRequest(BaseModel):
+    """Schema for linking a real transaction to a planned one.
 
     Attributes:
         real_transaction_id: ID of the real (imported) transaction.
-        virtual_transaction_id: ID of the virtual transaction to link.
+        planned_transaction_id: ID of the planned transaction to link.
     """
 
     real_transaction_id: int
-    virtual_transaction_id: int
+    planned_transaction_id: int
