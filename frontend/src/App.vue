@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import ToastContainer from '@/components/ToastContainer.vue'
 import BottomNav from '@/components/BottomNav.vue'
+
+const route = useRoute()
+const showNav = computed(() => route.name !== 'login')
 </script>
 
 <template>
@@ -11,8 +15,8 @@ import BottomNav from '@/components/BottomNav.vue'
       <RouterView />
     </main>
 
-    <!-- Bottom navigation bar -->
-    <BottomNav />
+    <!-- Bottom navigation bar (hidden on login page) -->
+    <BottomNav v-if="showNav" />
   </div>
 
   <!-- Global toast notifications -->

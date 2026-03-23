@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios'
+import router from '@/router'
 import { useToastStore } from '@/stores/toast'
 
 const client = axios.create({
@@ -25,18 +26,14 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// On 401: clear token + show toast. On other errors: show toast.
+// On 401: clear token + redirect to login. On other errors: show toast.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
-      // Show auth error via toast instead of hard redirect
-      try {
-        const toast = useToastStore()
-        toast.error('Non authentifié — vérifiez la configuration du serveur')
-      } catch {
-        // toast store not yet available
+      if (router.currentRoute.value.name !== 'login') {
+        router.push({ name: 'login' })
       }
     } else if (error.response) {
       // Only show a toast for non-401 server errors; callers can still
