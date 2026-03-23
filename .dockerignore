@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Frontend dev dependencies (rebuilt in Docker)
+frontend/node_modules
+
+# Runtime data
+data/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Tests & docs not needed in image
+tests/
+sensitive-test-data/
+docs/
+scripts/
+
+# CI
+.github/
