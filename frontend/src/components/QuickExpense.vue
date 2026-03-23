@@ -23,6 +23,7 @@ import { useNearbyPlaces } from '@/composables/useNearbyPlaces'
 
 const props = defineProps<{
   drawer: EnvelopeLine
+  accountId: number
 }>()
 
 const emit = defineEmits<{
@@ -136,7 +137,7 @@ async function submit(): Promise<void> {
     }
 
     await createTransaction({
-      account_id: 1, // Default account for MVP
+      account_id: props.accountId,
       date: showDate.value ? customDate.value : new Date().toISOString().slice(0, 10),
       amount: -amountCentimes.value, // Expense = negative
       category_id: categoryId,

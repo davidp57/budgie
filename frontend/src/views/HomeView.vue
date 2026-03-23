@@ -6,13 +6,15 @@
 
 import { computed, onMounted, ref } from 'vue'
 import { useBudgetStore } from '@/stores/budget'
+import { listAccounts } from '@/api/accounts'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
-import type { EnvelopeLine } from '@/api/types'
+import type { Account, EnvelopeLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
 
 const budgetStore = useBudgetStore()
 const selectedDrawer = ref<EnvelopeLine | null>(null)
+const defaultAccount = ref<Account | null>(null)
 
 function onDrawerTap(line: EnvelopeLine): void {
   selectedDrawer.value = line
@@ -52,8 +54,12 @@ function nextMonth(): void {
   budgetStore.loadMonth(next)
 }
 
-onMounted(() => {
-  budgetStore.loadMonth()
+onMounted(async () => {
+  const [, accounts] = await Promise.all([
+    budgetStore.loadMonth(),
+    listAccounts(),
+  ])
+  defaultAccount.value = accounts.find((a) => a.on_budget) ?? accounts[0] ?? null
 })
 </script>
 
@@ -105,11 +111,18 @@ onMounted(() => {
     </div>
   </div>
 
+  <!-- No account warning -->
+  <div v-if="!budgetStore.loading && !defaultAccount" class="px-4">
+    <div class="alert alert-warning text-sm">
+      <span>Aucun compte bancaire — crée-en un dans les Réglages.</span>
+    </div>
+  </div>
+
   <!-- Quick expense bottom sheet -->
   <QuickExpense
-    v-if="selectedDrawer"
+    v-if="selectedDrawer && defaultAccount"
     :drawer="selectedDrawer"
-
+    :account-id="defaultAccount.id"
     @close="closeExpense"
   />
 </template>
