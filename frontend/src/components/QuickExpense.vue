@@ -18,6 +18,8 @@ import type { EnvelopeLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
 import { createTransaction } from '@/api/transactions'
 import { useToastStore } from '@/stores/toast'
+import { usePresetsStore, type QuickPreset } from '@/stores/presets'
+import { useNearbyPlaces } from '@/composables/useNearbyPlaces'
 
 const props = defineProps<{
   drawer: EnvelopeLine
@@ -28,6 +30,9 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToastStore()
+const presetsStore = usePresetsStore()
+const nearby = useNearbyPlaces()
+const showLocation = ref(false)
 
 // Amount as string (user types digits + comma)
 const amountStr = ref('')
@@ -53,10 +58,13 @@ const amountCentimes = computed(() => {
 
 const hasAmount = computed(() => amountCentimes.value > 0)
 
-// Display formatted amount
+// Display formatted amount (French locale: space thousands separator)
 const displayAmount = computed(() => {
   if (!amountStr.value) return ''
-  return amountStr.value.replace(',', ',')
+  const parts = amountStr.value.split(',')
+  const intPart = parts[0] || '0'
+  const formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F')
+  return parts.length > 1 ? `${formatted},${parts[1]}` : formatted
 })
 
 // Numpad key handler
@@ -81,11 +89,36 @@ function onKey(key: string): void {
   amountStr.value += key
 }
 
-// Preset tap
-function onPreset(centimes: number): void {
-  const euros = Math.floor(centimes / 100)
-  const cents = centimes % 100
+// Preset tap — fills amount AND description
+function onPreset(preset: QuickPreset): void {
+  const euros = Math.floor(preset.amount / 100)
+  const cents = preset.amount % 100
   amountStr.value = cents > 0 ? `${euros},${String(cents).padEnd(2, '0')}` : `${euros}`
+  if (preset.description) {
+    description.value = preset.description
+    showDescription.value = true
+  }
+}
+
+// Format preset amount for button label
+function formatPresetAmount(centimes: number): string {
+  const euros = centimes / 100
+  return euros % 1 === 0
+    ? `${euros}€`
+    : `${euros.toFixed(2).replace('.', ',')}€`
+}
+
+// ── Nearby places ────────────────────────────────────────────────
+function toggleLocation(): void {
+  showLocation.value = !showLocation.value
+  if (showLocation.value && !nearby.hasPlaces.value && !nearby.loading.value) {
+    nearby.detect()
+  }
+}
+
+function selectPlace(name: string): void {
+  description.value = name
+  showDescription.value = true
 }
 
 // Submit transaction
@@ -123,15 +156,65 @@ async function submit(): Promise<void> {
   }
 }
 
-// Default presets (can be per-drawer later)
-const presets = [
-  { label: '🍞 2€', centimes: 200 },
-  { label: '☕ 4€', centimes: 400 },
-  { label: '🥖 5€', centimes: 500 },
-  { label: '🍕 12€', centimes: 1200 },
-  { label: '🛒 30€', centimes: 3000 },
-  { label: '🛒 50€', centimes: 5000 },
-]
+// ── Preset management dialog ─────────────────────────────────────
+const presetDialogRef = ref<HTMLDialogElement | null>(null)
+const editingPresets = ref<Array<{
+  id: string
+  emoji: string
+  amountStr: string
+  description: string
+}>>([])
+
+function openPresetManager(): void {
+  editingPresets.value = presetsStore.presets.map((p) => ({
+    id: p.id,
+    emoji: p.emoji,
+    amountStr: formatPresetAmount(p.amount).replace('€', ''),
+    description: p.description,
+  }))
+  presetDialogRef.value?.showModal()
+}
+
+function addEditingPreset(): void {
+  editingPresets.value.push({
+    id: crypto.randomUUID(),
+    emoji: '🏷️',
+    amountStr: '',
+    description: '',
+  })
+}
+
+function removeEditingPreset(id: string): void {
+  editingPresets.value = editingPresets.value.filter((p) => p.id !== id)
+}
+
+function parseAmountStr(str: string): number {
+  const cleaned = str.replace(',', '.').replace(/[^\d.]/g, '')
+  return Math.round((parseFloat(cleaned) || 0) * 100)
+}
+
+function savePresets(): void {
+  const parsed: QuickPreset[] = editingPresets.value
+    .filter((p) => p.amountStr.trim())
+    .map((p) => ({
+      id: p.id,
+      emoji: p.emoji || '🏷️',
+      amount: parseAmountStr(p.amountStr),
+      description: p.description,
+    }))
+  presetsStore.replaceAll(parsed)
+  presetDialogRef.value?.close()
+}
+
+function resetPresetsToDefaults(): void {
+  presetsStore.resetToDefaults()
+  editingPresets.value = presetsStore.presets.map((p) => ({
+    id: p.id,
+    emoji: p.emoji,
+    amountStr: formatPresetAmount(p.amount).replace('€', ''),
+    description: p.description,
+  }))
+}
 
 const numpadKeys = [
   ['1', '2', '3'],
@@ -185,20 +268,33 @@ const numpadKeys = [
         <!-- Presets -->
         <div class="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-none">
           <button
-            v-for="preset in presets"
-            :key="preset.centimes"
+            v-for="preset in presetsStore.presets"
+            :key="preset.id"
             class="btn btn-sm btn-outline btn-primary whitespace-nowrap flex-shrink-0"
-            @click="onPreset(preset.centimes)"
-          >{{ preset.label }}</button>
+            @click="onPreset(preset)"
+          >{{ preset.emoji }} {{ formatPresetAmount(preset.amount) }}</button>
+          <button
+            class="btn btn-sm btn-ghost btn-circle flex-shrink-0 text-base-content/40"
+            title="Configurer les raccourcis"
+            @click="openPresetManager"
+          >⚙️</button>
         </div>
 
         <!-- Optional field chips -->
-        <div class="flex gap-2 py-2">
+        <div class="flex gap-2 py-2 flex-wrap">
           <button
             class="btn btn-xs"
             :class="showDescription ? 'btn-primary' : 'btn-ghost'"
             @click="showDescription = !showDescription"
           >✏️ Description</button>
+          <button
+            class="btn btn-xs"
+            :class="showLocation ? 'btn-primary' : 'btn-ghost'"
+            @click="toggleLocation"
+          >
+            <span v-if="nearby.loading.value" class="loading loading-spinner loading-xs" />
+            <template v-else>📍 Lieu</template>
+          </button>
           <button
             class="btn btn-xs"
             :class="showDate ? 'btn-primary' : 'btn-ghost'"
@@ -209,6 +305,32 @@ const numpadKeys = [
             :class="isPlanned ? 'btn-primary' : 'btn-ghost'"
             @click="isPlanned = !isPlanned"
           >🔮 Prévue</button>
+        </div>
+
+        <!-- Nearby places (conditional) -->
+        <div v-if="showLocation" class="mt-1 mb-1">
+          <div v-if="nearby.loading.value" class="text-center py-2">
+            <span class="loading loading-dots loading-sm text-primary" />
+            <p class="text-xs text-base-content/50 mt-1">Recherche des commerces…</p>
+          </div>
+          <div v-else-if="nearby.error.value" class="text-xs text-error py-1">
+            {{ nearby.error.value }}
+          </div>
+          <div v-else-if="nearby.hasPlaces.value" class="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <button
+              v-for="place in nearby.places.value"
+              :key="place.id"
+              class="btn btn-xs btn-outline whitespace-nowrap flex-shrink-0"
+              :class="description === place.name ? 'btn-active' : ''"
+              @click="selectPlace(place.name)"
+            >
+              {{ place.emoji }} {{ place.name }}
+              <span class="text-[10px] opacity-50 ml-1">{{ nearby.formatDistance(place.distance) }}</span>
+            </button>
+          </div>
+          <div v-else class="text-xs text-base-content/50 py-1">
+            Aucun commerce trouvé à proximité
+          </div>
         </div>
 
         <!-- Description input (conditional) -->
@@ -260,6 +382,59 @@ const numpadKeys = [
         </button>
       </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Preset Management Dialog                                   -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <dialog ref="presetDialogRef" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold mb-4">⚙️ Raccourcis rapides</h3>
+
+        <div class="space-y-2">
+          <div
+            v-for="p in editingPresets"
+            :key="p.id"
+            class="flex items-center gap-1"
+          >
+            <input
+              v-model="p.emoji"
+              class="input input-bordered input-sm w-14 text-center text-lg p-0"
+              maxlength="2"
+            />
+            <input
+              v-model="p.amountStr"
+              class="input input-bordered input-sm w-20 text-right"
+              placeholder="€"
+              inputmode="decimal"
+            />
+            <input
+              v-model="p.description"
+              class="input input-bordered input-sm flex-1"
+              placeholder="Description"
+            />
+            <button
+              class="btn btn-ghost btn-sm btn-circle text-error"
+              @click="removeEditingPreset(p.id)"
+            >✕</button>
+          </div>
+        </div>
+
+        <button
+          class="btn btn-outline btn-sm btn-block mt-3"
+          @click="addEditingPreset"
+        >+ Ajouter</button>
+
+        <div class="modal-action">
+          <button class="btn btn-ghost btn-sm" @click="resetPresetsToDefaults">
+            Par défaut
+          </button>
+          <button class="btn btn-primary btn-sm" @click="savePresets">
+            OK
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
   </div>
 </template>
 
