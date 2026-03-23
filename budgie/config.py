@@ -40,5 +40,8 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
 
+    # CORS — comma-separated list of allowed origins
+    cors_origins: str = "http://localhost:5173,https://localhost:5173,http://localhost:8080"
+
 
 settings = Settings()

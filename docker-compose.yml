@@ -4,15 +4,16 @@ services:
     container_name: budgie
     restart: unless-stopped
     ports:
-      - "8080:8000"
+      - "${BUDGIE_PORT:-8080}:8000"
     volumes:
       - ./data:/app/data
     env_file:
       - .env
-    # Optional: set PUID/PGID to match host user (important on Synology NAS)
-    # environment:
-    #   - PUID=1026
-    #   - PGID=100
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/budgie.db
+      - UPLOAD_DIR=/app/data/uploads
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     mem_limit: 256m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
