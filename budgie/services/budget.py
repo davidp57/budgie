@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -308,6 +308,23 @@ async def assign_income_to_month(
         )
     )
     transactions = list(result.scalars().all())
+    if not transactions:
+        return 0
+
+    # Delete any stale virtual income transactions for this month from the same
+    # accounts (created by a previous Prévisionnel-mode run) to avoid
+    # double-counting when the user switches to N+1 mode.
+    account_ids = {txn.account_id for txn in transactions}
+    await db.execute(
+        delete(Transaction).where(
+            Transaction.account_id.in_(account_ids),
+            Transaction.is_virtual.is_(True),
+            Transaction.category_id.is_(None),
+            Transaction.amount > 0,
+            func.strftime("%Y-%m", Transaction.date) == month,
+        )
+    )
+
     for txn in transactions:
         txn.income_for_month = month
         db.add(txn)

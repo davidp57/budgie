@@ -98,6 +98,7 @@ export interface TransactionUpdate {
   memo?: string | null
   cleared?: ClearedStatus
   payee_id?: number | null
+  is_virtual?: boolean
 }
 
 // ── Budget ───────────────────────────────────────────────────────

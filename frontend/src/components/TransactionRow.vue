@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { updateTransaction } from '@/api/transactions'
+import { deleteTransaction, updateTransaction } from '@/api/transactions'
 import {
   formatAmount,
   type Category,
@@ -18,10 +18,14 @@ const emit = defineEmits<{
   (e: 'category-saved', txn: Transaction, categoryId: number | null): void
   (e: 'error', message: string): void
   (e: 'category-created', category: Category): void
+  (e: 'realized', txnId: number): void
+  (e: 'deleted', txnId: number): void
 }>()
 
 const editing = ref(false)
 const editCategoryId = ref<number | null>(null)
+const realizing = ref(false)
+const deleting = ref(false)
 
 function startEdit(): void {
   editCategoryId.value = props.txn.category_id
@@ -49,6 +53,30 @@ function categoryName(id: number | null): string {
     if (cat) return cat.name
   }
   return String(id)
+}
+
+async function realizeTransaction(): Promise<void> {
+  realizing.value = true
+  try {
+    await updateTransaction(props.txn.id, { is_virtual: false })
+    emit('realized', props.txn.id)
+  } catch {
+    emit('error', 'Failed to realize transaction.')
+  } finally {
+    realizing.value = false
+  }
+}
+
+async function deleteVirtualTransaction(): Promise<void> {
+  deleting.value = true
+  try {
+    await deleteTransaction(props.txn.id)
+    emit('deleted', props.txn.id)
+  } catch {
+    emit('error', 'Failed to delete transaction.')
+  } finally {
+    deleting.value = false
+  }
 }
 </script>
 
@@ -111,6 +139,26 @@ function categoryName(id: number | null): string {
         {{ txn.cleared }}
       </span>
       <span v-if="txn.is_virtual" class="badge badge-sm badge-warning ml-1">forecast</span>
+      <span v-if="txn.is_virtual" class="inline-flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          class="btn btn-xs btn-success"
+          :disabled="realizing || deleting"
+          :title="'Mark as real transaction'"
+          @click.stop="realizeTransaction"
+        >
+          <span v-if="realizing" class="loading loading-spinner loading-xs"></span>
+          <span v-else>✓ Realize</span>
+        </button>
+        <button
+          class="btn btn-xs btn-error btn-outline"
+          :disabled="realizing || deleting"
+          :title="'Delete forecast'"
+          @click.stop="deleteVirtualTransaction"
+        >
+          <span v-if="deleting" class="loading loading-spinner loading-xs"></span>
+          <span v-else>✕</span>
+        </button>
+      </span>
     </td>
   </tr>
 </template>

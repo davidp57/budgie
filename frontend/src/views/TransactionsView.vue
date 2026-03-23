@@ -203,6 +203,8 @@ async function saveVirtualTransaction(): Promise<void> {
               @category-saved="onCategorySaved"
               @category-created="reloadGroups"
               @error="error = $event"
+              @realized="load"
+              @deleted="load"
             />
           </template>
         </tbody>
