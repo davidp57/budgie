@@ -2,21 +2,21 @@
 import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import ToastContainer from '@/components/ToastContainer.vue'
-import BottomNav from '@/components/BottomNav.vue'
+import AppNav from '@/components/AppNav.vue'
 
 const route = useRoute()
 const showNav = computed(() => route.name !== 'login')
 </script>
 
 <template>
-  <div class="flex flex-col h-dvh bg-base-200">
+  <div class="flex flex-col lg:flex-row h-dvh bg-base-200">
+    <!-- Navigation: sidebar on desktop, bottom dock on mobile -->
+    <AppNav v-if="showNav" />
+
     <!-- Main content area — scrollable -->
-    <main class="flex-1 overflow-y-auto">
+    <main class="flex-1 overflow-y-auto pb-16 lg:pb-0">
       <RouterView />
     </main>
-
-    <!-- Bottom navigation bar (hidden on login page) -->
-    <BottomNav v-if="showNav" />
   </div>
 
   <!-- Global toast notifications -->

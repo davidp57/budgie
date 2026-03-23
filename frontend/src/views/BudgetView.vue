@@ -390,7 +390,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="px-4 py-5 pb-24">
+  <div class="px-4 py-5 pb-24 lg:px-8 lg:py-6 max-w-7xl mx-auto">
     <!-- Header -->
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-2">
@@ -426,15 +426,17 @@ onMounted(async () => {
     </div>
 
     <!-- Drawer cards with swipe-to-delete -->
-    <div v-else class="flex flex-col gap-4">
+    <div v-else class="flex flex-col lg:grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
       <div
         v-for="line in budgetStore.envelopeLines"
         :key="line.envelope_id"
         class="relative overflow-hidden rounded-2xl"
       >
-        <!-- Delete zone (revealed by swipe) -->
+        <!-- Delete zone (revealed by swipe on mobile, always visible on desktop) -->
         <div
-          class="absolute inset-y-0 right-0 w-24 bg-error flex items-center justify-center rounded-r-2xl"
+          class="absolute inset-y-0 right-0 w-24 bg-error items-center justify-center rounded-r-2xl
+                 hidden lg:hidden"
+          :class="{ '!flex': swipedId === line.envelope_id }"
         >
           <button
             class="btn btn-ghost text-white text-2xl"
@@ -446,7 +448,7 @@ onMounted(async () => {
 
         <!-- Card wrapper with touch gestures -->
         <div
-          class="relative transition-transform duration-200"
+          class="relative transition-transform duration-200 group"
           :class="{ '-translate-x-24': swipedId === line.envelope_id }"
           @touchstart="onTouchStart($event, line.envelope_id)"
           @touchmove="onTouchMove"
@@ -517,7 +519,7 @@ onMounted(async () => {
               </span>
             </template>
 
-            <!-- Actions slot: +€ and ⋯ buttons -->
+            <!-- Actions slot: +€, ⋯, and 🗑️ buttons -->
             <template #actions>
               <button
                 v-if="line.envelope_type === 'cumulative'"
@@ -534,10 +536,20 @@ onMounted(async () => {
                        flex items-center justify-center
                        text-sm font-bold text-white/80 hover:text-white hover:bg-white/30
                        active:scale-90 transition-all shrink-0"
-                :class="{ 'ml-auto': line.envelope_type !== 'cumulative' && line.envelope_type !== 'reserve' }"
                 @click.stop="openEdit(line)"
               >
                 ⋯
+              </button>
+              <button
+                class="w-8 h-8 rounded-full bg-error/60 backdrop-blur-sm
+                       hidden lg:flex items-center justify-center
+                       text-sm text-white/80 hover:text-white hover:bg-error/80
+                       active:scale-90 transition-all shrink-0
+                       opacity-0 group-hover:opacity-100"
+                title="Supprimer"
+                @click.stop="swipeDelete(line.envelope_id)"
+              >
+                🗑️
               </button>
             </template>
           </DrawerCard>
@@ -844,8 +856,21 @@ onMounted(async () => {
           </button>
         </div>
 
-        <!-- Numpad -->
-        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4">
+        <!-- Keyboard input (desktop) -->
+        <div class="hidden lg:block mb-4">
+          <input
+            v-model="addBudgetAmount"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered input-lg w-full text-center text-2xl font-bold tabular-nums"
+            placeholder="0,00"
+            autofocus
+            @keydown.enter="confirmAddBudget"
+          />
+        </div>
+
+        <!-- Numpad (mobile only) -->
+        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4 lg:hidden">
           <button
             v-for="k in ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', '⌫']"
             :key="k"

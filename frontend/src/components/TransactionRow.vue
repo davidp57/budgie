@@ -128,36 +128,40 @@ async function deleteVirtualTransaction(): Promise<void> {
     </td>
 
     <td>
-      <span
-        class="badge badge-sm"
-        :class="{
-          'badge-ghost': txn.status === 'real',
-          'badge-warning': txn.status === 'planned',
-          'badge-success': txn.status === 'reconciled',
-        }"
-      >
-        {{ txn.status }}
-      </span>
-      <span v-if="txn.status === 'planned'" class="inline-flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          class="btn btn-xs btn-success"
-          :disabled="realizing || deleting"
-          :title="'Mark as real transaction'"
-          @click.stop="realizeTransaction"
+      <div class="flex items-center gap-2">
+        <span
+          class="badge badge-sm"
+          :class="{
+            'badge-ghost': txn.status === 'real',
+            'badge-warning': txn.status === 'planned',
+            'badge-success': txn.status === 'reconciled',
+          }"
         >
-          <span v-if="realizing" class="loading loading-spinner loading-xs"></span>
-          <span v-else>✓ Realize</span>
-        </button>
-        <button
-          class="btn btn-xs btn-error btn-outline"
-          :disabled="realizing || deleting"
-          :title="'Delete forecast'"
-          @click.stop="deleteVirtualTransaction"
-        >
-          <span v-if="deleting" class="loading loading-spinner loading-xs"></span>
-          <span v-else>✕</span>
-        </button>
-      </span>
+          {{ txn.status }}
+        </span>
+        <span class="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <template v-if="txn.status === 'planned'">
+            <button
+              class="btn btn-xs btn-success"
+              :disabled="realizing || deleting"
+              title="Mark as real transaction"
+              @click.stop="realizeTransaction"
+            >
+              <span v-if="realizing" class="loading loading-spinner loading-xs"></span>
+              <span v-else>✓ Realize</span>
+            </button>
+          </template>
+          <button
+            class="btn btn-xs btn-error btn-outline"
+            :disabled="realizing || deleting"
+            title="Delete transaction"
+            @click.stop="deleteVirtualTransaction"
+          >
+            <span v-if="deleting" class="loading loading-spinner loading-xs"></span>
+            <span v-else>🗑️</span>
+          </button>
+        </span>
+      </div>
     </td>
   </tr>
 </template>

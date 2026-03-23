@@ -64,13 +64,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="px-4 py-5 pb-20">
+  <div class="px-4 py-5 lg:px-8 lg:py-6 max-w-7xl mx-auto">
     <!-- Header -->
     <div class="flex items-center justify-between mb-2">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 lg:hidden">
         <span class="text-2xl">🐦</span>
         <h1 class="text-xl font-bold">Budgie</h1>
       </div>
+      <h1 class="hidden lg:block text-xl font-bold">Tiroirs</h1>
       <!-- Month navigator -->
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>
@@ -101,7 +102,7 @@ onMounted(async () => {
     </div>
 
     <!-- Drawer cards grid -->
-    <div v-else class="flex flex-col gap-4 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+    <div v-else class="flex flex-col gap-4 lg:grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       <DrawerCard
         v-for="line in budgetStore.envelopeLines"
         :key="line.envelope_id"
