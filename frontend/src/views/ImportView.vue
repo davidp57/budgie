@@ -32,9 +32,13 @@ const virtualUnlinked = ref<Transaction[]>([])
 const linkDecisions = ref<Record<number, number>>({})
 
 onMounted(async () => {
-  accounts.value = await listAccounts()
-  if (accounts.value.length > 0) {
-    selectedAccountId.value = accounts.value[0]?.id ?? null
+  try {
+    accounts.value = await listAccounts()
+    if (accounts.value.length > 0) {
+      selectedAccountId.value = accounts.value[0]?.id ?? null
+    }
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
   }
 })
 

@@ -14,6 +14,19 @@ import {
 } from '@/api/categories'
 import { getPreferences, updatePreferences } from '@/api/users'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
+import { createPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
+import { usePinStorage } from '@/composables/usePinStorage'
+
+const auth = useAuthStore()
+const router = useRouter()
+const pinStorage = usePinStorage()
+
+function logout(): void {
+  auth.logout()
+  router.push({ name: 'login' })
+}
 
 // ── Accounts ───────────────────────────────────────────────────
 
@@ -54,10 +67,54 @@ async function setBudgetMode(mode: 'n1' | 'n'): Promise<void> {
   }
 }
 
+// ── Passkey management ────────────────────────────────────────────────────────
+const webAuthnSupported = isWebAuthnSupported()
+const pinAvailable = typeof window !== 'undefined' && !!window.crypto?.subtle
+const passkeyError = ref('')
+const passkeyLoading = ref(false)
+const newPasskeyName = ref('')
+const pinHasStored = ref(false)
+
+async function registerPasskey(): Promise<void> {
+  passkeyError.value = ''
+  passkeyLoading.value = true
+  try {
+    const options = await auth.webauthnRegisterBegin()
+    const credential = await createPasskey(options)
+    await auth.webauthnRegisterComplete(credential, newPasskeyName.value || undefined)
+    newPasskeyName.value = ''
+  } catch (err: unknown) {
+    passkeyError.value =
+      err instanceof Error ? err.message : 'Failed to register passkey.'
+  } finally {
+    passkeyLoading.value = false
+  }
+}
+
+async function removePasskey(id: number): Promise<void> {
+  passkeyError.value = ''
+  try {
+    await auth.deleteWebAuthnCredential(id)
+  } catch {
+    passkeyError.value = 'Failed to delete passkey.'
+  }
+}
+
+async function clearPin(): Promise<void> {
+  await pinStorage.clearStoredPassphrase()
+  pinHasStored.value = false
+}
+
 onMounted(async () => {
-  const prefs = await getPreferences()
-  budgetMode.value = prefs.budget_mode
-  await loadAll()
+  try {
+    const prefs = await getPreferences()
+    budgetMode.value = prefs.budget_mode
+    await loadAll()
+    await auth.loadWebAuthnCredentials()
+    pinHasStored.value = await pinStorage.hasStoredPassphrase()
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 
 async function addAccount(): Promise<void> {
@@ -282,6 +339,79 @@ async function removeCategory(id: number): Promise<void> {
         </div>
 
         <p v-if="prefError" class="text-error text-sm mt-2">{{ prefError }}</p>
+      </div>
+    </section>
+
+    <!-- Passkeys & PIN ──────────────────────────────────────────── -->
+    <section v-if="webAuthnSupported" class="card bg-base-100 shadow">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">🔑 Passkeys & PIN</h2>
+
+        <!-- Registered passkeys list -->
+        <div v-if="auth.webauthnCredentials.length > 0" class="flex flex-col gap-2">
+          <div
+            v-for="cred in auth.webauthnCredentials"
+            :key="cred.id"
+            class="flex items-center justify-between bg-base-200 rounded-box px-4 py-2"
+          >
+            <div>
+              <p class="font-medium">{{ cred.name ?? 'Passkey' }}</p>
+              <p class="text-xs text-base-content/50">Added {{ new Date(cred.created_at).toLocaleDateString() }}</p>
+            </div>
+            <button class="btn btn-ghost btn-sm text-error" @click="removePasskey(cred.id)">
+              🗑
+            </button>
+          </div>
+        </div>
+        <p v-else class="text-base-content/50 text-sm">No passkeys registered on this account.</p>
+
+        <!-- Register new passkey -->
+        <div class="flex gap-2">
+          <input
+            v-model="newPasskeyName"
+            type="text"
+            placeholder="Passkey name (e.g. iPhone 15)"
+            class="input input-bordered input-sm flex-1"
+            maxlength="50"
+          />
+          <button
+            class="btn btn-outline btn-sm gap-1"
+            :disabled="passkeyLoading"
+            @click="registerPasskey"
+          >
+            <span v-if="passkeyLoading" class="loading loading-spinner loading-xs"></span>
+            + Register Passkey
+          </button>
+        </div>
+
+        <p v-if="passkeyError" class="text-error text-sm">{{ passkeyError }}</p>
+
+        <!-- PIN management -->
+        <div class="divider text-xs">PIN</div>
+        <template v-if="pinAvailable">
+          <div v-if="pinHasStored" class="flex items-center justify-between">
+            <p class="text-sm">Your passphrase is saved on this device with a PIN.</p>
+            <button class="btn btn-ghost btn-sm text-error" @click="clearPin">Remove</button>
+          </div>
+          <p v-else class="text-base-content/50 text-sm">
+            No PIN set up. Unlock your encryption with your passphrase to be offered a PIN.
+          </p>
+        </template>
+        <p v-else class="text-base-content/50 text-sm">
+          ⚠️ PIN requires HTTPS. Connect securely to use this feature.
+        </p>
+      </div>
+    </section>
+
+    <!-- Logout (visible on mobile where sidebar is hidden) -->
+    <section class="card bg-base-100 shadow lg:hidden">
+      <div class="card-body">
+        <button class="btn btn-outline btn-error w-full gap-2" @click="logout">
+          <svg xmlns="http://www.w3.org/2000/svg" class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Déconnexion
+        </button>
       </div>
     </section>
   </div>

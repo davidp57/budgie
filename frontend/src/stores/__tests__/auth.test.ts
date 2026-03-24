@@ -5,6 +5,7 @@ import { useAuthStore } from '../auth'
 // Mock the auth API module
 vi.mock('@/api/auth', () => ({
   login: vi.fn().mockResolvedValue({ access_token: 'fake-token', token_type: 'bearer' }),
+  logout: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Mock localStorage

@@ -245,7 +245,7 @@ function formatDate(dateStr: string): string {
 </script>
 
 <template>
-  <div>
+  <div class="px-4 py-5 lg:px-8 lg:py-6 max-w-7xl mx-auto">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Transactions</h1>
       <button class="btn btn-secondary btn-sm gap-1" @click="openVirtualModal">

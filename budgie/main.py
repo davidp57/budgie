@@ -5,6 +5,7 @@ and a health check endpoint.
 """
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from budgie import __version__
 from budgie.api import (
     accounts,
     auth,
@@ -29,8 +31,11 @@ from budgie.api import (
     payees,
     transactions,
     users,
+    webauthn,
 )
 from budgie.config import BASE_DIR, settings
+
+logger = logging.getLogger(__name__)
 
 
 def _run_migrations() -> None:
@@ -53,17 +58,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Args:
         app: The FastAPI application instance.
     """
+    logger.info("Budgie v%s starting", __version__)
     # Apply any pending database migrations before accepting traffic
     await asyncio.to_thread(_run_migrations)
     # Ensure data directories exist
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    logger.info("Budgie v%s ready", __version__)
     yield
 
 
 app = FastAPI(
     title="Budgie",
     description="Personal household budget management API",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -81,9 +88,9 @@ async def health_check() -> dict[str, str]:
     """Health check endpoint for Docker and monitoring.
 
     Returns:
-        A dict with status "ok".
+        A dict with status, app name and version.
     """
-    return {"status": "ok"}
+    return {"status": "ok", "app": "Budgie", "version": __version__}
 
 
 # Register all API routers
@@ -99,6 +106,7 @@ app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
+app.include_router(webauthn.router)
 
 # ── Production static file serving ──────────────────────────────────────────
 # When the Vue dist folder exists (Docker production build), serve the SPA.

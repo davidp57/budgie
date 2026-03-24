@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from budgie.database import Base
+
 #: Valid envelope types.
 ENVELOPE_TYPES = ("regular", "cumulative", "reserve")
 #: Valid allocation periods.
 ENVELOPE_PERIODS = ("weekly", "monthly", "quarterly", "yearly")
-
-from budgie.database import Base
 
 if TYPE_CHECKING:
     from budgie.models.budget import BudgetAllocation

@@ -14,8 +14,7 @@
  *   z-0  Pastel gradient background (= "spent" zone)
  *   z-5  Money pile: bills (€5-€100) + coins (€1-€2), stacked en vrac, isometric
  *   z-10 Semi-transparent saturated fill (= remaining budget, ~80% opacity)
- *   z-[15] Goal bar
- *   z-20 Content (text, amounts, calendar)
+ *   z-20 Content (text, amounts, calendar, goal bar)
  *   z-30 Inner shadow pseudo-element
  *
  * Banknotes form a pile on the RIGHT side of the card.
@@ -50,10 +49,12 @@ const props = withDefaults(defineProps<{
   showMoney?: boolean
   showCalendar?: boolean
   showSubtitle?: boolean
+  showGoalBar?: boolean
 }>(), {
   showMoney: true,
   showCalendar: true,
   showSubtitle: true,
+  showGoalBar: true,
 })
 
 const emit = defineEmits<{
@@ -79,72 +80,74 @@ const isOverBudget = computed(() => props.line.available < 0)
 
 // Calendar strip: spec says "lumineux = jours restants (gauche), gris = jours passés (droite)"
 // So we put remaining days first (bright), then past days (gray).
+// The last bright day = today, gets special glow styling.
 const calendarDays = computed(() => {
   const now = new Date()
   const day = now.getDate()
   const total = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const remaining = total - day
-  const past = day
-  // Remaining (bright) on left, past (gray) on right
+  // Remaining (bright) on left, today marker, past (gray) on right
   return [
-    ...Array.from({ length: remaining }, () => true),
-    ...Array.from({ length: past }, () => false),
+    ...Array.from({ length: remaining }, () => 'future' as const),
+    'today' as const,
+    ...Array.from({ length: day - 1 }, () => 'past' as const),
   ]
 })
 
 // Money items: bills €5-€100 + coins €1/€2.
-// Stacked "en vrac" on the right, isometric perspective.
+// Stacked "en vrac" inside a dedicated .money-pile container.
 type MoneyKind = 'bill' | 'coin'
-interface MoneyItem { value: number; label: string; color: string; kind: MoneyKind }
+interface MoneyItem { value: number; label: string; cssClass: string; kind: MoneyKind }
 
 const MONEY_DEFS: MoneyItem[] = [
-  { value: 10000, label: '100',  color: '#6db86a', kind: 'bill' },  // green
-  { value: 5000,  label: '50',   color: '#e89030', kind: 'bill' },  // orange
-  { value: 2000,  label: '20',   color: '#4da6d8', kind: 'bill' },  // blue
-  { value: 1000,  label: '10',   color: '#e87080', kind: 'bill' },  // pink/red
-  { value: 500,   label: '5',    color: '#9a9a9a', kind: 'bill' },  // grey
-  { value: 200,   label: '2',    color: '#c0a860', kind: 'coin' },  // gold rim
-  { value: 100,   label: '1',    color: '#b8b8b8', kind: 'coin' },  // silver
+  { value: 10000, label: '100', cssClass: 'bill-100', kind: 'bill' },
+  { value: 5000,  label: '50',  cssClass: 'bill-50',  kind: 'bill' },
+  { value: 2000,  label: '20',  cssClass: 'bill-20',  kind: 'bill' },
+  { value: 1000,  label: '10',  cssClass: 'bill-10',  kind: 'bill' },
+  { value: 500,   label: '5',   cssClass: 'bill-5',   kind: 'bill' },
+  { value: 200,   label: '2',   cssClass: 'coin-2',   kind: 'coin' },
+  { value: 100,   label: '1',   cssClass: 'coin-1',   kind: 'coin' },
 ]
 
 const moneyItems = computed(() => {
   if (props.line.available <= 0) return []
   const items: MoneyItem[] = []
-  // Pick matching denominations, duplicating smaller ones for visual density
+  // Greedy decomposition: break the available amount into real denominations
+  let remaining = props.line.available  // in centimes
   for (const def of MONEY_DEFS) {
-    if (props.line.available >= def.value) {
+    while (remaining >= def.value && items.length < 8) {
       items.push(def)
-      // Add a second copy of smaller bills/coins
-      if (def.value <= 2000 && items.length < 10) items.push(def)
+      remaining -= def.value
     }
     if (items.length >= 8) break
   }
-  // Ensure at least 3 items for visual impact
-  while (items.length > 0 && items.length < 3) {
-    items.push(items[items.length - 1]!)
-  }
-  return items.slice(0, 8)
+  return items
 })
 
-// Pseudo-random helper: deterministic per envelope + index
+// Goal progress for cumulative envelopes with a target
+const goalPercent = computed(() => {
+  const target = props.line.target_amount
+  if (!target || target <= 0) return null
+  return Math.max(0, Math.min(100, Math.round((props.line.available / target) * 100)))
+})
+
+// Better pseudo-random: xorshift-inspired, much more chaotic distribution
 function prng(envelopeId: number, index: number, salt: number): number {
-  return ((envelopeId * 71 + index * 37 + salt * 13) % 997) / 997
+  let h = (envelopeId * 2654435761 + index * 340573321 + salt * 1013904223) >>> 0
+  h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b); h ^= h >>> 16
+  return (h >>> 0) / 4294967296
 }
 
-// Position & rotation for each money item in the pile
-function moneyStyle(index: number, item: MoneyItem): Record<string, string> {
-  const r1 = prng(props.line.envelope_id, index, 1)
-  const r2 = prng(props.line.envelope_id, index, 2)
-  const r3 = prng(props.line.envelope_id, index, 3)
-  // Pile in bottom-right corner, flush against right edge
-  const x = 62 + r1 * 30                    // 62-92%
-  const y = 35 + r2 * 50                    // 35-85%
-  const rotation = (r3 * 44) - 22           // ±22°
+// Position & rotation for each money item inside the .money-pile container.
+// Mockup: bills thrown "en vrac" — chaotic overlapping pile across the full area.
+function moneyStyle(index: number): Record<string, string> {
+  const bottom = Math.round(prng(props.line.envelope_id, index, 1) * 48)
+  const left = Math.round(prng(props.line.envelope_id, index, 2) * 58)
+  const rotation = prng(props.line.envelope_id, index, 3) * 40 - 20   // ±20°
   return {
-    transform: `perspective(300px) rotateX(12deg) rotateY(-8deg) rotate(${rotation.toFixed(1)}deg)`,
-    left: `${x.toFixed(1)}%`,
-    top: `${y.toFixed(1)}%`,
-    backgroundColor: item.color,
+    bottom: `${bottom}px`,
+    left: `${left}px`,
+    transform: `rotate(${rotation.toFixed(1)}deg)`,
   }
 }
 </script>
@@ -159,16 +162,6 @@ function moneyStyle(index: number, item: MoneyItem): Record<string, string> {
     }"
     @click="emit('tap', line)"
   >
-    <!-- Money pile: bills + coins stacked on the right (z-5) -->
-    <div
-      v-for="(item, i) in (props.showMoney ? moneyItems : [])"
-      :key="i"
-      :class="item.kind === 'coin' ? 'coin' : 'bill'"
-      :style="moneyStyle(i, item)"
-    >
-      <span :class="item.kind === 'coin' ? 'coin-value' : 'bill-value'">{{ item.label }}</span>
-    </div>
-
     <!-- Saturated fill = remaining budget (z-10) -->
     <div class="absolute inset-0 z-10 pointer-events-none">
       <!-- Regular / Cumulative: fill from left -->
@@ -189,17 +182,6 @@ function moneyStyle(index: number, item: MoneyItem): Record<string, string> {
         class="absolute inset-0 rounded-2xl"
         :style="{ background: `linear-gradient(135deg, ${colors.fill}e0, ${colors.fillEnd}e0)` }"
       />
-    </div>
-
-    <!-- Goal bar (cumulative only) — thin vertical line at target -->
-    <div
-      v-if="drawerType === 'cumulative' && line.budgeted > 0"
-      class="absolute top-1 bottom-1 w-0.5 bg-white/50 pointer-events-none z-[15]"
-      style="left: 100%"
-    >
-      <div class="absolute -top-0.5 -left-1 text-[8px] text-white/70 font-bold whitespace-nowrap">
-        🎯
-      </div>
     </div>
 
     <!-- Content (z-20) -->
@@ -225,105 +207,247 @@ function moneyStyle(index: number, item: MoneyItem): Record<string, string> {
         <slot name="actions" />
       </div>
 
-      <!-- Big amount -->
-      <div class="mt-3">
-        <slot name="amount">
-          <span
-            class="text-[42px] leading-none font-extrabold tabular-nums tracking-tight drop-shadow-lg"
-            :class="isOverBudget ? 'text-red-200' : ''"
-          >{{ formatAmount(line.available) }}</span>
-        </slot>
-      </div>
+      <!-- Card body: text left + money pile right (like mockup) -->
+      <div class="flex items-end gap-4 mt-3">
+        <div class="flex-1">
+          <!-- Big amount -->
+          <div>
+            <slot name="amount">
+              <span
+                class="text-[42px] leading-none font-extrabold tabular-nums tracking-tight drop-shadow-lg"
+                :class="isOverBudget ? 'text-red-200' : ''"
+              >{{ formatAmount(line.available) }}</span>
+            </slot>
+          </div>
 
-      <!-- Budget info -->
-      <div v-if="props.showSubtitle" class="text-sm text-white/80 mt-1.5 drop-shadow-sm font-medium">
+          <!-- Budget info -->
+          <div v-if="props.showSubtitle" class="text-sm text-white/80 mt-1.5 drop-shadow-sm font-medium">
         <template v-if="drawerType !== 'reserve'">
           {{ formatAmount(Math.abs(line.activity)) }} dépensé sur {{ formatAmount(line.budgeted) }}
         </template>
         <template v-else>
           {{ formatAmount(Math.abs(line.activity)) }} dépensé
         </template>
+          </div>
+        </div>
+
+        <!-- Money pile: relative flex child with isometric perspective (like mockup) -->
+        <div
+          v-if="props.showMoney && moneyItems.length > 0"
+          class="money-pile"
+        >
+          <div
+            v-for="(item, i) in moneyItems"
+            :key="i"
+            :class="[item.kind === 'coin' ? 'coin' : 'bill', item.cssClass]"
+            :style="moneyStyle(i)"
+          >{{ item.label }}</div>
+        </div>
+        <!-- Empty pile: show hole emoji when overspent -->
+        <div
+          v-else-if="props.showMoney && isOverBudget"
+          class="money-pile empty"
+        >
+          <div class="empty-indicator">🕳️</div>
+        </div>
       </div>
 
       <!-- Calendar strip (regular only) -->
-      <!-- Spec: lumineux = jours restants (gauche), gris = jours passés (droite) -->
+      <!-- Spec: lumineux = jours restants (gauche), today = glow, gris = jours passés (droite) -->
       <div v-if="props.showCalendar && drawerType === 'regular' && line.budgeted > 0" class="flex gap-[2px] mt-3">
         <div
-          v-for="(isBright, i) in calendarDays"
+          v-for="(dayType, i) in calendarDays"
           :key="i"
           class="h-[7px] flex-1 rounded-[2px] transition-colors"
-          :class="isBright ? 'bg-white/75' : 'bg-white/20'"
+          :class="{
+            'bg-white/75': dayType === 'future',
+            'bg-white/90 shadow-[0_0_4px_rgba(255,255,255,0.5)]': dayType === 'today',
+            'bg-white/20': dayType === 'past',
+          }"
         />
+      </div>
+
+      <!-- Goal bar (cumulative with target_amount) — inside content flow -->
+      <div
+        v-if="props.showGoalBar && drawerType === 'cumulative' && goalPercent !== null"
+        class="flex items-center gap-2 mt-3"
+      >
+        <div class="flex-1 h-[6px] rounded-full bg-white/15 overflow-hidden">
+          <div
+            class="h-full rounded-full bg-gradient-to-r from-white/60 to-white/90 transition-all duration-700"
+            :style="{ width: `${goalPercent}%` }"
+          />
+        </div>
+        <span class="text-[11px] text-white/55 whitespace-nowrap font-medium">
+          {{ formatAmount(line.available) }}/{{ formatAmount(line.target_amount!) }}
+        </span>
       </div>
     </div>
   </button>
 </template>
 
 <style scoped>
-/* ── Bills: euro banknote rectangles ── */
+/* ══════════════════════════════════════════════════════════ */
+/* BILLS — Euro banknotes (Europa series)                        */
+/* Real bills grow with denomination; colors match actual notes  */
+/* ══════════════════════════════════════════════════════════ */
 .bill {
   position: absolute;
-  width: 72px;
-  height: 38px;
-  border-radius: 4px;
-  opacity: 0.9;
-  pointer-events: none;
+  border-radius: 2px;
+  font-weight: 800;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  box-shadow:
-    1px 2px 6px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  z-index: 15;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 0 1px 4px;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
 }
 
-.bill-value {
-  font-size: 16px;
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-
-/* Euro symbol after bill value */
-.bill-value::after {
+/* "€" watermark top-right */
+.bill::before {
   content: '€';
-  font-size: 10px;
-  margin-left: 1px;
-  opacity: 0.7;
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 8px;
+  font-weight: 900;
+  opacity: 0.25;
 }
 
-/* ── Coins: circular with metallic look ── */
+/* Holographic band — wide silver stripe on the right (Europa series) */
+.bill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 8px;
+  width: 7px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(220, 230, 245, 0.30) 0%,
+    rgba(255, 255, 255, 0.18) 30%,
+    rgba(200, 215, 240, 0.30) 50%,
+    rgba(255, 255, 255, 0.12) 70%,
+    rgba(210, 225, 245, 0.25) 100%
+  );
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Per-denomination: colors + sizes matching real Europa series ── */
+
+/* €5 — grey / sage green (120×62mm → 44×23px) */
+.bill-5 {
+  width: 44px;
+  height: 23px;
+  font-size: 8px;
+  background: linear-gradient(160deg, #9aa89c 0%, #7d8d7f 35%, #8a9a8c 70%, #7a8a7c 100%);
+  color: #d8e8da;
+  border-bottom: 1.5px solid #6a7a6c;
+}
+
+/* €10 — red / rose-carmine (127×67mm → 46×25px) */
+.bill-10 {
+  width: 46px;
+  height: 25px;
+  font-size: 8px;
+  background: linear-gradient(160deg, #d4696a 0%, #c04855 35%, #b84050 70%, #c85060 100%);
+  color: #f5dde0;
+  border-bottom: 1.5px solid #a03845;
+}
+
+/* €20 — blue / azure (133×72mm → 49×26px) */
+.bill-20 {
+  width: 49px;
+  height: 26px;
+  font-size: 9px;
+  background: linear-gradient(160deg, #5a90d0 0%, #3570b5 35%, #2e65a8 70%, #4080c0 100%);
+  color: #d0e0f5;
+  border-bottom: 1.5px solid #2558a0;
+}
+
+/* €50 — orange / warm amber (140×77mm → 52×28px) */
+.bill-50 {
+  width: 52px;
+  height: 28px;
+  font-size: 9px;
+  background: linear-gradient(160deg, #e8a050 0%, #d08030 35%, #c87528 70%, #d89040 100%);
+  color: #fff2e0;
+  border-bottom: 2px solid #b06820;
+}
+
+/* €100 — bright green / spring green (147×82mm → 55×30px) */
+.bill-100 {
+  width: 55px;
+  height: 30px;
+  font-size: 10px;
+  background: linear-gradient(160deg, #60b870 0%, #40a058 35%, #359050 70%, #50a865 100%);
+  color: #d8f5e0;
+  border-bottom: 2px solid #2e8048;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* COINS — circular with realistic metallic look                 */
+/* ══════════════════════════════════════════════════════════ */
 .coin {
   position: absolute;
-  width: 30px;
-  height: 30px;
   border-radius: 50%;
-  opacity: 0.9;
-  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  box-shadow:
-    1px 2px 5px rgba(0, 0, 0, 0.35),
-    inset 0 1px 2px rgba(255, 255, 255, 0.4),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.15);
-  z-index: 15;
+  font-weight: 800;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.coin-value {
-  font-size: 12px;
-  font-weight: 900;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
-.coin-value::after {
-  content: '€';
+/* €2 coin: silver center, gold rim */
+.coin-2 {
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(180deg, #e8e8e8, #b0b0b0);
+  border: 2.5px solid #d4a530;
   font-size: 8px;
-  margin-left: 0.5px;
-  opacity: 0.7;
+  color: #555;
+}
+
+/* €1 coin: gold center, silver rim */
+.coin-1 {
+  width: 19px;
+  height: 19px;
+  background: linear-gradient(180deg, #d4a530, #b8882a);
+  border: 2.5px solid #c0c0c0;
+  font-size: 8px;
+  color: #6b4c1a;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* MONEY PILE — relative flex child with isometric perspective */
+/* Exactly like the mockup: position relative, in the flow    */
+/* ══════════════════════════════════════════════════════════ */
+.money-pile {
+  position: relative;
+  width: 110px;
+  height: 80px;
+  flex-shrink: 0;
+  transform: perspective(300px) rotateX(35deg) rotateZ(-8deg);
+  transform-origin: center bottom;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+}
+
+.money-pile.empty {
+  opacity: 0.4;
+}
+
+.empty-indicator {
+  position: absolute;
+  font-size: 32px;
+  opacity: 0.6;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 /* Inner shadow + glossy highlight for depth */

@@ -20,6 +20,7 @@
 14. [Déploiement Docker](#14-déploiement-docker)
 15. [Sauvegardes et mises à jour](#15-sauvegardes-et-mises-à-jour)
 16. [FAQ / Dépannage](#16-faq--dépannage)
+17. [Sécurité & Chiffrement](#17-sécurité--chiffrement)
 
 ---
 
@@ -103,11 +104,60 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Obligatoire** — Clé de signature JWT. Générez-en une avec `openssl rand -hex 32` |
+| `SECRET_KEY` | `change-me-to-a-random-string` | **Obligatoire** — Clé de signature JWT (voir détails ci-dessous) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | URL de la base SQLite (en Docker, défini automatiquement) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Origines autorisées (séparées par des virgules). Ajoutez votre domaine en production |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Origines autorisées (voir détails ci-dessous) |
 | `BUDGIE_PORT` | `8080` | Port externe du conteneur Docker |
 | `PUID` / `PGID` | `1000` | UID/GID de l'utilisateur hôte (pour les permissions fichiers en Docker). Trouvez les vôtres avec `id -u && id -g` |
+
+#### `SECRET_KEY` — Clé de signature JWT
+
+Cette clé est utilisée pour **signer et vérifier les tokens d'authentification** (JWT). À chaque connexion, le serveur crée un token signé avec cette clé. Si un attaquant connaît la clé, il peut forger des tokens valides et accéder à n'importe quel compte.
+
+**Règles :**
+- **Ne jamais** utiliser la valeur par défaut en production
+- Utiliser une **chaîne aléatoire d'au moins 32 caractères** (64 caractères hexadécimaux recommandés)
+- **Ne jamais partager** la clé ni la commiter dans un dépôt
+- En cas de suspicion de compromission, **changez-la immédiatement** — toutes les sessions en cours seront invalidées (les utilisateurs devront se reconnecter)
+
+**Comment générer une clé sécurisée :**
+
+```bash
+# Linux / macOS / WSL
+openssl rand -hex 32
+
+# PowerShell (Windows)
+-join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+
+# Python
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Exemple de résultat : `a3f7b9c1d4e8...` (64 caractères hexadécimaux). Copiez cette valeur dans votre fichier `.env`.
+
+#### `CORS_ORIGINS` — Origines autorisées
+
+CORS (Cross-Origin Resource Sharing) contrôle **quels sites web sont autorisés à appeler l'API Budgie**. Le navigateur bloque toute requête venant d'une origine absente de cette liste.
+
+**La valeur est une liste d'URLs séparées par des virgules** (protocole + domaine + port, sans slash final).
+
+**Configurations courantes :**
+
+| Scénario | Valeur |
+|---|---|
+| Développement local uniquement | `http://localhost:5173,http://localhost:8080` |
+| NAS Synology (réseau local) | `http://localhost:5173,http://192.168.1.50:8280` |
+| NAS Synology + domaine personnalisé | `http://localhost:5173,https://budgie.votre-domaine.com` |
+| Multiples points d'accès | `http://localhost:5173,http://192.168.1.50:8280,https://budgie.votre-domaine.com` |
+
+**Règles :**
+- Toujours inclure `http://localhost:5173` si vous utilisez `npm run dev` en local
+- Ajouter l'**URL exacte** que vous utilisez pour accéder à Budgie dans votre navigateur (avec le bon port)
+- Pour l'accès HTTPS via proxy inverse, utilisez `https://` — **pas** `http://`
+- **Ne jamais** utiliser `*` (wildcard) — cela désactive entièrement la protection CORS
+- Après modification, **redémarrez** le conteneur : `docker compose restart`
+
+> **Symptôme d'une origine manquante** : la console du navigateur affiche `CORS policy: No 'Access-Control-Allow-Origin' header`. Ajoutez l'URL indiquée dans l'erreur à `CORS_ORIGINS`.
 
 ### Variables avancées
 
@@ -143,7 +193,12 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 
 ## 5. Navigation dans l'application
 
-L'interface mobile-first de Budgie s'organise autour d'une **barre de navigation en bas** (BottomNav) avec 5 onglets :
+L'interface responsive de Budgie s'adapte à l'appareil :
+
+- **Mobile** : un **dock en bas** (5 icônes) pour un accès rapide.
+- **Desktop** : une **barre latérale** à gauche avec des libellés.
+
+La navigation (AppNav) propose 5 sections :
 
 | Icône | Page | Description |
 |---|---|---|
@@ -409,6 +464,9 @@ services:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
+      - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME:-Budgie}
+      - WEBAUTHN_ORIGIN=${WEBAUTHN_ORIGIN:-https://localhost:5173}
     mem_limit: 256m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -425,6 +483,8 @@ volumes:
    - `PUID` = votre UID (ex. `1026` — trouvez-le avec `id -u` en SSH)
    - `PGID` = votre GID (ex. `100` — trouvez-le avec `id -g` en SSH)
    - `CORS_ORIGINS` = `https://budgie.votre-domaine.com`
+   - `WEBAUTHN_RP_ID` = votre domaine sans schéma ni port (ex. `budgie.votre-domaine.com`) — requis pour que les Passkeys fonctionnent
+   - `WEBAUTHN_ORIGIN` = URL complète du frontend (ex. `https://budgie.votre-domaine.com`) — doit correspondre exactement à ce qu'affiche le navigateur
 
 5. **Deploy the stack**
 
@@ -537,3 +597,75 @@ docker exec -it budgie /bin/bash
 # Sauvegarde manuelle
 docker exec budgie /bin/bash /app/scripts/backup.sh /app/data/backups
 ```
+
+---
+
+## 17. Sécurité & Chiffrement
+
+### Qu'est-ce qui est chiffré ?
+
+Budgie chiffre **toutes vos données financières** au repos dans la base de données :
+- Noms de comptes
+- Montants, dates et mémos des transactions
+- Noms des catégories et enveloppes
+- Noms des bénéficiaires
+- Allocations budgétaires
+- Règles de catégorisation
+
+Seuls les identifiants structurels (IDs, clés étrangères) restent non chiffrés — ils ne révèlent aucune information personnelle.
+
+### Comment ça fonctionne ?
+
+Lors de la création de votre compte Budgie, vous choisissez une **passphrase** (une phrase mémorable ou un ensemble de mots). Cette passphrase est utilisée pour générer une clé de chiffrement via un algorithme sécurisé (Argon2id). Toutes vos données sont ensuite chiffrées avec cette clé selon un chiffrement de grade militaire (AES-256-GCM).
+
+**Points clés :**
+- Votre clé de chiffrement n'est **jamais stockée** sur le serveur — elle n'existe qu'en mémoire pendant votre connexion.
+- Lorsque vous vous déconnectez (ou que votre session expire), la clé est purgée de la mémoire.
+- Même l'administrateur du serveur **ne peut pas lire vos données** sans votre passphrase.
+- Si vous perdez votre passphrase, vos données sont **définitivement irrécupérables** — c'est un choix de conception.
+
+### Connexion
+
+Budgie propose trois méthodes d'authentification, équilibrant sécurité et confort :
+
+| Méthode | Quand l'utiliser | Fonctionnement |
+|---|---|---|
+| **Passkey (biométrie)** | Usage quotidien | Empreinte digitale ou Face ID sur votre appareil → déverrouille la clé stockée localement |
+| **PIN** | Accès rapide de secours | PIN à 4–6 chiffres → déchiffre la clé stockée localement |
+| **Passphrase** | Configuration initiale, nouvel appareil, récupération | Vous saisissez la passphrase → la clé est redérivée |
+
+**Sécurité du PIN** : après 5 tentatives échouées, la clé stockée localement est effacée. Vous devrez ressaisir votre passphrase.
+
+> **Le PIN nécessite HTTPS** — le PIN utilise l'API Web Crypto (`crypto.subtle`) qui n'est disponible que sur des origines sécurisées (HTTPS ou `localhost`). Si l'application est servie en HTTP simple, le PIN ne sera pas proposé.
+
+### Configurer les Passkeys
+
+1. Connectez-vous avec votre passphrase
+2. Allez dans **Paramètres → Sécurité**
+3. Cliquez sur **Enregistrer une Passkey**
+4. Suivez l'invite biométrique de votre appareil (empreinte, Face ID, Windows Hello…)
+5. C'est fait — la prochaine fois, vous pourrez vous connecter avec votre biométrie
+
+Vous pouvez enregistrer des Passkeys sur plusieurs appareils (téléphone, tablette, ordinateur).
+
+### Document de récupération (PDF)
+
+À la création du compte, Budgie génère un **PDF de récupération** contenant :
+- Votre passphrase en clair
+- Un QR code pour ressaisie rapide
+- Des informations de vérification (8 premiers caractères du hash de la clé)
+
+**Imprimez ce document et conservez-le en lieu sûr** (coffre-fort, coffre bancaire…). C'est votre seul moyen de récupérer l'accès si vous oubliez votre passphrase et perdez tous vos appareils.
+
+> ⚠️ **Ne stockez jamais ce PDF numériquement** (ni sur votre téléphone, ni dans le cloud, ni par email). Toute personne possédant ce document peut accéder à vos données.
+
+### Que se passe-t-il si…
+
+| Scénario | Résultat |
+|---|---|
+| Je change de téléphone | Enregistrez une nouvelle Passkey. Utilisez la passphrase pour la première connexion. |
+| J'oublie mon PIN | Ressaisissez votre passphrase. Vous pourrez définir un nouveau PIN ensuite. |
+| J'oublie ma passphrase mais j'ai le PDF | Utilisez la passphrase du PDF imprimé pour récupérer l'accès. |
+| J'oublie ma passphrase ET je perds le PDF | **Données définitivement perdues.** C'est le compromis sécurité : pas de porte dérobée admin. |
+| Mon NAS est volé | Le voleur a des blobs chiffrés — inutilisables sans votre passphrase. |
+| Je veux partager avec ma famille | Chaque utilisateur a sa propre passphrase et clé. Les données sont isolées par utilisateur. |

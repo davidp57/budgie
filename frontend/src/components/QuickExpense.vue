@@ -13,7 +13,7 @@
  * - Toast confirmation, non-blocking, auto-dismiss
  */
 
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import type { EnvelopeLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
 import { createTransaction } from '@/api/transactions'
@@ -34,6 +34,15 @@ const toast = useToastStore()
 const presetsStore = usePresetsStore()
 const nearby = useNearbyPlaces()
 const showLocation = ref(false)
+const desktopAmountInput = ref<HTMLInputElement | null>(null)
+
+// Responsive: detect desktop
+const isDesktop = ref(window.matchMedia('(min-width: 1024px)').matches)
+
+// Auto-focus the desktop amount input
+onMounted(() => {
+  nextTick(() => desktopAmountInput.value?.focus())
+})
 
 // Amount as string (user types digits + comma)
 const amountStr = ref('')
@@ -44,14 +53,24 @@ const isPlanned = ref(false)
 const customDate = ref(new Date().toISOString().slice(0, 10))
 const submitting = ref(false)
 
-// Parse amount string to centimes
+// Parse amount string to centimes (strict validation)
+// Accept both comma and dot as decimal separator
+const AMOUNT_RE = /^\d+([.,]\d{0,2})?$/
+
+const amountError = computed(() => {
+  if (!amountStr.value) return ''
+  if (!AMOUNT_RE.test(amountStr.value)) return 'Montant invalide'
+  return ''
+})
+
 const amountCentimes = computed(() => {
-  if (!amountStr.value) return 0
-  const parts = amountStr.value.split(',')
+  if (!amountStr.value || amountError.value) return 0
+  const normalized = amountStr.value.replace('.', ',')
+  const parts = normalized.split(',')
   const euros = parseInt(parts[0] || '0', 10)
   let cents = 0
   if (parts[1]) {
-    const rawCents = parts[1].slice(0, 2) // max 2 decimal places
+    const rawCents = parts[1].slice(0, 2)
     cents = parseInt(rawCents.padEnd(2, '0'), 10)
   }
   return euros * 100 + cents
@@ -227,13 +246,16 @@ const numpadKeys = [
 
 <template>
   <!-- Backdrop -->
-  <div class="fixed inset-0 z-50 flex flex-col justify-end">
+  <div
+    class="fixed inset-0 z-50 flex flex-col justify-end lg:items-center lg:justify-center"
+    @keydown.escape="emit('close')"
+  >
     <div class="absolute inset-0 bg-black/40" @click="emit('close')" />
 
-    <!-- Bottom sheet -->
-    <div class="relative bg-base-100 rounded-t-3xl shadow-2xl max-h-[92dvh] flex flex-col animate-slide-up">
-      <!-- Drag handle -->
-      <div class="flex justify-center pt-3 pb-1">
+    <!-- Bottom sheet (mobile) / Centered modal (desktop) -->
+    <div class="relative bg-base-100 rounded-t-3xl lg:rounded-2xl shadow-2xl max-h-[92dvh] lg:max-h-[85vh] lg:w-full lg:max-w-md flex flex-col animate-slide-up lg:animate-none">
+      <!-- Drag handle (mobile only) -->
+      <div class="flex justify-center pt-3 pb-1 lg:hidden">
         <div class="w-10 h-1 rounded-full bg-base-300" />
       </div>
 
@@ -256,12 +278,30 @@ const numpadKeys = [
         <!-- Amount display -->
         <div class="text-center py-6">
           <div class="flex items-baseline justify-center gap-1 min-h-[64px]">
-            <span
-              v-if="!displayAmount"
-              class="text-[48px] font-extrabold text-base-content/15 select-none"
-            >0</span>
-            <span v-else class="text-[48px] font-extrabold tabular-nums tracking-tight">{{ displayAmount }}</span>
-            <span class="blink-cursor text-[48px] font-thin text-primary/60 select-none">|</span>
+            <!-- Mobile: read-only display -->
+            <template v-if="!isDesktop">
+              <span
+                v-if="!displayAmount"
+                class="text-[48px] font-extrabold text-base-content/15 select-none"
+              >0</span>
+              <span v-else class="text-[48px] font-extrabold tabular-nums tracking-tight">{{ displayAmount }}</span>
+              <span class="blink-cursor text-[48px] font-thin text-primary/60 select-none">|</span>
+            </template>
+            <!-- Desktop: editable input styled as the display -->
+            <input
+              v-else
+              ref="desktopAmountInput"
+              v-model="amountStr"
+              type="text"
+              inputmode="decimal"
+              class="bg-transparent border-none outline-none text-center
+                     text-[48px] font-extrabold tabular-nums tracking-tight
+                     w-48 caret-primary placeholder:text-base-content/15"
+              :class="amountError ? 'text-error' : ''"
+              placeholder="0"
+              @keydown.enter="submit"
+              @keydown.escape="emit('close')"
+            />
             <span class="text-2xl text-base-content/25 font-light ml-1">€</span>
           </div>
         </div>
@@ -351,8 +391,8 @@ const numpadKeys = [
           class="input input-bordered input-sm w-full mt-1"
         />
 
-        <!-- Custom numpad -->
-        <div class="grid grid-cols-3 gap-2 mt-4">
+        <!-- Custom numpad (mobile only) -->
+        <div class="grid grid-cols-3 gap-2 mt-4 lg:hidden">
           <template v-for="row in numpadKeys" :key="row.join()">
             <button
               v-for="key in row"
@@ -367,13 +407,16 @@ const numpadKeys = [
         <!-- Confirm button -->
         <button
           class="btn btn-lg w-full mt-4 text-white font-semibold"
-          :class="hasAmount
+          :class="hasAmount && !amountError
             ? 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-lg'
             : 'btn-disabled bg-base-300 text-base-content/30'"
-          :disabled="!hasAmount || submitting"
+          :disabled="!hasAmount || !!amountError || submitting"
           @click="submit"
         >
           <span v-if="submitting" class="loading loading-spinner loading-sm" />
+          <template v-else-if="amountError">
+            {{ amountError }}
+          </template>
           <template v-else-if="hasAmount">
             Dépenser {{ formatAmount(amountCentimes) }}
           </template>

@@ -8,6 +8,18 @@
 export interface LoginResponse {
   access_token: string
   token_type: string
+  needs_encryption_setup: boolean
+  is_encrypted: boolean
+}
+
+export interface WebAuthnCredential {
+  id: number
+  name: string | null
+  created_at: string
+}
+
+export interface WebAuthnOptions {
+  options: Record<string, unknown>
 }
 
 // ── Accounts ─────────────────────────────────────────────────────
@@ -112,6 +124,7 @@ export interface EnvelopeLine {
   envelope_type: EnvelopeType
   emoji: string
   rollover: boolean
+  target_amount: number | null
   categories: CategoryRef[]
   budgeted: number // centimes
   activity: number // centimes

@@ -67,8 +67,6 @@ const EMOJI_PRESETS = [
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────
-const COLOR_PALETTE_LENGTH = 8
-
 function toggleCategory(ids: number[], id: number): void {
   const idx = ids.indexOf(id)
   if (idx >= 0) ids.splice(idx, 1)
@@ -79,16 +77,9 @@ function displayEuros(centimes: number): string {
   return (centimes / 100).toFixed(2).replace('.', ',')
 }
 
-// ── Color cycling on tile tap ───────────────────────────────────────
-const colorOverrides = ref<Record<number, number>>({})
-
+// ── Color index helper ────────────────────────────────────────────────
 function getColorIndex(line: EnvelopeLine): number {
-  return colorOverrides.value[line.envelope_id] ?? (line.envelope_id - 1)
-}
-
-function cycleColor(line: EnvelopeLine): void {
-  const current = getColorIndex(line)
-  colorOverrides.value[line.envelope_id] = (current + 1) % COLOR_PALETTE_LENGTH
+  return line.envelope_id - 1
 }
 
 // ── Swipe to delete ──────────────────────────────────────────────
@@ -120,7 +111,7 @@ function onTouchEnd(envelopeId: number): void {
 }
 
 // ── Inline editing ───────────────────────────────────────────────
-const inlineEdit = ref<{ id: number; field: 'name' | 'amount' } | null>(null)
+const inlineEdit = ref<{ id: number; field: 'name' | 'amount' | 'goal' } | null>(null)
 const inlineValue = ref('')
 
 async function cycleEmoji(line: EnvelopeLine): Promise<void> {
@@ -172,6 +163,25 @@ async function saveInlineAmount(line: EnvelopeLine): Promise<void> {
   await budgetStore.loadMonth()
 }
 
+function startEditGoal(line: EnvelopeLine): void {
+  inlineEdit.value = { id: line.envelope_id, field: 'goal' }
+  const full = fullEnvelopes.value.find((e) => e.id === line.envelope_id)
+  inlineValue.value = full?.target_amount ? displayEuros(full.target_amount) : ''
+  focusInlineInput()
+}
+
+async function saveInlineGoal(line: EnvelopeLine): Promise<void> {
+  if (!inlineEdit.value || inlineEdit.value.id !== line.envelope_id) return
+  const euros = parseFloat(inlineValue.value.replace(',', '.')) || 0
+  const centimes = Math.round(euros * 100)
+  inlineEdit.value = null
+  const full = fullEnvelopes.value.find((e) => e.id === line.envelope_id)
+  const current = full?.target_amount ?? 0
+  if (centimes === current) return
+  await updateEnvelope(line.envelope_id, { target_amount: centimes || null })
+  await reloadAll()
+}
+
 async function swipeDelete(envelopeId: number): Promise<void> {
   await deleteEnvelope(envelopeId)
   swipedId.value = null
@@ -189,6 +199,7 @@ const editForm = ref({
   rollover: false,
   category_ids: [] as number[],
   budgetedEuros: '',
+  targetAmountEuros: '',
 })
 const editError = ref('')
 const editSaving = ref(false)
@@ -204,6 +215,7 @@ function openEdit(line: EnvelopeLine): void {
     rollover: line.rollover,
     category_ids: line.categories.map((c) => c.id),
     budgetedEuros: displayEuros(line.budgeted),
+    targetAmountEuros: full?.target_amount ? displayEuros(full.target_amount) : '',
   }
   editError.value = ''
   editDialogRef.value?.showModal()
@@ -226,6 +238,9 @@ async function saveEdit(): Promise<void> {
       period: editForm.value.period,
       rollover: editForm.value.rollover,
       category_ids: editForm.value.category_ids,
+      target_amount: editForm.value.targetAmountEuros
+        ? Math.round(parseFloat(editForm.value.targetAmountEuros.replace(',', '.')) * 100)
+        : null,
     })
     const euros = parseFloat(editForm.value.budgetedEuros.replace(',', '.')) || 0
     const centimes = Math.round(euros * 100)
@@ -266,6 +281,7 @@ const createForm = ref({
   rollover: false,
   category_ids: [] as number[],
   budgetedEuros: '',
+  targetAmountEuros: '',
 })
 const createError = ref('')
 const createSaving = ref(false)
@@ -279,6 +295,7 @@ function openCreate(): void {
     rollover: false,
     category_ids: [],
     budgetedEuros: '',
+    targetAmountEuros: '',
   }
   createError.value = ''
   createDialogRef.value?.showModal()
@@ -300,6 +317,9 @@ async function saveCreate(): Promise<void> {
       period: createForm.value.period,
       rollover: createForm.value.rollover,
       category_ids: createForm.value.category_ids,
+      target_amount: createForm.value.targetAmountEuros
+        ? Math.round(parseFloat(createForm.value.targetAmountEuros.replace(',', '.')) * 100)
+        : null,
     })
     const euros = parseFloat(createForm.value.budgetedEuros.replace(',', '.')) || 0
     if (euros > 0) {
@@ -381,21 +401,25 @@ async function reloadAll(): Promise<void> {
 
 // ── Init ─────────────────────────────────────────────────────────
 onMounted(async () => {
-  await Promise.all([
-    budgetStore.loadMonth(),
-    listGroupsWithCategories().then((g) => (groups.value = g)),
-    listEnvelopes().then((e) => (fullEnvelopes.value = e)),
-  ])
+  try {
+    await Promise.all([
+      budgetStore.loadMonth(),
+      listGroupsWithCategories().then((g) => (groups.value = g)),
+      listEnvelopes().then((e) => (fullEnvelopes.value = e)),
+    ])
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 </script>
 
 <template>
-  <div class="px-4 py-5 pb-24">
+  <div class="px-4 py-5 pb-24 lg:px-8 lg:py-6 max-w-7xl mx-auto">
     <!-- Header -->
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-2">
         <span class="text-2xl">🗂️</span>
-        <h1 class="text-xl font-bold">Tiroirs</h1>
+        <h1 class="text-xl font-bold">Budget</h1>
       </div>
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>
@@ -426,15 +450,17 @@ onMounted(async () => {
     </div>
 
     <!-- Drawer cards with swipe-to-delete -->
-    <div v-else class="flex flex-col gap-4">
+    <div v-else class="flex flex-col lg:grid lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
       <div
         v-for="line in budgetStore.envelopeLines"
         :key="line.envelope_id"
         class="relative overflow-hidden rounded-2xl"
       >
-        <!-- Delete zone (revealed by swipe) -->
+        <!-- Delete zone (revealed by swipe on mobile, always visible on desktop) -->
         <div
-          class="absolute inset-y-0 right-0 w-24 bg-error flex items-center justify-center rounded-r-2xl"
+          class="absolute inset-y-0 right-0 w-24 bg-error items-center justify-center rounded-r-2xl
+                 hidden lg:hidden"
+          :class="{ '!flex': swipedId === line.envelope_id }"
         >
           <button
             class="btn btn-ghost text-white text-2xl"
@@ -446,7 +472,7 @@ onMounted(async () => {
 
         <!-- Card wrapper with touch gestures -->
         <div
-          class="relative transition-transform duration-200"
+          class="relative transition-transform duration-200 group"
           :class="{ '-translate-x-24': swipedId === line.envelope_id }"
           @touchstart="onTouchStart($event, line.envelope_id)"
           @touchmove="onTouchMove"
@@ -458,7 +484,8 @@ onMounted(async () => {
             :show-money="false"
             :show-calendar="false"
             :show-subtitle="false"
-            @tap="cycleColor(line)"
+            :show-goal-bar="false"
+            @tap="openEdit(line)"
           >
             <!-- Emoji slot: click to cycle -->
             <template #emoji>
@@ -515,9 +542,33 @@ onMounted(async () => {
               >
                 {{ formatAmount(line.available) }}
               </span>
+              <!-- Goal: inline-editable, shown bigger for cumulative envelopes -->
+              <div v-if="line.envelope_type === 'cumulative'" class="mt-1">
+                <input
+                  v-if="inlineEdit?.id === line.envelope_id && inlineEdit?.field === 'goal'"
+                  v-model="inlineValue"
+                  type="text"
+                  inputmode="decimal"
+                  class="inline-edit-input bg-white/30 rounded px-1.5 py-0.5
+                         text-lg text-white font-semibold
+                         outline-none border border-white/50 focus:border-white
+                         drop-shadow-sm w-32"
+                  placeholder="Objectif €"
+                  @click.stop
+                  @blur="saveInlineGoal(line)"
+                  @keyup.enter="($event.target as HTMLInputElement).blur()"
+                />
+                <span
+                  v-else
+                  class="text-lg font-semibold text-white/80 drop-shadow-sm cursor-pointer hover:text-white transition-colors"
+                  @click.stop="startEditGoal(line)"
+                >
+                  🎯 {{ line.target_amount ? formatAmount(line.target_amount) : 'Définir un objectif' }}
+                </span>
+              </div>
             </template>
 
-            <!-- Actions slot: +€ and ⋯ buttons -->
+            <!-- Actions slot: +€, ⋯, and 🗑️ buttons -->
             <template #actions>
               <button
                 v-if="line.envelope_type === 'cumulative'"
@@ -534,10 +585,20 @@ onMounted(async () => {
                        flex items-center justify-center
                        text-sm font-bold text-white/80 hover:text-white hover:bg-white/30
                        active:scale-90 transition-all shrink-0"
-                :class="{ 'ml-auto': line.envelope_type !== 'cumulative' && line.envelope_type !== 'reserve' }"
                 @click.stop="openEdit(line)"
               >
                 ⋯
+              </button>
+              <button
+                class="w-8 h-8 rounded-full bg-error/60 backdrop-blur-sm
+                       hidden lg:flex items-center justify-center
+                       text-sm text-white/80 hover:text-white hover:bg-error/80
+                       active:scale-90 transition-all shrink-0
+                       opacity-0 group-hover:opacity-100"
+                title="Supprimer"
+                @click.stop="swipeDelete(line.envelope_id)"
+              >
+                🗑️
               </button>
             </template>
           </DrawerCard>
@@ -626,6 +687,19 @@ onMounted(async () => {
             class="input input-bordered"
             placeholder="0,00"
           />
+        </div>
+
+        <!-- Target amount (cumulative only) -->
+        <div v-if="editForm.envelope_type === 'cumulative'" class="form-control mb-3">
+          <label class="label"><span class="label-text">🎯 Objectif (€)</span></label>
+          <input
+            v-model="editForm.targetAmountEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="Ex : 500"
+          />
+          <label class="label"><span class="label-text-alt text-base-content/40">Affiche une barre de progression sur le tiroir</span></label>
         </div>
 
         <!-- Rollover -->
@@ -761,6 +835,19 @@ onMounted(async () => {
           />
         </div>
 
+        <!-- Target amount (cumulative only) -->
+        <div v-if="createForm.envelope_type === 'cumulative'" class="form-control mb-3">
+          <label class="label"><span class="label-text">🎯 Objectif (€)</span></label>
+          <input
+            v-model="createForm.targetAmountEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="Ex : 500"
+          />
+          <label class="label"><span class="label-text-alt text-base-content/40">Affiche une barre de progression sur le tiroir</span></label>
+        </div>
+
         <!-- Rollover -->
         <label class="flex items-center gap-2 mb-3 cursor-pointer">
           <input
@@ -844,8 +931,21 @@ onMounted(async () => {
           </button>
         </div>
 
-        <!-- Numpad -->
-        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4">
+        <!-- Keyboard input (desktop) -->
+        <div class="hidden lg:block mb-4">
+          <input
+            v-model="addBudgetAmount"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered input-lg w-full text-center text-2xl font-bold tabular-nums"
+            placeholder="0,00"
+            autofocus
+            @keydown.enter="confirmAddBudget"
+          />
+        </div>
+
+        <!-- Numpad (mobile only) -->
+        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto mb-4 lg:hidden">
           <button
             v-for="k in ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', '⌫']"
             :key="k"

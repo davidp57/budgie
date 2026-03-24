@@ -20,6 +20,7 @@
 14. [Docker Deployment](#14-docker-deployment)
 15. [Backups & Updates](#15-backups--updates)
 16. [FAQ / Troubleshooting](#16-faq--troubleshooting)
+17. [Security & Encryption](#17-security--encryption)
 
 ---
 
@@ -103,11 +104,60 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key. Generate one with `openssl rand -hex 32` |
+| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key (see details below) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLite database URL (set automatically in Docker) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (comma-separated). Add your domain in production |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (see details below) |
 | `BUDGIE_PORT` | `8080` | External Docker container port |
 | `PUID` / `PGID` | `1000` | Host user UID/GID (for Docker file permissions). Find yours with `id -u && id -g` |
+
+#### `SECRET_KEY` — JWT signing key
+
+This key is used to **sign and verify authentication tokens** (JWT). Every time a user logs in, the server creates a token signed with this key. If an attacker knows the key, they can forge valid tokens and access any account.
+
+**Rules:**
+- **Never** use the default value in production
+- Use a **random string of at least 32 characters** (64 hex characters recommended)
+- **Never share** the key or commit it to a repository
+- If you suspect the key has been compromised, **change it immediately** — all existing sessions will be invalidated (users must log in again)
+
+**How to generate a secure key:**
+
+```bash
+# Linux / macOS / WSL
+openssl rand -hex 32
+
+# PowerShell (Windows)
+-join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+
+# Python
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Example result: `a3f7b9c1d4e8...` (64 hex characters). Copy this value into your `.env` file.
+
+#### `CORS_ORIGINS` — Allowed origins
+
+CORS (Cross-Origin Resource Sharing) controls **which websites are allowed to call the Budgie API**. The browser blocks any request coming from an origin not in this list.
+
+**The value is a comma-separated list of URLs** (protocol + domain + port, no trailing slash).
+
+**Common configurations:**
+
+| Scenario | Value |
+|---|---|
+| Local development only | `http://localhost:5173,http://localhost:8080` |
+| Synology NAS (local network) | `http://localhost:5173,http://192.168.1.50:8280` |
+| Synology NAS + custom domain | `http://localhost:5173,https://budgie.your-domain.com` |
+| Multiple access points | `http://localhost:5173,http://192.168.1.50:8280,https://budgie.your-domain.com` |
+
+**Rules:**
+- Always include `http://localhost:5173` if you use `npm run dev` locally
+- Add the **exact URL** you use to access Budgie in your browser (with the correct port)
+- For HTTPS via reverse proxy, use `https://` — **not** `http://`
+- **Never** use `*` (wildcard) — it disables CORS protection entirely
+- After changing the value, **restart** the container: `docker compose restart`
+
+> **Symptom of a missing origin**: the browser console shows `CORS policy: No 'Access-Control-Allow-Origin' header`. Add the URL shown in the error to `CORS_ORIGINS`.
 
 ### Advanced Variables
 
@@ -143,7 +193,12 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 ## 5. Navigating the Application
 
-Budgie's mobile-first interface is organized around a **bottom navigation bar** (BottomNav) with 5 tabs:
+Budgie's responsive interface adapts to the device:
+
+- **Mobile**: a **bottom dock** (5 icons) for quick access.
+- **Desktop**: a **sidebar** on the left with labels.
+
+The navigation (AppNav) offers 5 sections:
 
 | Icon | Page | Description |
 |---|---|---|
@@ -409,6 +464,9 @@ services:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
+      - WEBAUTHN_RP_NAME=${WEBAUTHN_RP_NAME:-Budgie}
+      - WEBAUTHN_ORIGIN=${WEBAUTHN_ORIGIN:-https://localhost:5173}
     mem_limit: 256m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -425,6 +483,8 @@ volumes:
    - `PUID` = your UID (e.g. `1026` — find it with `id -u` via SSH)
    - `PGID` = your GID (e.g. `100` — find it with `id -g` via SSH)
    - `CORS_ORIGINS` = `https://budgie.your-domain.com`
+   - `WEBAUTHN_RP_ID` = your domain without scheme or port (e.g. `budgie.your-domain.com`) — required for Passkeys to work
+   - `WEBAUTHN_ORIGIN` = full frontend URL (e.g. `https://budgie.your-domain.com`) — must match exactly what the browser shows
 
 5. **Deploy the stack**
 
@@ -537,3 +597,75 @@ docker exec -it budgie /bin/bash
 # Manual backup
 docker exec budgie /bin/bash /app/scripts/backup.sh /app/data/backups
 ```
+
+---
+
+## 17. Security & Encryption
+
+### What Is Encrypted?
+
+Budgie encrypts **all your financial data** at rest in the database:
+- Account names
+- Transaction amounts, dates, memos
+- Category and envelope names
+- Payee names
+- Budget allocations
+- Categorization rules
+
+Only structural identifiers (IDs, foreign keys) remain unencrypted — they reveal no personal information.
+
+### How Does It Work?
+
+When you create your Budgie account, you choose a **passphrase** (a memorable sentence or set of words). This passphrase is used to generate an encryption key via a secure algorithm (Argon2id). All your data is then encrypted with this key using military-grade encryption (AES-256-GCM).
+
+**Key facts:**
+- Your encryption key is **never stored** on the server — it only exists in memory while you are logged in.
+- When you log out (or your session expires), the key is purged from memory.
+- Even the server administrator **cannot read your data** without your passphrase.
+- If you lose your passphrase, your data is **permanently unrecoverable** — this is by design.
+
+### Signing In
+
+Budgie offers three ways to authenticate, balancing security with convenience:
+
+| Method | When to use | How it works |
+|---|---|---|
+| **Passkey (biometric)** | Daily use | Fingerprint or Face ID on your device → unlocks your encryption key stored locally |
+| **PIN** | Quick fallback | 4–6 digit PIN → decrypts your locally stored encryption key |
+| **Passphrase** | Initial setup, new device, recovery | You type the passphrase → the encryption key is re-derived |
+
+**PIN security**: after 5 failed PIN attempts, the locally stored encryption key is erased. You will need to re-enter your passphrase.
+
+> **PIN requires HTTPS** — the PIN uses the Web Crypto API (`crypto.subtle`) which is only available on secure origins (HTTPS or `localhost`). If the app is served over plain HTTP, the PIN option will not be offered.
+
+### Setting Up Passkeys
+
+1. Log in with your passphrase
+2. Go to **Settings → Security**
+3. Click **Register Passkey**
+4. Follow your device’s biometric prompt (fingerprint, Face ID, Windows Hello…)
+5. Done — next time, you can sign in with just your biometric
+
+You can register Passkeys on multiple devices (phone, tablet, laptop).
+
+### Recovery Document (PDF)
+
+At account creation, Budgie generates a **recovery PDF** containing:
+- Your passphrase in clear text
+- A QR code for quick re-entry
+- Verification information (first 8 characters of a key hash)
+
+**Print this document and store it in a safe place** (e.g. a fireproof safe, a safety deposit box). It is your only way to recover access if you forget your passphrase and lose all your devices.
+
+> ⚠️ **Never store this PDF digitally** (not on your phone, not in the cloud, not in email). Anyone with this document can access your data.
+
+### What Happens If…
+
+| Scenario | Outcome |
+|---|---|
+| I change my phone | Register a new Passkey on the new device. Use passphrase to log in the first time. |
+| I forget my PIN | Re-enter your passphrase. You can set a new PIN afterward. |
+| I forget my passphrase but have the PDF | Use the passphrase from the printed PDF to recover access. |
+| I forget my passphrase AND lose the PDF | **Data is permanently lost.** This is the security trade-off: no admin back door. |
+| My NAS is stolen | Thief has encrypted blobs — useless without your passphrase. |
+| I want to share with family | Each user has their own passphrase and encryption key. Data is isolated per user. |

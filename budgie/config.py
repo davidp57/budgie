@@ -29,9 +29,6 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
 
-    # MVP: skip authentication, hardcode user_id=1
-    mvp_mode: bool = False
-
     # File uploads
     upload_dir: str = str(DATA_DIR / "uploads")
 
@@ -41,7 +38,14 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS — comma-separated list of allowed origins
-    cors_origins: str = "http://localhost:5173,https://localhost:5173,http://localhost:8080"
+    cors_origins: str = (
+        "http://localhost:5173,https://localhost:5173,http://localhost:8080"
+    )
+
+    # WebAuthn (Passkeys)
+    webauthn_rp_id: str = "localhost"
+    webauthn_rp_name: str = "Budgie"
+    webauthn_origin: str = "https://localhost:5173"
 
 
 settings = Settings()

@@ -50,6 +50,23 @@ async def test_login_returns_token(client: AsyncClient):
     assert data["token_type"] == "bearer"
 
 
+async def test_login_returns_needs_encryption_setup_true_for_new_user(
+    client: AsyncClient,
+):
+    """New users (is_encrypted=False) must get needs_encryption_setup=True."""
+    await client.post(
+        "/api/auth/register",
+        json={"username": "alice", "password": "securepass123"},
+    )
+    response = await client.post(
+        "/api/auth/login",
+        json={"username": "alice", "password": "securepass123"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_encryption_setup"] is True
+
+
 async def test_login_wrong_password(client: AsyncClient):
     await client.post(
         "/api/auth/register",
