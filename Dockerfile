@@ -29,14 +29,15 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main --no-interaction --no-ansi --no-root
 
 # Copy backend source
+COPY README.md ./
 COPY budgie/ ./budgie/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
-# Install the budgie package itself (generates metadata for importlib.metadata.version())
-# Running poetry install again (without --no-root) only adds the root package;
-# already-installed dependencies are skipped.
-RUN poetry install --no-interaction --no-ansi
+# Install the budgie package itself (generates metadata for importlib.metadata.version()).
+# --only main avoids reinstalling dev deps; without --no-root, Poetry registers the
+# budgie package and creates the metadata needed by importlib.metadata.version().
+RUN poetry install --only main --no-interaction --no-ansi
 
 # Copy built frontend from stage 1
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
