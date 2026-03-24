@@ -86,12 +86,15 @@ budgie/
 │   │   │   ├── client.ts          # Axios instance, JWT interceptor, error toasts
 │   │   │   ├── types.ts           # Shared TypeScript interfaces
 │   │   │   ├── accounts.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── budget.ts
 │   │   │   ├── categories.ts
 │   │   │   ├── envelopes.ts
 │   │   │   ├── imports.ts
-│   │   │   └── transactions.ts
+│   │   │   ├── transactions.ts
+│   │   │   └── users.ts
 │   │   ├── components/            # Reusable Vue components
-│   │   │   ├── BottomNav.vue
+│   │   │   ├── AppNav.vue         # Responsive nav (sidebar desktop, dock mobile)
 │   │   │   ├── CategoryPicker.vue
 │   │   │   ├── CreateCategoryModal.vue
 │   │   │   ├── DrawerCard.vue
@@ -99,6 +102,7 @@ budgie/
 │   │   │   ├── EnvelopeManager.vue
 │   │   │   ├── FileUploader.vue
 │   │   │   ├── MonthPicker.vue
+│   │   │   ├── QuickExpense.vue   # Fast transaction entry (bottom sheet / modal)
 │   │   │   ├── SkeletonRow.vue
 │   │   │   ├── ToastContainer.vue
 │   │   │   └── TransactionRow.vue
@@ -112,10 +116,10 @@ budgie/
 │   │   │   └── toast.ts
 │   │   ├── views/
 │   │   │   ├── BudgetView.vue
+│   │   │   ├── DashboardView.vue
 │   │   │   ├── HomeView.vue
 │   │   │   ├── ImportView.vue
 │   │   │   ├── LoginView.vue
-│   │   │   ├── QuickExpense.vue
 │   │   │   ├── SettingsView.vue
 │   │   │   └── TransactionsView.vue
 │   │   └── router/
@@ -603,7 +607,8 @@ suggestion   = amount_match AND date_match
 
 | Component | Description |
 |---|---|
-| `BottomNav` | Mobile bottom navigation bar (5 tabs) |
+| `AppNav` | Responsive navigation (desktop sidebar + mobile dock) |
+| `QuickExpense` | Fast transaction entry (bottom sheet on mobile, modal on desktop) |
 | `DrawerCard` | Card with color palette, swipe support |
 | `EnvelopeCard` | Budget cell: name, emoji, category chips, rollover badge, inline editing |
 | `EnvelopeManager` | Settings panel — full CRUD for envelopes |
@@ -733,6 +738,18 @@ Rules:
 ---
 
 ## 14. CI/CD
+
+### `ci.yml` — Quality Checks
+
+Located in `.github/workflows/ci.yml`.
+
+| Property | Value |
+|---|---|
+| Trigger | Push to `main` / `develop` + Pull requests |
+
+**Backend job:** ruff lint, ruff format check, mypy, pytest.
+
+**Frontend job:** vue-tsc, ESLint, Vitest.
 
 ### `docker.yml` — Docker Build & Publish
 

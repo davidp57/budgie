@@ -86,12 +86,15 @@ budgie/
 │   │   │   ├── client.ts          # Instance Axios, intercepteur JWT, toasts d'erreur
 │   │   │   ├── types.ts           # Interfaces TypeScript partagées
 │   │   │   ├── accounts.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── budget.ts
 │   │   │   ├── categories.ts
 │   │   │   ├── envelopes.ts
 │   │   │   ├── imports.ts
-│   │   │   └── transactions.ts
+│   │   │   ├── transactions.ts
+│   │   │   └── users.ts
 │   │   ├── components/            # Composants Vue réutilisables
-│   │   │   ├── BottomNav.vue
+│   │   │   ├── AppNav.vue         # Navigation responsive (sidebar desktop, dock mobile)
 │   │   │   ├── CategoryPicker.vue
 │   │   │   ├── CreateCategoryModal.vue
 │   │   │   ├── DrawerCard.vue
@@ -99,6 +102,7 @@ budgie/
 │   │   │   ├── EnvelopeManager.vue
 │   │   │   ├── FileUploader.vue
 │   │   │   ├── MonthPicker.vue
+│   │   │   ├── QuickExpense.vue   # Saisie rapide (bottom sheet / modale)
 │   │   │   ├── SkeletonRow.vue
 │   │   │   ├── ToastContainer.vue
 │   │   │   └── TransactionRow.vue
@@ -112,10 +116,10 @@ budgie/
 │   │   │   └── toast.ts
 │   │   ├── views/
 │   │   │   ├── BudgetView.vue
+│   │   │   ├── DashboardView.vue
 │   │   │   ├── HomeView.vue
 │   │   │   ├── ImportView.vue
 │   │   │   ├── LoginView.vue
-│   │   │   ├── QuickExpense.vue
 │   │   │   ├── SettingsView.vue
 │   │   │   └── TransactionsView.vue
 │   │   └── router/
@@ -603,7 +607,8 @@ suggestion   = amount_match ET date_match
 
 | Composant | Description |
 |---|---|
-| `BottomNav` | Barre de navigation mobile (5 onglets) |
+| `AppNav` | Navigation responsive (sidebar desktop + dock mobile) |
+| `QuickExpense` | Saisie rapide de transaction (bottom sheet mobile, modale desktop) |
 | `DrawerCard` | Carte avec palette de couleurs, support swipe |
 | `EnvelopeCard` | Cellule budget : nom, emoji, chips catégories, badge rollover, édition inline |
 | `EnvelopeManager` | Panneau paramètres — CRUD complet des enveloppes |
@@ -733,6 +738,18 @@ Règles :
 ---
 
 ## 14. CI/CD
+
+### `ci.yml` — Contrôles qualité
+
+Situé dans `.github/workflows/ci.yml`.
+
+| Propriété | Valeur |
+|---|---|
+| Déclencheur | Push sur `main` / `develop` + Pull requests |
+
+**Job backend :** ruff lint, ruff format check, mypy, pytest.
+
+**Job frontend :** vue-tsc, ESLint, Vitest.
 
 ### `docker.yml` — Build et publication Docker
 

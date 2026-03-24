@@ -8,9 +8,6 @@ import pathlib
 import openpyxl
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
-
 # ── ImportedTransaction schema ──────────────────────────────────
 
 
@@ -393,6 +390,7 @@ NEWFILEUID:NONE
 # ── Import service tests ─────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 async def test_import_service_detects_duplicates(db_session):
     from budgie.importers.base import ImportedTransaction
     from budgie.models.account import Account
@@ -429,6 +427,7 @@ async def test_import_service_detects_duplicates(db_session):
     assert result2.duplicates == 1
 
 
+@pytest.mark.asyncio
 async def test_import_service_partial_duplicates(db_session):
     from budgie.importers.base import ImportedTransaction
     from budgie.models.account import Account

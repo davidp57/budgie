@@ -143,7 +143,12 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 
 ## 5. Navigation dans l'application
 
-L'interface mobile-first de Budgie s'organise autour d'une **barre de navigation en bas** (BottomNav) avec 5 onglets :
+L'interface responsive de Budgie s'adapte à l'appareil :
+
+- **Mobile** : un **dock en bas** (5 icônes) pour un accès rapide.
+- **Desktop** : une **barre latérale** à gauche avec des libellés.
+
+La navigation (AppNav) propose 5 sections :
 
 | Icône | Page | Description |
 |---|---|---|

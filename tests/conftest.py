@@ -4,6 +4,12 @@ Provides an async test database, a test client, and helper fixtures
 for all backend tests.
 """
 
+import os
+
+# Disable MVP mode BEFORE importing the app so that deps._settings
+# picks up mvp_mode=False regardless of the .env file.
+os.environ["MVP_MODE"] = "false"
+
 from collections.abc import AsyncGenerator
 
 import budgie.models  # noqa: F401 — registers all models with Base.metadata

@@ -143,7 +143,12 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 ## 5. Navigating the Application
 
-Budgie's mobile-first interface is organized around a **bottom navigation bar** (BottomNav) with 5 tabs:
+Budgie's responsive interface adapts to the device:
+
+- **Mobile**: a **bottom dock** (5 icons) for quick access.
+- **Desktop**: a **sidebar** on the left with labels.
+
+The navigation (AppNav) offers 5 sections:
 
 | Icon | Page | Description |
 |---|---|---|

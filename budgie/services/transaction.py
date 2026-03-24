@@ -152,9 +152,9 @@ async def create_transaction(
     Returns:
         Newly created Transaction instance.
     """
-    _DEPRECATED_FIELDS = {"cleared", "is_virtual", "virtual_linked_id"}
+    deprecated_fields = {"cleared", "is_virtual", "virtual_linked_id"}
 
-    data = {k: v for k, v in schema.model_dump().items() if k not in _DEPRECATED_FIELDS}
+    data = {k: v for k, v in schema.model_dump().items() if k not in deprecated_fields}
     txn = Transaction(**data)
     db.add(txn)
     await db.commit()
@@ -175,9 +175,9 @@ async def update_transaction(
     Returns:
         Updated Transaction instance.
     """
-    _DEPRECATED = {"cleared", "is_virtual", "virtual_linked_id"}
+    deprecated = {"cleared", "is_virtual", "virtual_linked_id"}
     for field, value in schema.model_dump(exclude_unset=True).items():
-        if field not in _DEPRECATED:
+        if field not in deprecated:
             setattr(txn, field, value)
     await db.commit()
     await db.refresh(txn)
