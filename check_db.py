@@ -1,4 +1,5 @@
 """Temporary DB diagnostic script."""
+
 import asyncio
 from sqlalchemy import text
 from budgie.database import engine

@@ -118,9 +118,7 @@ async def test_register_complete_saves_credential(
 # ── Credential deletion ───────────────────────────────────────────────────────
 
 
-async def test_delete_credential(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_delete_credential(client: AsyncClient, db_session: AsyncSession) -> None:
     token = await _register_alice(client)
     client.headers["Authorization"] = f"Bearer {token}"
 

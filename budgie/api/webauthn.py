@@ -51,9 +51,7 @@ async def register_begin(
         ``navigator.credentials.create()``.
     """
     result = await db.execute(
-        select(WebAuthnCredential).where(
-            WebAuthnCredential.user_id == current_user.id
-        )
+        select(WebAuthnCredential).where(WebAuthnCredential.user_id == current_user.id)
     )
     existing_ids = [c.credential_id for c in result.scalars().all()]
     options = webauthn_service.begin_registration(

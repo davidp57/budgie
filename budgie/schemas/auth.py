@@ -113,4 +113,3 @@ class WebAuthnCredentialRead(BaseModel):
     created_at: str
 
     model_config = {"from_attributes": True}
-

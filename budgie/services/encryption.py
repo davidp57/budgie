@@ -23,9 +23,7 @@ _ARGON2_PARAMS: dict[str, int] = {
 }
 
 
-async def setup_user_encryption(
-    db: AsyncSession, user: User, passphrase: str
-) -> bytes:
+async def setup_user_encryption(db: AsyncSession, user: User, passphrase: str) -> bytes:
     """Set up encryption for a user for the first time.
 
     Derives an AES-256-GCM key from the passphrase using Argon2id,
