@@ -110,20 +110,16 @@ const MONEY_DEFS: MoneyItem[] = [
 const moneyItems = computed(() => {
   if (props.line.available <= 0) return []
   const items: MoneyItem[] = []
-  // Pick matching denominations, duplicating smaller ones for visual density
+  // Greedy decomposition: break the available amount into real denominations
+  let remaining = props.line.available  // in centimes
   for (const def of MONEY_DEFS) {
-    if (props.line.available >= def.value) {
+    while (remaining >= def.value && items.length < 8) {
       items.push(def)
-      // Add a second copy of smaller bills/coins
-      if (def.value <= 2000 && items.length < 10) items.push(def)
+      remaining -= def.value
     }
     if (items.length >= 8) break
   }
-  // Ensure at least 3 items for visual impact
-  while (items.length > 0 && items.length < 3) {
-    items.push(items[items.length - 1]!)
-  }
-  return items.slice(0, 8)
+  return items
 })
 
 // Pseudo-random helper: deterministic per envelope + index
