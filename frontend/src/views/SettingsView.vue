@@ -55,9 +55,13 @@ async function setBudgetMode(mode: 'n1' | 'n'): Promise<void> {
 }
 
 onMounted(async () => {
-  const prefs = await getPreferences()
-  budgetMode.value = prefs.budget_mode
-  await loadAll()
+  try {
+    const prefs = await getPreferences()
+    budgetMode.value = prefs.budget_mode
+    await loadAll()
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 
 async function addAccount(): Promise<void> {

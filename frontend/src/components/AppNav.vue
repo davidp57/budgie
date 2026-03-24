@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+
+function logout(): void {
+  auth.logout()
+  router.push({ name: 'login' })
+}
 
 const links = [
   { path: '/', label: 'Tiroirs', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -69,5 +76,15 @@ const links = [
         {{ link.label }}
       </button>
     </nav>
+
+    <!-- Logout button at bottom of sidebar -->
+    <div class="px-3 pb-4">
+      <button class="btn btn-ghost btn-sm justify-start gap-3 font-normal w-full text-base-content/50" @click="logout">
+        <svg xmlns="http://www.w3.org/2000/svg" class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Déconnexion
+      </button>
+    </div>
   </aside>
 </template>

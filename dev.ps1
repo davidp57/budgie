@@ -4,11 +4,20 @@
 
 $ErrorActionPreference = "Stop"
 
-# Get local WiFi IP address
+# Get local network IP — prefer Ethernet/Wi-Fi, skip virtual adapters
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.InterfaceAlias -notmatch 'Loopback' -and $_.IPAddress -ne '127.0.0.1' } |
-    Sort-Object -Property InterfaceAlias |
+    Where-Object {
+        $_.IPAddress -ne '127.0.0.1' -and
+        $_.PrefixOrigin -ne 'WellKnown' -and
+        $_.InterfaceAlias -notmatch 'Loopback|Bluetooth|vEthernet|Docker|WSL|VPN|VMware|Hyper-V|Virtual'
+    } |
+    Sort-Object -Property { if ($_.InterfaceAlias -match 'Ethernet') { 0 } elseif ($_.InterfaceAlias -match 'Wi-Fi') { 1 } else { 2 } } |
     Select-Object -First 1).IPAddress
+
+if (-not $ip) {
+    $ip = "localhost"
+    Write-Host "  Warning: Could not detect LAN IP" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

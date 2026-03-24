@@ -55,11 +55,15 @@ function nextMonth(): void {
 }
 
 onMounted(async () => {
-  const [, accounts] = await Promise.all([
-    budgetStore.loadMonth(),
-    listAccounts(),
-  ])
-  defaultAccount.value = accounts.find((a) => a.on_budget) ?? accounts[0] ?? null
+  try {
+    const [, accounts] = await Promise.all([
+      budgetStore.loadMonth(),
+      listAccounts(),
+    ])
+    defaultAccount.value = accounts.find((a) => a.on_budget) ?? accounts[0] ?? null
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 </script>
 

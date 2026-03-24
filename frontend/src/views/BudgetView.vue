@@ -381,11 +381,15 @@ async function reloadAll(): Promise<void> {
 
 // ── Init ─────────────────────────────────────────────────────────
 onMounted(async () => {
-  await Promise.all([
-    budgetStore.loadMonth(),
-    listGroupsWithCategories().then((g) => (groups.value = g)),
-    listEnvelopes().then((e) => (fullEnvelopes.value = e)),
-  ])
+  try {
+    await Promise.all([
+      budgetStore.loadMonth(),
+      listGroupsWithCategories().then((g) => (groups.value = g)),
+      listEnvelopes().then((e) => (fullEnvelopes.value = e)),
+    ])
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 </script>
 
