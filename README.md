@@ -79,13 +79,13 @@ npx eslint src/                          # lint
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [docs/en/user-guide.md](docs/en/user-guide.md) | End-user guide (English) |
-| [docs/fr/user-guide.md](docs/fr/user-guide.md) | Guide utilisateur (Français) |
-| [docs/en/developer-guide.md](docs/en/developer-guide.md) | Developer reference (English) |
-| [docs/fr/developer-guide.md](docs/fr/developer-guide.md) | Référence développeur (Français) |
-| [docs/PLAN.md](docs/PLAN.md) | Project plan & roadmap / Plan du projet & feuille de route |
+| | 🇬🇧 English | 🇫🇷 Français |
+|---|---|---|
+| User Guide / Guide utilisateur | [docs/en/user-guide.md](docs/en/user-guide.md) | [docs/fr/user-guide.md](docs/fr/user-guide.md) |
+| Developer Guide / Guide développeur | [docs/en/developer-guide.md](docs/en/developer-guide.md) | [docs/fr/developer-guide.md](docs/fr/developer-guide.md) |
+| Project Plan / Plan du projet | [docs/en/plan.md](docs/en/plan.md) | [docs/fr/plan.md](docs/fr/plan.md) |
+| Roadmap / Feuille de route | [docs/en/roadmap.md](docs/en/roadmap.md) | [docs/fr/roadmap.md](docs/fr/roadmap.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) | — |
 
 ---
 

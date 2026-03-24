@@ -1,25 +1,23 @@
 # Budgie 🐦 — Roadmap
 
+🌐 [Version française](../fr/roadmap.md)
+
 This document outlines planned future improvements for Budgie.
 Items are grouped by priority and may change as the project evolves.
 
-Ce document présente les améliorations futures prévues pour Budgie.
-Les items sont regroupés par priorité et peuvent évoluer.
-
 ---
 
-## Short Term / Court terme
+## Short Term
 
-### Passive Learning / Apprentissage passif
+### Passive Learning
 
 Improve categorization accuracy over time by learning from user behavior.
-Améliorer la précision de la catégorisation en apprenant du comportement utilisateur.
 
 - [ ] Propose updating `Payee.auto_category_id` on manual categorization
 - [ ] Propose creating a `CategoryRule` from repeated manual assignments
 - [ ] Track categorization accuracy metrics
 
-### UX Improvements / Améliorations UX
+### UX Improvements
 
 - [ ] Transaction search (full-text on payee, memo)
 - [ ] Bulk transaction editing (multi-select + assign category)
@@ -27,21 +25,21 @@ Améliorer la précision de la catégorisation en apprenant du comportement util
 
 ---
 
-## Medium Term / Moyen terme
+## Medium Term
 
-### Reporting / Rapports
+### Reporting
 
 - [ ] Monthly spending breakdown by category (charts)
 - [ ] Income vs. expenses trend over time
 - [ ] Budget adherence history (% of envelopes staying positive)
 - [ ] Export reports to CSV/PDF
 
-### Multi-currency / Multi-devise
+### Multi-currency
 
 - [ ] Support multiple currencies per account
 - [ ] Exchange rate management
 
-### Recurring Transactions / Transactions récurrentes
+### Recurring Transactions
 
 - [ ] Define recurring transaction templates (rent, subscriptions, etc.)
 - [ ] Auto-generate virtual transactions from recurring schedules
@@ -49,7 +47,7 @@ Améliorer la précision de la catégorisation en apprenant du comportement util
 
 ---
 
-## Long Term / Long terme
+## Long Term
 
 ### Data & Sync
 
@@ -57,7 +55,7 @@ Améliorer la précision de la catégorisation en apprenant du comportement util
 - [ ] Multi-device sync improvements
 - [ ] Data export/import (full backup as JSON/ZIP)
 
-### Advanced Budgeting / Budget avancé
+### Advanced Budgeting
 
 - [ ] Savings goals with progress tracking
 - [ ] Rollover rules per envelope (capped vs. unlimited)
@@ -70,7 +68,6 @@ Améliorer la précision de la catégorisation en apprenant du comportement util
 
 ---
 
-## Completed / Terminé
+## Completed
 
-See [CHANGELOG.md](CHANGELOG.md) for delivered features.
-Voir [CHANGELOG.md](CHANGELOG.md) pour les fonctionnalités livrées.
+See [CHANGELOG.md](../../CHANGELOG.md) for delivered features.

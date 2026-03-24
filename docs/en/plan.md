@@ -1,42 +1,39 @@
 # Budgie 🐦 — Project Plan
 
-# Plan du projet Budgie 🐦
+🌐 [Version française](../fr/plan.md)
 
 ---
 
-## Overview / Vue d'ensemble
+## Overview
 
 Personal household budget management web app.
 Import bank transactions, auto-categorize, manage envelope budgets, plan future purchases with virtual transactions.
 
-Application web de gestion de budget personnel pour un ménage.
-Import de transactions bancaires, catégorisation automatique, gestion d'enveloppes budgétaires, prévision d'achats futurs via transactions virtuelles.
+---
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Name | **Budgie** 🐦 |
+| Backend | Python 3.12+, FastAPI, Poetry |
+| ORM | SQLAlchemy 2.0 (async) + Alembic |
+| Database | SQLite (amounts in integer centimes) |
+| Frontend | Vue.js 3, Composition API, TypeScript, Vite |
+| CSS | DaisyUI (Tailwind CSS) |
+| Auth | JWT + bcrypt + WebAuthn (Passkeys) |
+| Encryption | AES-256-GCM, Argon2 (key derivation) |
+| Import | CSV, Excel, QIF, OFX |
+| Categorization | Rules + payee history (MVP) |
+| Deployment | Docker Compose on Synology NAS |
+| Testing | pytest + pytest-asyncio, Vitest |
+| Linting | ruff, mypy, ESLint, Prettier |
 
 ---
 
-## Final Stack / Stack finale
+## Phase 0 — Foundations
 
-| Layer / Couche | Choice / Choix                              |
-|---------------|----------------------------------------------|
-| Name          | **Budgie** 🐦                                |
-| Backend       | Python 3.12+, FastAPI, Poetry                |
-| ORM           | SQLAlchemy 2.0 (async) + Alembic             |
-| Database      | SQLite (amounts in integer centimes)         |
-| Frontend      | Vue.js 3, Composition API, TypeScript, Vite  |
-| CSS           | DaisyUI (Tailwind CSS)                       |
-| Auth          | JWT + bcrypt + WebAuthn (Passkeys)           |
-| Encryption    | AES-256-GCM, Argon2 (key derivation)         |
-| Import        | CSV, Excel, QIF, OFX                         |
-| Categorization| Rules + payee history (MVP)                  |
-| Deployment    | Docker Compose on Synology NAS               |
-| Testing       | pytest + pytest-asyncio, Vitest              |
-| Linting       | ruff, mypy, ESLint, Prettier                 |
-
----
-
-## Phase 0 — Foundations / Fondations
-
-### 0.1 — Poetry project init / Initialisation du projet Poetry
+### 0.1 — Poetry project init
 
 - [x] Initialize Poetry project in workspace root
 - [x] `pyproject.toml` with metadata, Python >=3.12
@@ -44,7 +41,7 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 - [x] Import dependencies: `pandas`, `openpyxl`, `quiffen`, `ofxtools`
 - [x] Dev dependencies: `pytest`, `pytest-asyncio`, `httpx`, `ruff`, `mypy`, `pytest-cov`
 
-### 0.2 — Backend project structure / Structure du projet backend
+### 0.2 — Backend project structure
 
 - [x] Create `budgie/` package with `__init__.py`
 - [x] Create subpackages: `models/`, `schemas/`, `api/`, `services/`, `importers/`
@@ -54,7 +51,7 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 - [x] Create `.env.example` with all config variables
 - [x] Create `tests/conftest.py` with async test fixtures (test DB, test client)
 
-### 0.3 — Frontend project init / Initialisation du projet frontend
+### 0.3 — Frontend project init
 
 - [x] Initialize Vue.js 3 project in `frontend/` via `create-vue` (Vite + TS + Router + Pinia)
 - [x] Install DaisyUI + Tailwind CSS
@@ -62,14 +59,14 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 - [x] Configure Vite proxy to forward `/api` to FastAPI dev server
 - [x] Configure ESLint + Prettier
 
-### 0.4 — Tooling & CI / Outillage
+### 0.4 — Tooling & CI
 
 - [x] Configure `ruff` in `pyproject.toml` (linting + formatting rules)
 - [x] Configure `mypy` in `pyproject.toml` (strict mode)
 - [x] VS Code workspace settings: ruff, mypy, Pylance, ESLint integration
-- [x] Create `.gitignore` (Python, Node, data/, .env, __pycache__, etc.)
+- [x] Create `.gitignore` (Python, Node, data/, .env, `__pycache__`, etc.)
 
-### 0.5 — Docker / Conteneurisation
+### 0.5 — Docker
 
 - [x] `Dockerfile` — multi-stage: (1) Node build of Vue → static files, (2) Python slim runtime
 - [x] `docker-compose.yml` — single service, volume for `data/`, port 8080, health check, `mem_limit: 256m`, `restart: unless-stopped`
@@ -78,12 +75,11 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 
 ---
 
-## Phase 1 — Data Model / Modèle de données
+## Phase 1 — Data Model
 
-### 1.1 — SQLAlchemy models / Modèles SQLAlchemy
+### 1.1 — SQLAlchemy models
 
 All amounts stored as **integer centimes** (e.g., `1050` = 10.50€).
-Tous les montants en **centimes entiers** (ex: `1050` = 10,50€).
 
 - [x] `User` — `id`, `username` (unique), `hashed_password`, `created_at`
 - [x] `Account` — `id`, `user_id`, `name`, `type` (checking/savings/credit/cash), `on_budget`, `created_at`
@@ -95,12 +91,12 @@ Tous les montants en **centimes entiers** (ex: `1050` = 10,50€).
 - [x] `BudgetAllocation` — `id`, `category_id`, `month` (YYYY-MM), `budgeted` (centimes). Unique constraint on `(category_id, month)`
 - [x] `CategoryRule` — `id`, `user_id`, `pattern`, `match_field` (payee/memo), `match_type` (contains/exact/regex), `category_id`, `priority`
 
-### 1.2 — Pydantic schemas / Schémas Pydantic
+### 1.2 — Pydantic schemas
 
 - [x] Request/response schemas for each model
 - [x] Validation rules (amount > 0 for budgets, date formats, etc.)
 
-### 1.3 — Alembic setup / Configuration Alembic
+### 1.3 — Alembic setup
 
 - [x] `alembic init` with async config
 - [x] Generate initial migration from models
@@ -108,16 +104,16 @@ Tous les montants en **centimes entiers** (ex: `1050` = 10,50€).
 
 ---
 
-## Phase 2 — Auth & Base API / Auth & API de base
+## Phase 2 — Auth & Base API
 
-### 2.1 — Authentication / Authentification
+### 2.1 — Authentication
 
 - [x] `POST /api/auth/register` — first user only (or open registration, TBD)
 - [x] `POST /api/auth/login` — returns JWT access token
 - [x] JWT verification middleware / dependency `get_current_user`
 - [x] Password hashing with bcrypt
 
-### 2.2 — CRUD API endpoints / Endpoints CRUD
+### 2.2 — CRUD API endpoints
 
 - [x] `GET/POST /api/accounts`, `GET/PUT/DELETE /api/accounts/{id}`
 - [x] `GET/POST /api/category-groups` (with nested categories)
@@ -129,21 +125,20 @@ Tous les montants en **centimes entiers** (ex: `1050` = 10,50€).
 
 ---
 
-## Phase 3 — Bank Transaction Import / Import de transactions bancaires
+## Phase 3 — Bank Transaction Import
 
-### 3.1 — Parsers / Analyseurs de fichiers
+### 3.1 — Parsers
 
 Each parser implements `BaseImporter` with `parse(file) → list[ImportedTransaction]`.
-Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTransaction]`.
 
 - [x] `ImportedTransaction` Pydantic schema: `date`, `amount`, `description`, `payee_name`, `reference`, `import_hash`
 - [x] `BaseImporter` — abstract interface in `budgie/importers/base.py`
 - [x] `CsvImporter` — configurable column mapping, encoding detection, French decimal support
-- [x] `ExcelImporter` — via `pandas.read_excel()` + `openpyxl`; supports header=None for positional indexing
+- [x] `ExcelImporter` — via `pandas.read_excel()` + `openpyxl`; supports `header=None` for positional indexing
 - [x] `QifImporter` — via `quiffen`
 - [x] `OfxImporter` — via `ofxtools`, uses FITID as `import_hash`; ElementTree-based parsing (no strict schema)
 
-### 3.2 — Import workflow / Flux d'import
+### 3.2 — Import workflow
 
 - [x] `POST /api/imports/parse` — upload file + format → returns parsed transactions (preview)
 - [x] `POST /api/imports/confirm` — receives validated transactions (with assigned categories) → inserts into DB
@@ -151,59 +146,59 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ---
 
-## Phase 4 — Categorization / Catégorisation
+## Phase 4 — Categorization
 
-### 4.1 — Categorization engine / Moteur de catégorisation
+### 4.1 — Categorization engine
 
 - [x] Step 1: Exact payee match (case-insensitive) → `Payee.auto_category_id`
 - [x] Step 2: Evaluate `CategoryRule` rows ordered by priority DESC (`contains` / `exact` / `regex` on `payee` or `memo` field)
 - [x] Returns `category_id` + `confidence` (`"auto"` / `"rule"` / `"none"`)
 - [x] `POST /api/categorize` — batch categorization endpoint
-- [x] `GET/POST/PUT/DELETE /api/category-rules` — CategoryRule CRUD (needed by tests and frontend settings)
+- [x] `GET/POST/PUT/DELETE /api/category-rules` — CategoryRule CRUD
 
-### 4.2 — Passive learning / Apprentissage passif
+### 4.2 — Passive learning
 
 - [ ] On manual categorization, propose updating `Payee.auto_category_id`
-- [ ] Propose creating a `CategoryRule` from manual assignments
+- [ ] Propose creating a `CategoryRule` from repeated manual assignments
 - [ ] Track categorization accuracy metrics (optional)
 
 ---
 
-## Phase 5 — Budget Engine / Moteur de budget
+## Phase 5 — Budget Engine
 
-### 5.1 — Envelope calculations / Calculs d'enveloppes
+### 5.1 — Envelope calculations
 
 - [x] `get_month_budget_view(month)` — for each category:
   - `budgeted`: amount from `BudgetAllocation` for this month
   - `activity`: sum of transactions (incl. virtual) for this month in this category
-  - `available`: cumulative sum (`Σ budgeted - Σ spending` over all months ≤ current)
+  - `available`: cumulative sum (`Σ budgeted − Σ spending` over all months ≤ current)
 - [x] `get_to_be_budgeted(month)` — income received − total budgeted. Goal = 0
 - [x] Virtual transactions (`is_virtual=True`) reduce envelope `available` but NOT real account balance
 
 ### 5.2 — API endpoint
 
-- [x] `GET /api/budget/{month}` — returns full month view with all envelopes + to_be_budgeted
+- [x] `GET /api/budget/{month}` — returns full month view with all envelopes + `to_be_budgeted`
 
 ---
 
-## Phase 6 — Frontend / Interface utilisateur
+## Phase 6 — Frontend
 
-### 6.1 — Core setup / Setup de base
+### 6.1 — Core setup
 
 - [x] API client module (`src/api/client.ts`) — axios instance with JWT interceptor
 - [x] Auth store (Pinia) + login page (`LoginView.vue`)
 - [x] App layout: sidebar/navbar, responsive menu (DaisyUI drawer)
 - [x] Vue Router with auth guard
 
-### 6.2 — Main views / Vues principales
+### 6.2 — Main views
 
 - [x] **Dashboard** (`DashboardView.vue`) — month summary, account balances, alerts (negative envelopes), recent transactions
 - [x] **Transactions** (`TransactionsView.vue`) — paginated table, filters (account, category, date range, virtual/real), inline category editing
-- [x] **Budget** (`BudgetView.vue`) — monthly grid, editable `budgeted` amounts, `activity`/`available` display with color coding (green/orange/red), month navigation, "to be budgeted" bar
-- [x] **Import** (`ImportView.vue`) — file upload (drag & drop), format selection, parsed transaction preview table, auto-filled category suggestions, confirm/skip per row, duplicate indicator
+- [x] **Budget** (`BudgetView.vue`) — monthly grid, editable `budgeted` amounts, `activity`/`available` display with color coding, month navigation, "to be budgeted" bar
+- [x] **Import** (`ImportView.vue`) — file upload (drag & drop), format selection, parsed transaction preview, auto-filled category suggestions, confirm/skip per row, duplicate indicator
 - [x] **Settings** (`SettingsView.vue`) — accounts CRUD, category groups/categories CRUD, categorization rules CRUD, password change
 
-### 6.3 — Reusable components / Composants réutilisables
+### 6.3 — Reusable components
 
 - [x] `EnvelopeCard.vue` — single envelope display with budget/activity/available
 - [x] `TransactionRow.vue` — single transaction with inline edit
@@ -213,15 +208,15 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ---
 
-## Phase 7 — Virtual Transactions / Transactions virtuelles
+## Phase 7 — Virtual Transactions
 
 - [x] Creation form: toggle "virtual" on transaction form, fields: amount, estimated date, category, description
 - [x] Linking: on import, suggest matching with existing virtual transactions (similar amount + payee + date range). Linked virtual → marked `realized`, real transaction gets `virtual_linked_id`
-- [x] Display: virtual transactions shown with distinct style (dashed border, forecast icon) in transaction list. Count toward envelope `available` but not real account balance
+- [x] Display: virtual transactions shown with distinct style (dashed border, forecast icon). Count toward envelope `available` but not real account balance
 
 ---
 
-## Phase 8 — Polish & Deployment / Finitions & Déploiement
+## Phase 8 — Polish & Deployment
 
 - [x] Dark/light theme support (DaisyUI themes)
 - [x] PWA manifest for mobile "install" capability
@@ -234,31 +229,15 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ---
 
-## Testing Strategy / Stratégie de test
+## Phase 9 — Security & Encryption
 
-| What / Quoi                    | How / Comment                              | Where / Où                     |
-|-------------------------------|--------------------------------------------|-------------------------------|
-| Importers (parsers)           | Unit tests with fixture files              | `tests/test_importers/`       |
-| Budget engine (calculations)  | Unit tests with known scenarios            | `tests/test_services/`        |
-| Categorization engine         | Unit tests with rules + payee data         | `tests/test_services/`        |
-| API routes                    | Integration tests via `httpx.AsyncClient`  | `tests/test_api/`             |
-| Vue components                | Component tests via Vitest + Vue Test Utils| `frontend/src/**/*.test.ts`   |
-| Pinia stores                  | Unit tests via Vitest                      | `frontend/src/**/*.test.ts`   |
-| Full workflow                 | E2E: import → categorize → budget impact   | `tests/test_services/`        |
-
----
-
-## Phase 9 — Security & Encryption / Sécurité & Chiffrement
-
-### Overview / Vue d'ensemble
+### Overview
 
 All user data is encrypted at rest using **AES-256-GCM** with a key derived from the user's passphrase via **Argon2id**. The encryption key is **never stored on the server** — it exists only in server RAM for the duration of the authenticated session. Daily login uses **WebAuthn (Passkeys)** for biometric convenience, with a **PIN fallback** for devices without biometric support.
 
-Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et une clé dérivée de la passphrase utilisateur via **Argon2id**. La clé de chiffrement n'est **jamais stockée sur le serveur** — elle n'existe qu'en RAM le temps de la session. L'authentification quotidienne utilise **WebAuthn (Passkeys)** pour le confort biométrique, avec un **PIN** en solution de repli.
+**Approach**: Server-side decryption — the derived key is sent to the server over HTTPS, held in memory during the session, and purged on logout or token expiry.
 
-**Approach / Approche** : Server-side decryption (Approach B) — the derived key is sent to the server over HTTPS, held in memory during the session, and purged on logout or token expiry. This allows SQL queries on decrypted data in RAM while keeping data encrypted on disk.
-
-### 9.1 — Encryption key derivation / Dérivation de la clé de chiffrement
+### 9.1 — Encryption key derivation
 
 - [ ] User chooses a **passphrase** (distinct from login password) at account creation
 - [ ] Derive a 256-bit encryption key using **Argon2id** (time_cost=3, memory_cost=65536, parallelism=4)
@@ -280,7 +259,7 @@ Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et
 - [ ] Store encrypted encryption key in **IndexedDB** on the device, unlocked by successful Passkey auth
 - [ ] Alembic migration for `webauthn_credentials` table
 
-### 9.3 — PIN-based local key storage / Stockage local de la clé par PIN
+### 9.3 — PIN-based local key storage
 
 - [ ] User sets a **4-6 digit PIN** on the device
 - [ ] Derive a wrapping key from PIN using **PBKDF2** (100k iterations, device-specific salt)
@@ -289,7 +268,7 @@ Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et
 - [ ] **5 failed PIN attempts** → purge local key storage (user must re-enter passphrase)
 - [ ] PIN is device-local only — never sent to or stored on the server
 
-### 9.4 — Server-side encryption service / Service de chiffrement côté serveur
+### 9.4 — Server-side encryption service
 
 - [ ] `budgie/services/crypto.py` — `encrypt(plaintext, key)` / `decrypt(ciphertext, key)` using AES-256-GCM
 - [ ] Each field encrypted with a unique **random nonce** (96-bit) — stored alongside ciphertext
@@ -298,11 +277,9 @@ Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et
 - [ ] Key purged on: logout, token expiry, server restart
 - [ ] In-memory key store: `dict[user_id, bytes]` with TTL matching JWT expiry
 
-### 9.5 — Data encryption / Chiffrement des données
+### 9.5 — Data encryption
 
 All user-owned data fields are encrypted. This includes amounts (integer centimes), names, memos, dates — everything except structural IDs and foreign keys.
-
-Tous les champs de données utilisateur sont chiffrés. Cela inclut les montants, noms, mémos, dates — tout sauf les IDs structurels et les clés étrangères.
 
 - [ ] Encrypt/decrypt happens in the **service layer** (transparent to API routes)
 - [ ] Encrypted models: `Account`, `Transaction`, `Category`, `CategoryGroup`, `Payee`, `CategoryRule`, `Envelope`, `BudgetAllocation`
@@ -318,7 +295,7 @@ Tous les champs de données utilisateur sont chiffrés. Cela inclut les montants
 - [ ] SQL aggregation (budget engine) operates on **decrypted data in RAM** — no SQL SUM on encrypted columns
 - [ ] Alembic migration: alter encrypted columns from typed to `Text` (base64 blobs)
 
-### 9.6 — Password reset & encryption key recovery / Réinitialisation & récupération
+### 9.6 — Password reset & encryption key recovery
 
 - [ ] **Password reset** (login password): standard flow — does NOT affect encryption key
 - [ ] **Encryption key recovery**: user must provide the passphrase to re-derive the key
@@ -326,7 +303,7 @@ Tous les champs de données utilisateur sont chiffrés. Cela inclut les montants
 - [ ] Challenge blob verification: attempt to decrypt with candidate key → GCM tag validates = correct key
 - [ ] Admin cannot recover data — only the user's passphrase can derive the key
 
-### 9.7 — PDF recovery document / Document de récupération PDF
+### 9.7 — PDF recovery document
 
 - [ ] Generate a PDF at account creation containing:
   - User's **passphrase** (in clear text — printed once, never stored)
@@ -337,54 +314,51 @@ Tous les champs de données utilisateur sont chiffrés. Cela inclut les montants
 - [ ] PDF generation: `reportlab` or `fpdf2` library
 - [ ] `GET /api/auth/recovery-document` — download PDF (requires current passphrase confirmation)
 
-### 9.8 — Migration of existing accounts / Migration des comptes existants
+### 9.8 — Migration of existing accounts
 
 - [ ] Existing users (pre-encryption) have `is_encrypted = False`; data remains in plaintext
-- [ ] Alembic migration: encrypted field columns changed to `Text` type (compatible with both plaintext and base64 blobs)
+- [ ] Alembic migration: encrypted field columns changed to `Text` type
 - [ ] Alembic migration adds `is_encrypted` column to `User` (default `False`)
-- [ ] On next login: users with `is_encrypted = False` are redirected to a one-time **"Set up your passphrase"** screen
-  - User chooses passphrase → Argon2id derives key → challenge blob created → recovery PDF downloaded
-  - (Optional) Passkey registration offered immediately after
-- [ ] One-shot migration: server reads all plaintext data, encrypts every field, writes in a **single SQLite transaction** (rollback on failure), sets `is_encrypted = True`
-- [ ] Transition code in service layer: `if user.is_encrypted: decrypt(...) else: use_plaintext(...)` guard until all users migrated
+- [ ] On next login: users with `is_encrypted = False` redirected to **"Set up your passphrase"** screen
+- [ ] One-shot migration: server reads all plaintext data, encrypts every field in a **single SQLite transaction** (rollback on failure), sets `is_encrypted = True`
 - [ ] Passkeys are **never required** — password + passphrase always works as fallback
 
-### 9.9 — Dependencies / Dépendances
+### 9.9 — Dependencies
 
-- [ ] Backend: add `py_webauthn`, `cryptography` (already present via `python-jose`), `argon2-cffi`, `fpdf2` to `pyproject.toml`
-- [ ] Frontend: no additional dependencies (WebAuthn is a browser API, IndexedDB is native)
-
----
-
-## Testing Strategy / Stratégie de test
-
-| What / Quoi                    | How / Comment                              | Where / Où                     |
-|-------------------------------|--------------------------------------------|-------------------------------|
-| Importers (parsers)           | Unit tests with fixture files              | `tests/test_importers/`       |
-| Budget engine (calculations)  | Unit tests with known scenarios            | `tests/test_services/`        |
-| Categorization engine         | Unit tests with rules + payee data         | `tests/test_services/`        |
-| API routes                    | Integration tests via `httpx.AsyncClient`  | `tests/test_api/`             |
-| Vue components                | Component tests via Vitest + Vue Test Utils| `frontend/src/**/*.test.ts`   |
-| Pinia stores                  | Unit tests via Vitest                      | `frontend/src/**/*.test.ts`   |
-| Full workflow                 | E2E: import → categorize → budget impact   | `tests/test_services/`        |
-| Encryption service            | Unit tests: encrypt/decrypt round-trip, wrong key rejection | `tests/test_services/` |
-| WebAuthn flow                 | Integration tests with mocked credentials  | `tests/test_api/`             |
-| Key derivation                | Unit tests: Argon2 params, challenge blob   | `tests/test_services/`        |
+- [ ] Backend: add `py_webauthn`, `argon2-cffi`, `fpdf2` to `pyproject.toml`
+- [ ] Frontend: no additional dependencies (WebAuthn and IndexedDB are browser-native)
 
 ---
 
-## Status / Statut
+## Testing Strategy
 
-- [x] Plan finalized / Plan finalisé
-- [x] Stack decided / Stack décidée
-- [x] Copilot instructions written / Instructions Copilot rédigées
-- [x] Phase 0 — Foundations / Fondations
-- [x] Phase 1 — Data model / Modèle de données
+| What | How | Where |
+|---|---|---|
+| Importers (parsers) | Unit tests with fixture files | `tests/test_importers/` |
+| Budget engine | Unit tests with known scenarios | `tests/test_services/` |
+| Categorization engine | Unit tests with rules + payee data | `tests/test_services/` |
+| API routes | Integration tests via `httpx.AsyncClient` | `tests/test_api/` |
+| Vue components | Component tests via Vitest + Vue Test Utils | `frontend/src/**/*.spec.ts` |
+| Pinia stores | Unit tests via Vitest | `frontend/src/**/*.spec.ts` |
+| Full workflow | E2E: import → categorize → budget impact | `tests/test_services/` |
+| Encryption service | Unit tests: encrypt/decrypt round-trip, wrong key rejection | `tests/test_services/` |
+| WebAuthn flow | Integration tests with mocked credentials | `tests/test_api/` |
+| Key derivation | Unit tests: Argon2 params, challenge blob | `tests/test_services/` |
+
+---
+
+## Status
+
+- [x] Plan finalized
+- [x] Stack decided
+- [x] Copilot instructions written
+- [x] Phase 0 — Foundations
+- [x] Phase 1 — Data model
 - [x] Phase 2 — Auth & API
 - [x] Phase 3 — Import
-- [x] Phase 4 — Categorization / Catégorisation
-- [x] Phase 5 — Budget engine / Moteur de budget
+- [x] Phase 4 — Categorization
+- [x] Phase 5 — Budget engine
 - [x] Phase 6 — Frontend
-- [x] Phase 7 — Virtual transactions / Transactions virtuelles
-- [x] Phase 8 — Polish & deployment / Finitions & déploiement
-- [ ] Phase 9 — Security & Encryption / Sécurité & Chiffrement
+- [x] Phase 7 — Virtual transactions
+- [x] Phase 8 — Polish & deployment
+- [ ] Phase 9 — Security & Encryption
