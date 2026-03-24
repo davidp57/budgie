@@ -20,7 +20,7 @@ const pin = usePinStorage()
 // ── UI state ──────────────────────────────────────────────────────────────────
 /**
  * 'passphrase' — standard passphrase entry
- * 'pin'        — PIN entry (IndexedDB passphrase stored)
+ * 'pin'        — PIN entry (localStorage passphrase stored)
  * 'pin-setup'  — offer PIN setup after successful passphrase unlock
  */
 type UnlockMode = 'passphrase' | 'pin' | 'pin-setup'
@@ -105,6 +105,7 @@ async function submitPinSetup(): Promise<void> {
   } catch (err) {
     // Surface the real error so the user knows the PIN was NOT saved
     error.value = extractError(err, 'Could not save PIN. Make sure the app is served over HTTPS.')
+  } finally {
     loading.value = false
   }
 }

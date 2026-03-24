@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] — 2026-03-24
+
+### Added
+
+- **WebAuthn passkeys** — FIDO2 passkey registration and authentication via `py_webauthn`; replaces password-only login as the primary authentication method
+- **End-to-end encryption** — AES-256-GCM field encryption with Argon2id key derivation; `is_encrypted`, `encryption_salt`, `challenge_blob`, and `argon2_params` stored per user row
+- **PIN-based key wrapping** — PBKDF2-HMAC-SHA-256 derived wrapping key encrypts the session key via AES-KW and persists it in `localStorage`
+- **In-memory key store** — server-side `_KeyStore` holds per-user AES-256-GCM keys in RAM with TTL matching the JWT lifetime; keys are purged on logout or expiry
+- **Passphrase wordlist generator** — 253-word BIP-39-style generator in `SetupEncryptionView` for strong, human-readable passphrases
+- **Setup & unlock views** — `SetupEncryptionView.vue` and `UnlockEncryptionView.vue` with passphrase / PIN / WebAuthn flows
+
+### Changed
+
+- **Authentication** — JWT login now also supports WebAuthn passkey assertion; bcrypt password login retained as fallback
+- **User model** — added `webauthn_credentials` relationship and encryption key material columns (Alembic migration)
+
+---
+
 ## [0.2.0] — 2026-03-24
 
 ### Added

@@ -979,7 +979,7 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | `budgie/api/webauthn.py` | WebAuthn registration & login endpoints |
 | `budgie/models/webauthn.py` | `WebAuthnCredential` ORM model |
 | `budgie/schemas/webauthn.py` | WebAuthn Pydantic schemas |
-| `frontend/src/composables/useCrypto.ts` | Argon2 key derivation, IndexedDB key storage |
+| `frontend/src/composables/usePinStorage.ts` | PIN-based key wrapping, localStorage key storage |
 | `frontend/src/composables/useWebAuthn.ts` | `navigator.credentials` wrapper |
 
 ### Encryption Flow

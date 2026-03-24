@@ -65,7 +65,10 @@ async def verify_user_passphrase(user: User, passphrase: str) -> bytes | None:
     """
     if user.encryption_salt is None or user.challenge_blob is None:
         return None
-    key = derive_key(passphrase, user.encryption_salt)
+    params: dict[str, int] = (
+        json.loads(user.argon2_params) if user.argon2_params else {}
+    )
+    key = derive_key(passphrase, user.encryption_salt, **params)
     if not verify_challenge_blob(user.challenge_blob, key):
         return None
     return key

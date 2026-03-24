@@ -979,7 +979,7 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | `budgie/api/webauthn.py` | Endpoints WebAuthn (enregistrement & connexion) |
 | `budgie/models/webauthn.py` | Modèle ORM `WebAuthnCredential` |
 | `budgie/schemas/webauthn.py` | Schémas Pydantic WebAuthn |
-| `frontend/src/composables/useCrypto.ts` | Dérivation Argon2, stockage clé IndexedDB |
+| `frontend/src/composables/usePinStorage.ts` | Chiffrement PIN, stockage clé localStorage |
 | `frontend/src/composables/useWebAuthn.ts` | Wrapper `navigator.credentials` |
 
 ### Flux de chiffrement

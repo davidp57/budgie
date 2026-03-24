@@ -29,7 +29,7 @@
 |---|---|
 | Backend | Python 3.12+, FastAPI, SQLAlchemy 2.0 (async), Alembic, SQLite |
 | Frontend | Vue.js 3, TypeScript, Vite, Tailwind CSS + DaisyUI 5 |
-| Auth | JWT + bcrypt |
+| Auth / Authentification | JWT + bcrypt + WebAuthn passkeys |
 | Deployment / Déploiement | Docker Compose (Synology NAS) |
 | Testing / Tests | pytest + pytest-asyncio · Vitest |
 | CI/CD | GitHub Actions (lint, tests, Docker build) |

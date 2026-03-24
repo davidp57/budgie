@@ -27,15 +27,15 @@ const WORDS = [
   'notch','novel','nurse','nymph','oaken','ocean','olive','onion','orbit','otter',
   'outer','ovoid','oxide','ozone','paint','panel','paper','party','pasta','peach',
   'pearl','pedal','penny','perch','petal','phase','piano','pilot','pinch','pixel',
-  'pixel','plain','plane','plant','plate','plaza','plumb','plume','polar','polka',
+  'plain','plane','plant','plate','plaza','plumb','plume','polar','polka',
   'poppy','pouch','power','press','pride','prime','prize','probe','prune','pulse',
   'quail','quart','queen','quest','queue','quiet','quota','quill','radar','radix',
   'rally','ranch','range','rapid','raven','reach','realm','resin','ridge','risky',
   'rivet','robin','rocky','roman','roost','rouge','rough','round','royal','rugby',
   'ruler','runic','rusty','safer','satin','scale','scene','scout','screw','sedan',
   'shade','shaft','shale','shark','sharp','shelf','shell','shift','shine','shire',
-  'shirt','shore','short','shout','shrub','sigma','sight','sigma','silky','sinew',
-  'sixth','skimp','skimp','slate','sleek','sleet','slick','slope','sloth','smart',
+  'shirt','shore','short','shout','shrub','sigma','sight','silky','sinew',
+  'sixth','skimp','slate','sleek','sleet','slick','slope','sloth','smart',
   'smoke','snail','snake','solar','solid','space','spark','speed','spell','spice',
   'spine','spoke','spoon','sport','spray','squad','stack','staff','stage','stain',
   'staple','stark','start','steel','steep','stern','stick','still','stock','stoic',
@@ -85,9 +85,13 @@ function regenerate(): void {
 }
 
 async function copyToClipboard(): Promise<void> {
-  await navigator.clipboard.writeText(passphrase.value)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 2000)
+  try {
+    await navigator.clipboard.writeText(passphrase.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    error.value = 'Could not copy to clipboard. Please copy the passphrase manually.'
+  }
 }
 
 onMounted(() => {

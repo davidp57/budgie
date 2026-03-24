@@ -37,12 +37,21 @@ class InvalidKeyError(Exception):
 # ── Key derivation ────────────────────────────────────────────────────────────
 
 
-def derive_key(passphrase: str, salt: bytes) -> bytes:
+def derive_key(
+    passphrase: str,
+    salt: bytes,
+    time_cost: int = _ARGON2_TIME_COST,
+    memory_cost: int = _ARGON2_MEMORY_COST,
+    parallelism: int = _ARGON2_PARALLELISM,
+) -> bytes:
     """Derive a 256-bit encryption key from a passphrase using Argon2id.
 
     Args:
         passphrase: The user's secret passphrase (plaintext).
         salt: A 16-byte random salt stored alongside the user record.
+        time_cost: Argon2id time cost (iterations). Defaults to module constant.
+        memory_cost: Argon2id memory cost in KiB. Defaults to module constant.
+        parallelism: Argon2id parallelism factor. Defaults to module constant.
 
     Returns:
         32-byte derived key suitable for AES-256-GCM.
@@ -50,9 +59,9 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
     return hash_secret_raw(
         secret=passphrase.encode(),
         salt=salt,
-        time_cost=_ARGON2_TIME_COST,
-        memory_cost=_ARGON2_MEMORY_COST,
-        parallelism=_ARGON2_PARALLELISM,
+        time_cost=time_cost,
+        memory_cost=memory_cost,
+        parallelism=parallelism,
         hash_len=_ARGON2_HASH_LEN,
         type=Type.ID,
     )
@@ -114,7 +123,7 @@ def decrypt_field(ciphertext: str, key: bytes) -> str:
         aesgcm = AESGCM(key)
         plaintext_bytes = aesgcm.decrypt(nonce, ciphertext_with_tag, None)
         return plaintext_bytes.decode()
-    except (InvalidTag, Exception) as exc:
+    except (InvalidTag, ValueError) as exc:
         raise InvalidKeyError(
             "Decryption failed: wrong key or tampered ciphertext."
         ) from exc

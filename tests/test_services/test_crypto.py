@@ -146,3 +146,34 @@ def test_challenge_blob_is_non_deterministic() -> None:
     blob1 = create_challenge_blob(key)
     blob2 = create_challenge_blob(key)
     assert blob1 != blob2
+
+
+# ── derive_key with custom params ─────────────────────────────────────────────
+
+
+def test_derive_key_with_custom_params_matches_explicit_call() -> None:
+    """Passing explicit Argon2id params must produce the same key as the defaults."""
+    key_default = derive_key(PASSPHRASE, SALT)
+    key_explicit = derive_key(
+        PASSPHRASE, SALT, time_cost=3, memory_cost=65536, parallelism=4
+    )
+    assert key_default == key_explicit
+
+
+def test_derive_key_with_different_params_differs() -> None:
+    """Different Argon2id params must produce a different derived key."""
+    key_default = derive_key(PASSPHRASE, SALT)
+    key_lower = derive_key(
+        PASSPHRASE, SALT, time_cost=1, memory_cost=65536, parallelism=4
+    )
+    assert key_default != key_lower
+
+
+# ── decrypt_field invalid input ────────────────────────────────────────────────
+
+
+def test_decrypt_field_with_invalid_base64_raises() -> None:
+    """Passing a non-base64 string must raise InvalidKeyError (ValueError path)."""
+    key = derive_key(PASSPHRASE, SALT)
+    with pytest.raises(InvalidKeyError):
+        decrypt_field("not-valid-base64!!!", key)
