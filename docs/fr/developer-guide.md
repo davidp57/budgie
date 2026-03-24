@@ -31,6 +31,7 @@ budgie/
 ├── .github/
 │   ├── copilot-instructions.md    # Instructions Copilot
 │   └── workflows/
+│       ├── ci.yml                 # CI — lint, vérification de types, tests
 │       └── docker.yml             # CI/CD — build image Docker sur GHCR
 ├── alembic/                       # Migrations de base de données
 │   └── versions/
@@ -648,7 +649,7 @@ suggestion   = amount_match ET date_match
 ### Backend (pytest)
 
 ```bash
-# Tous les tests (~180 tests)
+# Tous les tests (~200 tests)
 poetry run pytest
 
 # Avec couverture
@@ -719,8 +720,8 @@ Configuration dans `pyproject.toml` sous `[tool.ruff]` et `[tool.mypy]`.
 ```bash
 cd frontend
 
-# Vérification de types strict
-npx tsc --noEmit
+# Vérification de types strict (Vue + TS)
+npx vue-tsc --noEmit
 
 # Lint ESLint
 npm run lint

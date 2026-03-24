@@ -103,11 +103,60 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key. Generate one with `openssl rand -hex 32` |
+| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key (see details below) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLite database URL (set automatically in Docker) |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (comma-separated). Add your domain in production |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (see details below) |
 | `BUDGIE_PORT` | `8080` | External Docker container port |
 | `PUID` / `PGID` | `1000` | Host user UID/GID (for Docker file permissions). Find yours with `id -u && id -g` |
+
+#### `SECRET_KEY` — JWT signing key
+
+This key is used to **sign and verify authentication tokens** (JWT). Every time a user logs in, the server creates a token signed with this key. If an attacker knows the key, they can forge valid tokens and access any account.
+
+**Rules:**
+- **Never** use the default value in production
+- Use a **random string of at least 32 characters** (64 hex characters recommended)
+- **Never share** the key or commit it to a repository
+- If you suspect the key has been compromised, **change it immediately** — all existing sessions will be invalidated (users must log in again)
+
+**How to generate a secure key:**
+
+```bash
+# Linux / macOS / WSL
+openssl rand -hex 32
+
+# PowerShell (Windows)
+-join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+
+# Python
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Example result: `a3f7b9c1d4e8...` (64 hex characters). Copy this value into your `.env` file.
+
+#### `CORS_ORIGINS` — Allowed origins
+
+CORS (Cross-Origin Resource Sharing) controls **which websites are allowed to call the Budgie API**. The browser blocks any request coming from an origin not in this list.
+
+**The value is a comma-separated list of URLs** (protocol + domain + port, no trailing slash).
+
+**Common configurations:**
+
+| Scenario | Value |
+|---|---|
+| Local development only | `http://localhost:5173,http://localhost:8080` |
+| Synology NAS (local network) | `http://localhost:5173,http://192.168.1.50:8280` |
+| Synology NAS + custom domain | `http://localhost:5173,https://budgie.your-domain.com` |
+| Multiple access points | `http://localhost:5173,http://192.168.1.50:8280,https://budgie.your-domain.com` |
+
+**Rules:**
+- Always include `http://localhost:5173` if you use `npm run dev` locally
+- Add the **exact URL** you use to access Budgie in your browser (with the correct port)
+- For HTTPS via reverse proxy, use `https://` — **not** `http://`
+- **Never** use `*` (wildcard) — it disables CORS protection entirely
+- After changing the value, **restart** the container: `docker compose restart`
+
+> **Symptom of a missing origin**: the browser console shows `CORS policy: No 'Access-Control-Allow-Origin' header`. Add the URL shown in the error to `CORS_ORIGINS`.
 
 ### Advanced Variables
 

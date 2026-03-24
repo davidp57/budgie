@@ -31,6 +31,7 @@ budgie/
 ├── .github/
 │   ├── copilot-instructions.md    # Copilot instructions
 │   └── workflows/
+│       ├── ci.yml                 # CI — lint, type check, tests
 │       └── docker.yml             # CI/CD — Docker image build on GHCR
 ├── alembic/                       # Database migrations
 │   └── versions/
@@ -648,7 +649,7 @@ suggestion   = amount_match AND date_match
 ### Backend (pytest)
 
 ```bash
-# All tests (~180 tests)
+# All tests (~200 tests)
 poetry run pytest
 
 # With coverage
@@ -719,8 +720,8 @@ Configuration in `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`.
 ```bash
 cd frontend
 
-# Strict type check
-npx tsc --noEmit
+# Strict type check (Vue + TS)
+npx vue-tsc --noEmit
 
 # ESLint
 npm run lint

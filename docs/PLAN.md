@@ -228,8 +228,8 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Loading states: skeleton loaders for data fetching
 - [x] Docker build & test on local machine
 - [x] Backup strategy for SQLite DB file (`scripts/backup.sh`)
-- [ ] Deploy to Synology NAS via Docker Compose
-- [ ] Synology reverse proxy configuration (HTTPS)
+- [x] Deploy to Synology NAS via Docker Compose
+- [x] Synology reverse proxy configuration (HTTPS)
 
 ---
 
@@ -260,4 +260,4 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Phase 5 — Budget engine / Moteur de budget
 - [x] Phase 6 — Frontend
 - [x] Phase 7 — Virtual transactions / Transactions virtuelles
-- [x] Phase 8 — Polish & deployment / Finitions & déploiement (code complete; deployment pending)
+- [x] Phase 8 — Polish & deployment / Finitions & déploiement
