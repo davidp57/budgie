@@ -8,6 +8,18 @@
 export interface LoginResponse {
   access_token: string
   token_type: string
+  needs_encryption_setup: boolean
+  is_encrypted: boolean
+}
+
+export interface WebAuthnCredential {
+  id: number
+  name: string | null
+  created_at: string
+}
+
+export interface WebAuthnOptions {
+  options: Record<string, unknown>
 }
 
 // ── Accounts ─────────────────────────────────────────────────────

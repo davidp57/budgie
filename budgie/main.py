@@ -31,6 +31,7 @@ from budgie.api import (
     payees,
     transactions,
     users,
+    webauthn,
 )
 from budgie.config import BASE_DIR, settings
 
@@ -105,6 +106,7 @@ app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
+app.include_router(webauthn.router)
 
 # ── Production static file serving ──────────────────────────────────────────
 # When the Vue dist folder exists (Docker production build), serve the SPA.

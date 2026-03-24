@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { register as apiRegister } from '@/api/auth'
+import { getPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
 
 function extractError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
@@ -25,6 +26,8 @@ const password = ref('')
 const passwordConfirm = ref('')
 const error = ref('')
 const loading = ref(false)
+
+const webAuthnSupported = isWebAuthnSupported()
 
 function switchMode(m: 'login' | 'register'): void {
   mode.value = m
@@ -61,6 +64,25 @@ async function submit(): Promise<void> {
     } finally {
       loading.value = false
     }
+  }
+}
+
+async function loginWithPasskey(): Promise<void> {
+  if (!username.value) {
+    error.value = 'Enter your username first.'
+    return
+  }
+  error.value = ''
+  loading.value = true
+  try {
+    const options = await auth.webauthnAuthBegin(username.value)
+    const assertion = await getPasskey(options)
+    await auth.webauthnAuthComplete(username.value, assertion)
+    await router.push('/')
+  } catch (err) {
+    error.value = extractError(err, 'Passkey authentication failed.')
+  } finally {
+    loading.value = false
   }
 }
 </script>
@@ -137,6 +159,18 @@ async function submit(): Promise<void> {
           <button type="submit" class="btn btn-primary mt-2" :disabled="loading">
             <span v-if="loading" class="loading loading-spinner loading-sm"></span>
             {{ mode === 'login' ? 'Sign in' : 'Create account' }}
+          </button>
+
+          <div v-if="mode === 'login' && webAuthnSupported" class="divider text-xs">or</div>
+
+          <button
+            v-if="mode === 'login' && webAuthnSupported"
+            type="button"
+            class="btn btn-outline gap-2"
+            :disabled="loading"
+            @click="loginWithPasskey"
+          >
+            🔑 Sign in with Passkey
           </button>
         </form>
       </div>

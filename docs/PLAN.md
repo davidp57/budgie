@@ -24,7 +24,8 @@ Import de transactions bancaires, catégorisation automatique, gestion d'envelop
 | Database      | SQLite (amounts in integer centimes)         |
 | Frontend      | Vue.js 3, Composition API, TypeScript, Vite  |
 | CSS           | DaisyUI (Tailwind CSS)                       |
-| Auth          | JWT + bcrypt                                 |
+| Auth          | JWT + bcrypt + WebAuthn (Passkeys)           |
+| Encryption    | AES-256-GCM, Argon2 (key derivation)         |
 | Import        | CSV, Excel, QIF, OFX                         |
 | Categorization| Rules + payee history (MVP)                  |
 | Deployment    | Docker Compose on Synology NAS               |
@@ -247,6 +248,131 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 
 ---
 
+## Phase 9 — Security & Encryption / Sécurité & Chiffrement
+
+### Overview / Vue d'ensemble
+
+All user data is encrypted at rest using **AES-256-GCM** with a key derived from the user's passphrase via **Argon2id**. The encryption key is **never stored on the server** — it exists only in server RAM for the duration of the authenticated session. Daily login uses **WebAuthn (Passkeys)** for biometric convenience, with a **PIN fallback** for devices without biometric support.
+
+Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et une clé dérivée de la passphrase utilisateur via **Argon2id**. La clé de chiffrement n'est **jamais stockée sur le serveur** — elle n'existe qu'en RAM le temps de la session. L'authentification quotidienne utilise **WebAuthn (Passkeys)** pour le confort biométrique, avec un **PIN** en solution de repli.
+
+**Approach / Approche** : Server-side decryption (Approach B) — the derived key is sent to the server over HTTPS, held in memory during the session, and purged on logout or token expiry. This allows SQL queries on decrypted data in RAM while keeping data encrypted on disk.
+
+### 9.1 — Encryption key derivation / Dérivation de la clé de chiffrement
+
+- [ ] User chooses a **passphrase** (distinct from login password) at account creation
+- [ ] Derive a 256-bit encryption key using **Argon2id** (time_cost=3, memory_cost=65536, parallelism=4)
+- [ ] Generate a **challenge blob**: encrypt a random 32-byte salt with AES-256-GCM using the derived key → store `(nonce, ciphertext, tag, salt)` on the server
+- [ ] Key verification: decrypt the challenge blob — if GCM tag validates, the key is correct
+- [ ] Store **Argon2 parameters** (salt, time_cost, memory_cost, parallelism) in the `users` table — never the key itself
+- [ ] Add `encryption_salt`, `challenge_blob`, `argon2_params` columns to `User` model
+- [ ] Alembic migration for new columns
+
+### 9.2 — WebAuthn / Passkeys registration & login
+
+- [ ] Backend: integrate `py_webauthn` library
+- [ ] `POST /api/auth/webauthn/register/begin` — generate registration options (challenge, RP info)
+- [ ] `POST /api/auth/webauthn/register/complete` — verify attestation, store credential in DB
+- [ ] `POST /api/auth/webauthn/login/begin` — generate authentication options
+- [ ] `POST /api/auth/webauthn/login/complete` — verify assertion, return JWT
+- [ ] New model `WebAuthnCredential`: `id`, `user_id`, `credential_id`, `public_key`, `sign_count`, `transports`, `created_at`
+- [ ] Frontend: `navigator.credentials.create()` / `navigator.credentials.get()` API
+- [ ] Store encrypted encryption key in **IndexedDB** on the device, unlocked by successful Passkey auth
+- [ ] Alembic migration for `webauthn_credentials` table
+
+### 9.3 — PIN-based local key storage / Stockage local de la clé par PIN
+
+- [ ] User sets a **4-6 digit PIN** on the device
+- [ ] Derive a wrapping key from PIN using **PBKDF2** (100k iterations, device-specific salt)
+- [ ] Encrypt the encryption key with the wrapping key → store in **IndexedDB**
+- [ ] On PIN entry: derive wrapping key, decrypt encryption key, send to server
+- [ ] **5 failed PIN attempts** → purge local key storage (user must re-enter passphrase)
+- [ ] PIN is device-local only — never sent to or stored on the server
+
+### 9.4 — Server-side encryption service / Service de chiffrement côté serveur
+
+- [ ] `budgie/services/crypto.py` — `encrypt(plaintext, key)` / `decrypt(ciphertext, key)` using AES-256-GCM
+- [ ] Each field encrypted with a unique **random nonce** (96-bit) — stored alongside ciphertext
+- [ ] Encrypted fields stored as `base64(nonce + ciphertext + tag)` in the database
+- [ ] Key held in server RAM only — associated with session/JWT, **never written to disk or logs**
+- [ ] Key purged on: logout, token expiry, server restart
+- [ ] In-memory key store: `dict[user_id, bytes]` with TTL matching JWT expiry
+
+### 9.5 — Data encryption / Chiffrement des données
+
+All user-owned data fields are encrypted. This includes amounts (integer centimes), names, memos, dates — everything except structural IDs and foreign keys.
+
+Tous les champs de données utilisateur sont chiffrés. Cela inclut les montants, noms, mémos, dates — tout sauf les IDs structurels et les clés étrangères.
+
+- [ ] Encrypt/decrypt happens in the **service layer** (transparent to API routes)
+- [ ] Encrypted models: `Account`, `Transaction`, `Category`, `CategoryGroup`, `Payee`, `CategoryRule`, `Envelope`, `BudgetAllocation`
+- [ ] Encrypted fields per model:
+  - `Account`: `name`, `type`
+  - `Transaction`: `date`, `amount`, `memo`, `cleared`, `import_hash`
+  - `Category`: `name`
+  - `CategoryGroup`: `name`
+  - `Payee`: `name`
+  - `CategoryRule`: `pattern`
+  - `Envelope`: `name`, `emoji`
+  - `BudgetAllocation`: `budgeted`, `month`
+- [ ] SQL aggregation (budget engine) operates on **decrypted data in RAM** — no SQL SUM on encrypted columns
+- [ ] Alembic migration: alter encrypted columns from typed to `Text` (base64 blobs)
+
+### 9.6 — Password reset & encryption key recovery / Réinitialisation & récupération
+
+- [ ] **Password reset** (login password): standard flow — does NOT affect encryption key
+- [ ] **Encryption key recovery**: user must provide the passphrase to re-derive the key
+- [ ] If passphrase is lost → data is **irrecoverable** (by design)
+- [ ] Challenge blob verification: attempt to decrypt with candidate key → GCM tag validates = correct key
+- [ ] Admin cannot recover data — only the user's passphrase can derive the key
+
+### 9.7 — PDF recovery document / Document de récupération PDF
+
+- [ ] Generate a PDF at account creation containing:
+  - User's **passphrase** (in clear text — printed once, never stored)
+  - **QR code** encoding the passphrase for quick re-entry
+  - First 8 characters of the derived key hash (for verification without revealing the key)
+  - Instructions for recovery
+- [ ] User is strongly advised to **print and store** this document in a safe place
+- [ ] PDF generation: `reportlab` or `fpdf2` library
+- [ ] `GET /api/auth/recovery-document` — download PDF (requires current passphrase confirmation)
+
+### 9.8 — Migration of existing accounts / Migration des comptes existants
+
+- [ ] Existing users (pre-encryption) have `is_encrypted = False`; data remains in plaintext
+- [ ] Alembic migration: encrypted field columns changed to `Text` type (compatible with both plaintext and base64 blobs)
+- [ ] Alembic migration adds `is_encrypted` column to `User` (default `False`)
+- [ ] On next login: users with `is_encrypted = False` are redirected to a one-time **"Set up your passphrase"** screen
+  - User chooses passphrase → Argon2id derives key → challenge blob created → recovery PDF downloaded
+  - (Optional) Passkey registration offered immediately after
+- [ ] One-shot migration: server reads all plaintext data, encrypts every field, writes in a **single SQLite transaction** (rollback on failure), sets `is_encrypted = True`
+- [ ] Transition code in service layer: `if user.is_encrypted: decrypt(...) else: use_plaintext(...)` guard until all users migrated
+- [ ] Passkeys are **never required** — password + passphrase always works as fallback
+
+### 9.9 — Dependencies / Dépendances
+
+- [ ] Backend: add `py_webauthn`, `cryptography` (already present via `python-jose`), `argon2-cffi`, `fpdf2` to `pyproject.toml`
+- [ ] Frontend: no additional dependencies (WebAuthn is a browser API, IndexedDB is native)
+
+---
+
+## Testing Strategy / Stratégie de test
+
+| What / Quoi                    | How / Comment                              | Where / Où                     |
+|-------------------------------|--------------------------------------------|-------------------------------|
+| Importers (parsers)           | Unit tests with fixture files              | `tests/test_importers/`       |
+| Budget engine (calculations)  | Unit tests with known scenarios            | `tests/test_services/`        |
+| Categorization engine         | Unit tests with rules + payee data         | `tests/test_services/`        |
+| API routes                    | Integration tests via `httpx.AsyncClient`  | `tests/test_api/`             |
+| Vue components                | Component tests via Vitest + Vue Test Utils| `frontend/src/**/*.test.ts`   |
+| Pinia stores                  | Unit tests via Vitest                      | `frontend/src/**/*.test.ts`   |
+| Full workflow                 | E2E: import → categorize → budget impact   | `tests/test_services/`        |
+| Encryption service            | Unit tests: encrypt/decrypt round-trip, wrong key rejection | `tests/test_services/` |
+| WebAuthn flow                 | Integration tests with mocked credentials  | `tests/test_api/`             |
+| Key derivation                | Unit tests: Argon2 params, challenge blob   | `tests/test_services/`        |
+
+---
+
 ## Status / Statut
 
 - [x] Plan finalized / Plan finalisé
@@ -261,3 +387,4 @@ Chaque parser implémente `BaseImporter` avec `parse(file) → list[ImportedTran
 - [x] Phase 6 — Frontend
 - [x] Phase 7 — Virtual transactions / Transactions virtuelles
 - [x] Phase 8 — Polish & deployment / Finitions & déploiement
+- [ ] Phase 9 — Security & Encryption / Sécurité & Chiffrement

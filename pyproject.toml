@@ -20,7 +20,9 @@ dependencies = [
     "pandas (>=3.0.1,<4.0.0)",
     "openpyxl (>=3.1.5,<4.0.0)",
     "ofxtools (>=0.9.5,<0.10.0)",
-    "quiffen (>=4.0.1,<5.0.0) ; python_version < \"3.14\""
+    "quiffen (>=4.0.1,<5.0.0) ; python_version < \"3.14\"",
+    "argon2-cffi (>=23.1.0,<24.0.0)",
+    "webauthn (>=2.7.1,<3.0.0)"
 ]
 
 
@@ -78,6 +80,8 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D103", "ANN"]  # No docstrings or annotations required in tests
 "alembic/**/*.py" = ["D", "ANN", "E501", "W"]  # Auto-generated migration files
+"check_db.py" = ["D", "ANN", "I", "RUF"]  # Temporary diagnostic script
+"test_startup.py" = ["D", "ANN", "I", "RUF"]  # Temporary startup test
 
 [tool.mypy]
 python_version = "3.12"

@@ -21,6 +21,7 @@
 15. [Docker & Déploiement](#15-docker--déploiement)
 16. [Configuration](#16-configuration)
 17. [Conventions et bonnes pratiques](#17-conventions-et-bonnes-pratiques)
+18. [Sécurité & Chiffrement](#18-sécurité--chiffrement)
 
 ---
 
@@ -846,6 +847,9 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | `PORT` | `8000` | Port d'écoute Uvicorn |
 | `DEBUG` | `false` | Mode debug FastAPI |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Origines CORS autorisées |
+| `WEBAUTHN_RP_ID` | `localhost` | Identifiant du Relying Party WebAuthn — doit correspondre exactement au domaine servi (sans schéma ni port) |
+| `WEBAUTHN_RP_NAME` | `Budgie` | Nom lisible de l'application affiché dans les invites de clés d'accès |
+| `WEBAUTHN_ORIGIN` | `https://localhost:5173` | URL d'origine complète du frontend (schéma + hôte + port si non standard) |
 
 ---
 
@@ -877,3 +881,164 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 - **Montants en centimes** — Jamais de flottants pour l'argent.
 - **Routes minces** — Déléguer la logique aux services.
 - **Documentation bilingue** — EN + FR pour toute la documentation.
+
+---
+
+## 18. Sécurité & Chiffrement
+
+### Principes de conception
+
+- **Toutes les données utilisateur chiffrées au repos** — noms, montants, dates, mémos… tout sauf les IDs structurels et les clés étrangères.
+- **Clé de chiffrement jamais stockée sur le serveur** — elle n'existe qu'en RAM pendant la session authentifiée.
+- **Déchiffrement côté serveur (Approche B)** — la clé dérivée est envoyée via HTTPS, maintenue en mémoire, et purgée lors de la déconnexion ou l'expiration du token.
+- **Sécurité gérée par l'utilisateur** — seule la passphrase de l'utilisateur peut dériver la clé. Les administrateurs ne peuvent pas récupérer les données.
+
+### Stack cryptographique
+
+| Composant | Technologie | Détails |
+|---|---|---|
+| Chiffrement symétrique | **AES-256-GCM** | Chiffrement authentifié avec nonce aléatoire de 96 bits par champ |
+| Dérivation de clé | **Argon2id** | time_cost=3, memory_cost=64 MiB, parallelism=4, sortie 256 bits |
+| Vérification de la clé | **Challenge blob** | Chiffrement AES-GCM d'un sel aléatoire de 32 octets ; le tag GCM valide la clé |
+| Authentification | **WebAuthn (Passkeys)** | `py_webauthn` (backend), API `navigator.credentials` (navigateur) |
+| Repli PIN | **PBKDF2-HMAC-SHA256** | 100k itérations, sel spécifique à l'appareil, encapsule la clé dans `localStorage` (nécessite HTTPS) |
+| Document de récupération | **fpdf2** | PDF unique avec passphrase + QR code |
+
+### Architecture
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                        CLIENT                              │
+│                                                            │
+│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
+│  │   Passkey     │   │  PIN + LS    │   │  Passphrase   │  │
+│  │ (biométrie)  │   │  (repli)     │   │  (initial /   │  │
+│  │              │   │              │   │  récupération)│  │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬────────┘  │
+│         │                  │                   │           │
+│         ▼                  ▼                   ▼           │
+│   Déverrouille la     Déchiffre la       Argon2id        │
+│   clé locale chiffrée clé locale chiffrée dérive la clé   │
+│         │                  │                   │           │
+│         └──────────────────┴───────────────────┘           │
+│                            │                               │
+│                  clé_chiffrement (bytes)                    │
+│                            │                               │
+│                     HTTPS POST /api/...                     │
+│                    Authorization: Bearer                    │
+│                    X-Encryption-Key: <clé>                  │
+└────────────────────────────┬───────────────────────────────┘
+                             │
+┌────────────────────────────▼───────────────────────────────┐
+│                       SERVEUR                              │
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │  Key store en mémoire : dict[user_id → (clé, expiry)]│  │
+│  │  TTL = expiration JWT (24h) — purgé à la déco/restart │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  Couche service : encrypt() / decrypt()              │  │
+│  │  AES-256-GCM par champ, nonce unique                 │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  SQLite : données stockées en base64(nonce+ct+tag)   │  │
+│  └─────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Modifications du modèle de données
+
+#### Nouvelles colonnes sur `User`
+
+| Colonne | Type | Description |
+|---|---|---|
+| `encryption_salt` | `bytes` | Sel Argon2 (16 octets) |
+| `challenge_blob` | `str` | base64(nonce + texte chiffré + tag) — pour la vérification de la clé |
+| `argon2_params` | `str` | JSON : `{time_cost, memory_cost, parallelism}` |
+| `is_encrypted` | `bool` | Indique si les données ont été migrées au format chiffré |
+
+#### Nouvelle table `webauthn_credentials`
+
+| Colonne | Type | Description |
+|---|---|---|
+| `id` | `int` PK | |
+| `user_id` | `int` FK → User | |
+| `credential_id` | `bytes` | Identifiant WebAuthn |
+| `public_key` | `bytes` | Clé publique COSE |
+| `sign_count` | `int` | Compteur de signatures |
+| `transports` | `str` | Tableau JSON des transports |
+| `created_at` | `datetime` | |
+
+### Nouveaux modules
+
+| Module | Rôle |
+|---|---|
+| `budgie/services/crypto.py` | `encrypt(plaintext, key)` / `decrypt(ciphertext, key)` — AES-256-GCM |
+| `budgie/api/webauthn.py` | Endpoints WebAuthn (enregistrement & connexion) |
+| `budgie/models/webauthn.py` | Modèle ORM `WebAuthnCredential` |
+| `budgie/schemas/webauthn.py` | Schémas Pydantic WebAuthn |
+| `frontend/src/composables/useCrypto.ts` | Dérivation Argon2, stockage clé IndexedDB |
+| `frontend/src/composables/useWebAuthn.ts` | Wrapper `navigator.credentials` |
+
+### Flux de chiffrement
+
+1. **Inscription** : l'utilisateur crée username + mot de passe + passphrase → Argon2id dérive la clé → challenge blob créé → document PDF de récupération généré.
+2. **Connexion quotidienne (Passkey)** : authentification biométrique → obtention du JWT → la clé de chiffrement est déverrouillée séparément via PIN ou passphrase sur l'écran de déverrouillage.
+3. **Connexion quotidienne (PIN)** : PIN saisi → PBKDF2 dérive la clé d'encapsulation → déchiffre la clé depuis `localStorage` → clé envoyée au serveur.
+4. **Connexion de secours (passphrase)** : l'utilisateur saisit la passphrase → Argon2id redérive la clé → clé envoyée au serveur.
+5. **Accès aux données** : la couche service déchiffre en RAM avec la clé de session → sert le texte clair via l'API → le client affiche normalement.
+6. **Écriture de données** : la couche service chiffre chaque champ avec un nonce unique → stocke le blob base64 dans SQLite.
+7. **Déconnexion / expiration du token** : clé purgée du store en mémoire.
+
+### Migration des comptes existants
+
+Les comptes créés avant la Phase 9 ont leurs données stockées en clair (`is_encrypted = False`). La migration est transparente et progressive.
+
+#### Migration Alembic
+- Les colonnes typées des champs à chiffrer sont remplacées par des colonnes `Text` (compatibles avec le texte clair et les blobs base64).
+- Le flag `is_encrypted` est ajouté sur `User` (défaut `False`).
+
+#### À la prochaine connexion
+Les utilisateurs dont `is_encrypted = False` sont redirigés vers un écran unique **« Configurer votre passphrase »** :
+1. L'utilisateur choisit sa passphrase.
+2. Argon2id dérive la clé de chiffrement.
+3. Le challenge blob est créé et stocké.
+4. Le PDF de récupération est généré et téléchargé.
+5. (Optionnel) Enregistrement d'une Passkey proposé immédiatement.
+
+#### Migration one-shot des données
+Une fois la passphrase validée, le serveur :
+1. Lit toutes les données de l'utilisateur (en clair, déjà en RAM).
+2. Chiffre chaque champ avec la nouvelle clé.
+3. Enregistre tout dans une **transaction SQLite unique** — rollback en cas d'erreur.
+4. Met `is_encrypted = True`.
+
+#### Code de transition
+Pendant le déploiement progressif, la couche service gère les deux états :
+
+```python
+# Dans les fonctions de service, après chargement d'un objet :
+if user.is_encrypted:
+    name = crypto.decrypt(account.name, session_key)
+else:
+    name = account.name  # fallback texte clair
+```
+
+Ce garde `if user.is_encrypted` peut être supprimé une fois tous les utilisateurs migrés.
+
+#### Passkeys optionnelles
+Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'authentifier avec mot de passe + passphrase. Passkeys et PIN sont uniquement des couches de confort.
+
+### Mesures de sécurité
+
+| Menace | Atténuation |
+|---|---|
+| Interception de la clé en transit | HTTPS obligatoire (TLS 1.2+) |
+| Clé sur disque | Jamais écrite sur disque — RAM uniquement, purgée à la déconnexion/redémarrage |
+| Force brute du PIN | 5 tentatives échouées → purge de la clé locale |
+| Dump de la mémoire serveur | Clé présente uniquement pendant la session active ; `mlock` recommandé en production |
+| Vol de la base de données | Toutes les données sont chiffrées AES-256-GCM — inutilisables sans la clé |
+| Passphrase perdue | Données irrécupérables par conception — le document PDF de récupération atténue ce risque |
+| Attaques par rejeu | Nonce AES-GCM unique par chiffrement — aucune réutilisation de nonce |

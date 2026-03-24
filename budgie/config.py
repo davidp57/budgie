@@ -42,5 +42,10 @@ class Settings(BaseSettings):
         "http://localhost:5173,https://localhost:5173,http://localhost:8080"
     )
 
+    # WebAuthn (Passkeys)
+    webauthn_rp_id: str = "localhost"
+    webauthn_rp_name: str = "Budgie"
+    webauthn_origin: str = "http://localhost:5173"
+
 
 settings = Settings()

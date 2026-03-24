@@ -21,6 +21,7 @@
 15. [Docker & Deployment](#15-docker--deployment)
 16. [Configuration](#16-configuration)
 17. [Conventions & Best Practices](#17-conventions--best-practices)
+18. [Security & Encryption](#18-security--encryption)
 
 ---
 
@@ -846,6 +847,9 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | `PORT` | `8000` | Uvicorn bind port |
 | `DEBUG` | `false` | FastAPI debug mode |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed CORS origins |
+| `WEBAUTHN_RP_ID` | `localhost` | WebAuthn Relying Party ID — must match the serving domain exactly (no scheme, no port) |
+| `WEBAUTHN_RP_NAME` | `Budgie` | Human-readable app name displayed in passkey prompts |
+| `WEBAUTHN_ORIGIN` | `https://localhost:5173` | Full frontend origin URL (scheme + host + optional port) |
 
 ---
 
@@ -877,3 +881,164 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 - **Amounts in centimes** — Never use floats for money.
 - **Thin routes** — Delegate all logic to services.
 - **Bilingual documentation** — EN + FR for all documentation files.
+
+---
+
+## 18. Security & Encryption
+
+### Design Principles
+
+- **All user data encrypted at rest** — names, amounts, dates, memos, everything except structural IDs and foreign keys.
+- **Encryption key never stored on server** — exists only in server RAM during an authenticated session.
+- **Server-side decryption (Approach B)** — the derived key is sent over HTTPS, held in memory, and purged on logout/token expiry.
+- **User-owned security** — only the user's passphrase can derive the encryption key. Admins cannot recover data.
+
+### Cryptographic Stack
+
+| Component | Technology | Details |
+|---|---|---|
+| Symmetric encryption | **AES-256-GCM** | Authenticated encryption with random 96-bit nonce per field |
+| Key derivation | **Argon2id** | time_cost=3, memory_cost=64 MiB, parallelism=4, 256-bit output |
+| Key verification | **Challenge blob** | AES-GCM encryption of random 32-byte salt; GCM tag validates the key |
+| Authentication | **WebAuthn (Passkeys)** | `py_webauthn` backend, `navigator.credentials` browser API |
+| PIN fallback | **PBKDF2-HMAC-SHA256** | 100k iterations, device-specific salt, wraps encryption key in `localStorage` (requires HTTPS) |
+| PDF recovery | **fpdf2** | One-time PDF with passphrase + QR code |
+
+### Architecture
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                        CLIENT                              │
+│                                                            │
+│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
+│  │   Passkey     │   │   PIN + LS   │   │  Passphrase   │  │
+│  │  (biometric)  │   │  (fallback)  │   │  (initial /   │  │
+│  │              │   │              │   │   recovery)   │  │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬────────┘  │
+│         │                  │                   │           │
+│         ▼                  ▼                   ▼           │
+│     Unlock local       Decrypt local      Argon2id        │
+│     encrypted key      encrypted key      derive key      │
+│         │                  │                   │           │
+│         └──────────────────┴───────────────────┘           │
+│                            │                               │
+│                  encryption_key (bytes)                     │
+│                            │                               │
+│                     HTTPS POST /api/...                     │
+│                    Authorization: Bearer                    │
+│                    X-Encryption-Key: <key>                  │
+└────────────────────────────┬───────────────────────────────┘
+                             │
+┌────────────────────────────▼───────────────────────────────┐
+│                        SERVER                              │
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │  In-memory key store: dict[user_id → (key, expiry)] │  │
+│  │  TTL = JWT expiry (24h) — purged on logout/restart  │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  Service layer: encrypt() / decrypt()               │  │
+│  │  AES-256-GCM per field, unique nonce                │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  SQLite: all data stored as base64(nonce+ct+tag)    │  │
+│  └─────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Data Model Changes
+
+#### New columns on `User`
+
+| Column | Type | Description |
+|---|---|---|
+| `encryption_salt` | `bytes` | Argon2 salt (16 bytes) |
+| `challenge_blob` | `str` | base64(nonce + ciphertext + tag) — used for key verification |
+| `argon2_params` | `str` | JSON: `{time_cost, memory_cost, parallelism}` |
+| `is_encrypted` | `bool` | Whether data has been migrated to encrypted format |
+
+#### New table `webauthn_credentials`
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `int` PK | |
+| `user_id` | `int` FK → User | |
+| `credential_id` | `bytes` | WebAuthn credential ID |
+| `public_key` | `bytes` | COSE public key |
+| `sign_count` | `int` | Signature counter |
+| `transports` | `str` | JSON array of transports |
+| `created_at` | `datetime` | |
+
+### New Modules
+
+| Module | Purpose |
+|---|---|
+| `budgie/services/crypto.py` | `encrypt(plaintext, key)` / `decrypt(ciphertext, key)` — AES-256-GCM |
+| `budgie/api/webauthn.py` | WebAuthn registration & login endpoints |
+| `budgie/models/webauthn.py` | `WebAuthnCredential` ORM model |
+| `budgie/schemas/webauthn.py` | WebAuthn Pydantic schemas |
+| `frontend/src/composables/useCrypto.ts` | Argon2 key derivation, IndexedDB key storage |
+| `frontend/src/composables/useWebAuthn.ts` | `navigator.credentials` wrapper |
+
+### Encryption Flow
+
+1. **Registration**: user sets username + password + passphrase → Argon2id derives encryption key → challenge blob created → PDF recovery document generated.
+2. **Daily login (Passkey)**: biometric authentication → obtains JWT → encryption key then unlocked via PIN or passphrase on the unlock screen.
+3. **Daily login (PIN)**: PIN entered → PBKDF2 derives wrapping key → decrypts encryption key from `localStorage` → key sent to server.
+4. **Fallback login (passphrase)**: user enters passphrase → Argon2id re-derives key → key sent to server.
+5. **Data access**: service layer decrypts data in RAM using the session key → serves plaintext via API → client renders normally.
+6. **Data write**: service layer encrypts each field with unique nonce → stores base64 blob in SQLite.
+7. **Logout / token expiry**: key purged from in-memory store.
+
+### Migration of Existing Accounts
+
+Existing accounts created before Phase 9 have their data stored in plaintext (`is_encrypted = False`). Migration is transparent and progressive:
+
+#### Alembic migration
+- New `Text` columns replace typed columns for encrypted fields (compatible with both plaintext and base64 blobs).
+- `is_encrypted` flag added to `User` (default `False`).
+
+#### On next login
+Users with `is_encrypted = False` are redirected to a one-time **"Set up your passphrase"** screen:
+1. User chooses their passphrase.
+2. Argon2id derives the encryption key.
+3. Challenge blob is created and stored.
+4. Recovery PDF is generated and downloaded.
+5. (Optional) Passkey registration offered immediately.
+
+#### One-shot data migration
+Once the passphrase is validated, the server:
+1. Reads all user data (plaintext, already in RAM).
+2. Encrypts every field with the new key.
+3. Writes everything in a **single SQLite transaction** — rollback on any error.
+4. Sets `is_encrypted = True`.
+
+#### Transition code
+During the progressive rollout, the service layer must handle both states:
+
+```python
+# In service functions, after loading a record:
+if user.is_encrypted:
+    name = crypto.decrypt(account.name, session_key)
+else:
+    name = account.name  # plaintext fallback
+```
+
+This `if user.is_encrypted` guard can be removed once all users have migrated.
+
+#### Passkeys are optional
+Passkeys are never required. A migrated user can always authenticate with password + passphrase. Passkeys and PIN are convenience layers only.
+
+### Security Mitigations
+
+| Threat | Mitigation |
+|---|---|
+| Key interception in transit | HTTPS mandatory (TLS 1.2+) |
+| Key on disk | Never written to disk — RAM only, purged on logout/restart |
+| Brute-force PIN | 5 failed attempts → local key purge |
+| Server memory dump | Key held only during active session; `mlock` recommended for production |
+| Database theft | All data is AES-256-GCM encrypted — useless without key |
+| Lost passphrase | Data irrecoverable by design — PDF recovery document mitigates |
+| Replay attacks | AES-GCM unique nonce per encryption — no nonce reuse |
