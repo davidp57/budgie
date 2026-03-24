@@ -23,12 +23,14 @@ const editingId = ref<number | null>(null)
 const editName = ref('')
 const editRollover = ref(false)
 const editCategoryIds = ref<number[]>([])
+const editTargetAmount = ref<number | null>(null)
 
 // ── New envelope form ─────────────────────────────────────────────
 const addingEnvelope = ref(false)
 const newName = ref('')
 const newRollover = ref(false)
 const newCategoryIds = ref<number[]>([])
+const newTargetAmount = ref<number | null>(null)
 
 async function load(): Promise<void> {
   envelopes.value = await listEnvelopes()
@@ -41,6 +43,7 @@ function startEdit(env: Envelope): void {
   editName.value = env.name
   editRollover.value = env.rollover
   editCategoryIds.value = env.categories.map((c) => c.id)
+  editTargetAmount.value = env.target_amount ? env.target_amount / 100 : null
 }
 
 function cancelEdit(): void {
@@ -56,6 +59,7 @@ async function saveEdit(): Promise<void> {
       name: editName.value.trim(),
       rollover: editRollover.value,
       category_ids: editCategoryIds.value,
+      target_amount: editTargetAmount.value != null ? Math.round(editTargetAmount.value * 100) : null,
     })
     editingId.value = null
     await load()
@@ -86,10 +90,12 @@ async function submitNew(): Promise<void> {
       name: newName.value.trim(),
       rollover: newRollover.value,
       category_ids: newCategoryIds.value,
+      target_amount: newTargetAmount.value != null ? Math.round(newTargetAmount.value * 100) : null,
     })
     newName.value = ''
     newRollover.value = false
     newCategoryIds.value = []
+    newTargetAmount.value = null
     addingEnvelope.value = false
     await load()
   } catch {
@@ -123,6 +129,7 @@ function toggleId(ids: number[], id: number): void {
         <div class="flex items-center gap-2 px-3 py-2 flex-wrap">
           <span class="font-medium">{{ env.name }}</span>
           <span v-if="env.rollover" class="badge badge-xs badge-info" title="Rollover: balance carries forward">↻</span>
+          <span v-if="env.target_amount" class="badge badge-xs badge-accent" title="Target amount">🎯 {{ env.target_amount / 100 }} €</span>
           <span
             v-for="cat in env.categories"
             :key="cat.id"
@@ -150,6 +157,19 @@ function toggleId(ids: number[], id: number): void {
               <input v-model="editRollover" type="checkbox" class="checkbox checkbox-xs" />
               Rollover (carry unspent balance)
             </label>
+          </div>
+
+          <!-- Target amount (goal) -->
+          <div class="flex gap-2 items-center">
+            <input
+              v-model.number="editTargetAmount"
+              type="number"
+              min="0"
+              step="1"
+              class="input input-bordered input-sm w-32"
+              placeholder="Goal (€)"
+            />
+            <span class="text-xs text-base-content/50">Target amount (€) — leave empty for no goal</span>
           </div>
 
           <!-- Category assignment -->
@@ -205,6 +225,19 @@ function toggleId(ids: number[], id: number): void {
           <input v-model="newRollover" type="checkbox" class="checkbox checkbox-xs" />
           Rollover
         </label>
+      </div>
+
+      <!-- Target amount (goal) -->
+      <div class="flex gap-2 items-center">
+        <input
+          v-model.number="newTargetAmount"
+          type="number"
+          min="0"
+          step="1"
+          class="input input-bordered input-sm w-32"
+          placeholder="Goal (€)"
+        />
+        <span class="text-xs text-base-content/50">Target amount (€)</span>
       </div>
 
       <div v-if="groups.length > 0">

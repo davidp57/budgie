@@ -75,7 +75,7 @@ onMounted(async () => {
         <span class="text-2xl">🐦</span>
         <h1 class="text-xl font-bold">Budgie</h1>
       </div>
-      <h1 class="hidden lg:block text-xl font-bold">Tiroirs</h1>
+      <h1 class="hidden lg:block text-xl font-bold">Dépenses</h1>
       <!-- Month navigator -->
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>

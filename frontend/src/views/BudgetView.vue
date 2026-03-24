@@ -67,8 +67,6 @@ const EMOJI_PRESETS = [
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────
-const COLOR_PALETTE_LENGTH = 8
-
 function toggleCategory(ids: number[], id: number): void {
   const idx = ids.indexOf(id)
   if (idx >= 0) ids.splice(idx, 1)
@@ -79,16 +77,9 @@ function displayEuros(centimes: number): string {
   return (centimes / 100).toFixed(2).replace('.', ',')
 }
 
-// ── Color cycling on tile tap ───────────────────────────────────────
-const colorOverrides = ref<Record<number, number>>({})
-
+// ── Color index helper ────────────────────────────────────────────────
 function getColorIndex(line: EnvelopeLine): number {
-  return colorOverrides.value[line.envelope_id] ?? (line.envelope_id - 1)
-}
-
-function cycleColor(line: EnvelopeLine): void {
-  const current = getColorIndex(line)
-  colorOverrides.value[line.envelope_id] = (current + 1) % COLOR_PALETTE_LENGTH
+  return line.envelope_id - 1
 }
 
 // ── Swipe to delete ──────────────────────────────────────────────
@@ -120,7 +111,7 @@ function onTouchEnd(envelopeId: number): void {
 }
 
 // ── Inline editing ───────────────────────────────────────────────
-const inlineEdit = ref<{ id: number; field: 'name' | 'amount' } | null>(null)
+const inlineEdit = ref<{ id: number; field: 'name' | 'amount' | 'goal' } | null>(null)
 const inlineValue = ref('')
 
 async function cycleEmoji(line: EnvelopeLine): Promise<void> {
@@ -172,6 +163,25 @@ async function saveInlineAmount(line: EnvelopeLine): Promise<void> {
   await budgetStore.loadMonth()
 }
 
+function startEditGoal(line: EnvelopeLine): void {
+  inlineEdit.value = { id: line.envelope_id, field: 'goal' }
+  const full = fullEnvelopes.value.find((e) => e.id === line.envelope_id)
+  inlineValue.value = full?.target_amount ? displayEuros(full.target_amount) : ''
+  focusInlineInput()
+}
+
+async function saveInlineGoal(line: EnvelopeLine): Promise<void> {
+  if (!inlineEdit.value || inlineEdit.value.id !== line.envelope_id) return
+  const euros = parseFloat(inlineValue.value.replace(',', '.')) || 0
+  const centimes = Math.round(euros * 100)
+  inlineEdit.value = null
+  const full = fullEnvelopes.value.find((e) => e.id === line.envelope_id)
+  const current = full?.target_amount ?? 0
+  if (centimes === current) return
+  await updateEnvelope(line.envelope_id, { target_amount: centimes || null })
+  await reloadAll()
+}
+
 async function swipeDelete(envelopeId: number): Promise<void> {
   await deleteEnvelope(envelopeId)
   swipedId.value = null
@@ -189,6 +199,7 @@ const editForm = ref({
   rollover: false,
   category_ids: [] as number[],
   budgetedEuros: '',
+  targetAmountEuros: '',
 })
 const editError = ref('')
 const editSaving = ref(false)
@@ -204,6 +215,7 @@ function openEdit(line: EnvelopeLine): void {
     rollover: line.rollover,
     category_ids: line.categories.map((c) => c.id),
     budgetedEuros: displayEuros(line.budgeted),
+    targetAmountEuros: full?.target_amount ? displayEuros(full.target_amount) : '',
   }
   editError.value = ''
   editDialogRef.value?.showModal()
@@ -226,6 +238,9 @@ async function saveEdit(): Promise<void> {
       period: editForm.value.period,
       rollover: editForm.value.rollover,
       category_ids: editForm.value.category_ids,
+      target_amount: editForm.value.targetAmountEuros
+        ? Math.round(parseFloat(editForm.value.targetAmountEuros.replace(',', '.')) * 100)
+        : null,
     })
     const euros = parseFloat(editForm.value.budgetedEuros.replace(',', '.')) || 0
     const centimes = Math.round(euros * 100)
@@ -266,6 +281,7 @@ const createForm = ref({
   rollover: false,
   category_ids: [] as number[],
   budgetedEuros: '',
+  targetAmountEuros: '',
 })
 const createError = ref('')
 const createSaving = ref(false)
@@ -279,6 +295,7 @@ function openCreate(): void {
     rollover: false,
     category_ids: [],
     budgetedEuros: '',
+    targetAmountEuros: '',
   }
   createError.value = ''
   createDialogRef.value?.showModal()
@@ -300,6 +317,9 @@ async function saveCreate(): Promise<void> {
       period: createForm.value.period,
       rollover: createForm.value.rollover,
       category_ids: createForm.value.category_ids,
+      target_amount: createForm.value.targetAmountEuros
+        ? Math.round(parseFloat(createForm.value.targetAmountEuros.replace(',', '.')) * 100)
+        : null,
     })
     const euros = parseFloat(createForm.value.budgetedEuros.replace(',', '.')) || 0
     if (euros > 0) {
@@ -399,7 +419,7 @@ onMounted(async () => {
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-2">
         <span class="text-2xl">🗂️</span>
-        <h1 class="text-xl font-bold">Tiroirs</h1>
+        <h1 class="text-xl font-bold">Budget</h1>
       </div>
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>
@@ -464,7 +484,8 @@ onMounted(async () => {
             :show-money="false"
             :show-calendar="false"
             :show-subtitle="false"
-            @tap="cycleColor(line)"
+            :show-goal-bar="false"
+            @tap="openEdit(line)"
           >
             <!-- Emoji slot: click to cycle -->
             <template #emoji>
@@ -521,6 +542,30 @@ onMounted(async () => {
               >
                 {{ formatAmount(line.available) }}
               </span>
+              <!-- Goal: inline-editable, shown bigger for cumulative envelopes -->
+              <div v-if="line.envelope_type === 'cumulative'" class="mt-1">
+                <input
+                  v-if="inlineEdit?.id === line.envelope_id && inlineEdit?.field === 'goal'"
+                  v-model="inlineValue"
+                  type="text"
+                  inputmode="decimal"
+                  class="inline-edit-input bg-white/30 rounded px-1.5 py-0.5
+                         text-lg text-white font-semibold
+                         outline-none border border-white/50 focus:border-white
+                         drop-shadow-sm w-32"
+                  placeholder="Objectif €"
+                  @click.stop
+                  @blur="saveInlineGoal(line)"
+                  @keyup.enter="($event.target as HTMLInputElement).blur()"
+                />
+                <span
+                  v-else
+                  class="text-lg font-semibold text-white/80 drop-shadow-sm cursor-pointer hover:text-white transition-colors"
+                  @click.stop="startEditGoal(line)"
+                >
+                  🎯 {{ line.target_amount ? formatAmount(line.target_amount) : 'Définir un objectif' }}
+                </span>
+              </div>
             </template>
 
             <!-- Actions slot: +€, ⋯, and 🗑️ buttons -->
@@ -642,6 +687,19 @@ onMounted(async () => {
             class="input input-bordered"
             placeholder="0,00"
           />
+        </div>
+
+        <!-- Target amount (cumulative only) -->
+        <div v-if="editForm.envelope_type === 'cumulative'" class="form-control mb-3">
+          <label class="label"><span class="label-text">🎯 Objectif (€)</span></label>
+          <input
+            v-model="editForm.targetAmountEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="Ex : 500"
+          />
+          <label class="label"><span class="label-text-alt text-base-content/40">Affiche une barre de progression sur le tiroir</span></label>
         </div>
 
         <!-- Rollover -->
@@ -775,6 +833,19 @@ onMounted(async () => {
             class="input input-bordered"
             placeholder="0,00"
           />
+        </div>
+
+        <!-- Target amount (cumulative only) -->
+        <div v-if="createForm.envelope_type === 'cumulative'" class="form-control mb-3">
+          <label class="label"><span class="label-text">🎯 Objectif (€)</span></label>
+          <input
+            v-model="createForm.targetAmountEuros"
+            type="text"
+            inputmode="decimal"
+            class="input input-bordered"
+            placeholder="Ex : 500"
+          />
+          <label class="label"><span class="label-text-alt text-base-content/40">Affiche une barre de progression sur le tiroir</span></label>
         </div>
 
         <!-- Rollover -->

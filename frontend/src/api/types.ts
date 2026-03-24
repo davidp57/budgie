@@ -112,6 +112,7 @@ export interface EnvelopeLine {
   envelope_type: EnvelopeType
   emoji: string
   rollover: boolean
+  target_amount: number | null
   categories: CategoryRef[]
   budgeted: number // centimes
   activity: number // centimes
