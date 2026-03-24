@@ -34,8 +34,9 @@ COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
 # Install the budgie package itself (generates metadata for importlib.metadata.version())
-# pip --no-deps avoids reinstalling dependencies that are already installed above
-RUN pip install --no-deps --no-build-isolation .
+# Running poetry install again (without --no-root) only adds the root package;
+# already-installed dependencies are skipped.
+RUN poetry install --no-interaction --no-ansi
 
 # Copy built frontend from stage 1
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
