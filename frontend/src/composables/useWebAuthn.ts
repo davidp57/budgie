@@ -7,11 +7,13 @@
 
 // ── Encoding helpers ──────────────────────────────────────────────────────────
 
-function base64urlToUint8Array(b64url: string): Uint8Array {
+function base64urlToUint8Array(b64url: string): Uint8Array<ArrayBuffer> {
   const pad = '='.repeat((4 - (b64url.length % 4)) % 4)
   const base64 = b64url.replace(/-/g, '+').replace(/_/g, '/') + pad
   const binary = atob(base64)
-  return new Uint8Array(binary.length).map((_, i) => binary.charCodeAt(i))
+  const result = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) result[i] = binary.charCodeAt(i)
+  return result
 }
 
 function arrayBufferToBase64url(buf: ArrayBuffer): string {
@@ -56,7 +58,7 @@ export async function createPasskey(
       ...c,
       id: base64urlToUint8Array(c.id),
     })),
-  } as PublicKeyCredentialCreationOptions
+  } as unknown as PublicKeyCredentialCreationOptions
 
   const credential = (await navigator.credentials.create({
     publicKey,

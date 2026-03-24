@@ -25,7 +25,7 @@ interface WrappedPassphrase {
   ciphertext: number[] // variable
 }
 
-async function deriveWrappingKey(pin: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveWrappingKey(pin: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const enc = new TextEncoder()
   const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, [
     'deriveKey',
