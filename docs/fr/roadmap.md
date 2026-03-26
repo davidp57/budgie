@@ -9,6 +9,17 @@ Les items sont regroupés par priorité et peuvent évoluer.
 
 ## Court terme
 
+### Corrections & petites améliorations
+
+- [ ] **Choix de couleur d'une enveloppe** — permettre aux utilisateurs d'assigner une couleur personnalisée à chaque enveloppe directement depuis la vue budget
+- [ ] **Plage de montant dans les règles de catégorie** — ajouter des conditions min/max optionnelles lors de la création ou modification d'une règle d'auto-catégorisation (ex. : seulement les transactions entre −50 € et −5 €)
+
+### Vue des dépenses par catégorie
+
+- [ ] Nouvelle vue dédiée affichant les dépenses pointées (rapprochées) par catégorie et par groupe pour un mois sélectionné
+- [ ] Afficher le budget prévu vs. réalisé en regard des totaux d'enveloppe
+- [ ] Filtrer par compte ou par plage de dates
+
 ### Apprentissage passif
 
 Améliorer la précision de la catégorisation en apprenant du comportement utilisateur.
@@ -26,6 +37,23 @@ Améliorer la précision de la catégorisation en apprenant du comportement util
 ---
 
 ## Moyen terme
+
+### Refonte de la vue transactions
+
+La vue liste des transactions actuelle est devenue moins utile depuis que le rapprochement couvre la majorité des flux quotidiens. La refondre autour de ce qui reste pertinent :
+
+- [ ] Transformer en journal de recherche global (texte intégral, plage de dates, catégorie, compte)
+- [ ] Édition en ligne de la catégorie, du mémo et du montant directement dans la liste
+- [ ] Actions en masse : assigner une catégorie, supprimer, exporter la sélection
+- [ ] Distinction visuelle claire entre transactions pointées et non pointées
+
+### Amélioration de la gestion des catégories
+
+- [ ] Réordonner les groupes et les catégories par glisser-déposer
+- [ ] Renommer une catégorie ou un groupe en ligne
+- [ ] Déplacer une catégorie d'un groupe vers un autre
+- [ ] **Diviser** une catégorie en deux (redistribuer les transactions passées)
+- [ ] **Fusionner** deux catégories en une (réaffecter toutes les transactions)
 
 ### Rapports
 

@@ -9,6 +9,17 @@ Items are grouped by priority and may change as the project evolves.
 
 ## Short Term
 
+### Bug Fixes & Small Improvements
+
+- [ ] **Envelope color picker** — let users assign a custom color to each envelope directly from the budget view
+- [ ] **Amount range in category rules** — add optional min/max amount conditions when creating or editing auto-categorization rules (e.g. only match transactions between −50 € and −5 €)
+
+### Category Spending View
+
+- [ ] New dedicated view showing reconciled ("pointed") spending per category and per group for a selected month
+- [ ] Display budget vs. actual breakdown alongside envelope totals
+- [ ] Filter by account or date range
+
 ### Passive Learning
 
 Improve categorization accuracy over time by learning from user behavior.
@@ -26,6 +37,23 @@ Improve categorization accuracy over time by learning from user behavior.
 ---
 
 ## Medium Term
+
+### Transaction View Overhaul
+
+The current transaction list view has become less useful since reconciliation covers most day-to-day workflows. Redesign it around what's still needed:
+
+- [ ] Repurpose as a global search / audit log (full-text, date range, category, account filters)
+- [ ] Inline editing of category, memo, and amount directly in the list
+- [ ] Bulk actions: assign category, delete, export selection
+- [ ] Clear visual distinction between reconciled and unreconciled transactions
+
+### Category Management Improvements
+
+- [ ] Reorder category groups and categories via drag-and-drop
+- [ ] Edit category or group name inline
+- [ ] Move a category from one group to another
+- [ ] **Split** a category into two (redistribute past transactions)
+- [ ] **Merge** two categories into one (reassign all transactions)
 
 ### Reporting
 
