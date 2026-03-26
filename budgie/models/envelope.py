@@ -81,6 +81,9 @@ class Envelope(Base):
     rollover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     emoji: Mapped[str] = mapped_column(String(10), nullable=False, default="📦")
+    color_index: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
 
     categories: Mapped[list[Category]] = relationship(
         "Category",

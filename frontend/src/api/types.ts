@@ -123,6 +123,7 @@ export interface EnvelopeLine {
   envelope_name: string
   envelope_type: EnvelopeType
   emoji: string
+  color_index: number | null
   rollover: boolean
   target_amount: number | null
   categories: CategoryRef[]
@@ -176,6 +177,7 @@ export interface Envelope {
   id: number
   name: string
   emoji: string
+  color_index: number | null
   rollover: boolean
   sort_order: number
   envelope_type: EnvelopeType
@@ -188,6 +190,7 @@ export interface Envelope {
 export interface EnvelopeCreate {
   name: string
   emoji?: string
+  color_index?: number | null
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]
@@ -200,6 +203,7 @@ export interface EnvelopeCreate {
 export interface EnvelopeUpdate {
   name?: string
   emoji?: string
+  color_index?: number | null
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]

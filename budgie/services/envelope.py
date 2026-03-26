@@ -75,6 +75,7 @@ async def create_envelope(
         rollover=schema.rollover,
         sort_order=schema.sort_order,
         emoji=schema.emoji,
+        color_index=schema.color_index,
     )
     db.add(envelope)
     await db.flush()
@@ -117,6 +118,8 @@ async def update_envelope(
         envelope.sort_order = schema.sort_order
     if schema.emoji is not None:
         envelope.emoji = schema.emoji
+    if schema.color_index is not None or "color_index" in schema.model_fields_set:
+        envelope.color_index = schema.color_index
     if schema.category_ids is not None:
         await _set_categories(db, envelope, schema.category_ids)
     await db.commit()

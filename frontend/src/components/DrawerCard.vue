@@ -41,6 +41,13 @@ const COLOR_PALETTE: CardColors[] = [
   { pastel: '#fcd34d', fill: '#d97706', fillEnd: '#b45309' }, // amber
   { pastel: '#c4b5fd', fill: '#8b5cf6', fillEnd: '#7c3aed' }, // violet
   { pastel: '#5eead4', fill: '#14b8a6', fillEnd: '#0d9488' }, // teal
+  { pastel: '#fca5a5', fill: '#ef4444', fillEnd: '#dc2626' }, // red
+  { pastel: '#bae6fd', fill: '#0ea5e9', fillEnd: '#0284c7' }, // sky
+  { pastel: '#bef264', fill: '#84cc16', fillEnd: '#65a30d' }, // lime
+  { pastel: '#a5f3fc', fill: '#06b6d4', fillEnd: '#0891b2' }, // cyan
+  { pastel: '#f0abfc', fill: '#d946ef', fillEnd: '#c026d3' }, // fuchsia
+  { pastel: '#fef08a', fill: '#eab308', fillEnd: '#ca8a04' }, // yellow
+  { pastel: '#86efac', fill: '#22c55e', fillEnd: '#16a34a' }, // green
 ]
 
 const props = withDefaults(defineProps<{
@@ -79,7 +86,7 @@ const fillPercent = computed(() => {
   return Math.max(0, Math.min(100, Math.round(ratio * 100)))
 })
 
-const isOverBudget = computed(() => props.line.available < 0)
+const isOverBudget = computed(() => !props.fullFill && props.line.available < 0)
 
 // Calendar strip: spec says "lumineux = jours restants (gauche), gris = jours passés (droite)"
 // So we put remaining days first (bright), then past days (gray).

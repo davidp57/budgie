@@ -80,6 +80,7 @@ class EnvelopeLineRead(BaseModel):
     envelope_name: str
     envelope_type: str = "regular"
     emoji: str = "📦"
+    color_index: int | None = None
     rollover: bool
     target_amount: int | None = None
     categories: list[CategoryRef]
