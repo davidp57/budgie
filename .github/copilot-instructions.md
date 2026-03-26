@@ -64,7 +64,7 @@ Core features: bank transaction import (CSV, Excel, QIF, OFX), assisted/automati
   - API calls centralized in `src/api/` module using axios.
   - Components should be small, single-responsibility.
   - Use DaisyUI component classes — avoid custom CSS when a DaisyUI component exists.
-  - **After every change to a `.vue` file, run `npx vue-tsc --noEmit` (frontend equivalent of `mypy`) before considering the task done.** This catches template errors, broken bindings, and type mismatches that Vite only reports at runtime.
+  - **After every change to a `.vue` file, run `npx vue-tsc --noEmit -p tsconfig.app.json` (frontend equivalent of `mypy`) before considering the task done.** This catches template errors, broken bindings, and type mismatches that Vite only reports at runtime. Always use `-p tsconfig.app.json` to ensure all strict options (e.g. `noUncheckedIndexedAccess`) are applied — matching exactly what the CI runs.
 
 - **Database**:
   - Monetary values are **integer centimes** (never floats).
@@ -126,7 +126,7 @@ When the user asks to commit, follow these steps **in order** before creating th
 1. **Tests** — verify existing tests still pass; add or update tests for all new/changed behavior.
 2. **Quality checks** — run all checks and fix all issues before proceeding:
    - Backend: `poetry run ruff check .`, `poetry run mypy budgie/`, `poetry run pytest`
-   - Frontend: `cd frontend && npx vue-tsc --noEmit`, `npx eslint src/`, `npx vitest run`
+   - Frontend: `cd frontend && npx vue-tsc --noEmit -p tsconfig.app.json`, `npx eslint src/`, `npx vitest run`
 3. **Documentation** — verify and update all relevant docs:
    - `docs/en/` and `docs/fr/` user/developer guides — update if the change affects user-facing behavior or architecture.
    - Docstrings — update if public API signatures or behavior changed.
@@ -175,7 +175,7 @@ npm run dev                             # Vite dev server
 npm run build                           # Production build
 npx vitest run                          # Tests
 npx eslint src/                         # ESLint
-npx vue-tsc --noEmit                    # TypeScript check
+npx vue-tsc --noEmit -p tsconfig.app.json  # TypeScript check (matches CI exactly)
 
 # Docker
 docker compose up --build               # Build & run
