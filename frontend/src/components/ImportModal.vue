@@ -4,7 +4,7 @@
   successful import so the parent can reload its data.
 -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import { listAccounts } from '@/api/accounts'
 import { confirmImport, parseFile } from '@/api/imports'

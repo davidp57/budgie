@@ -57,7 +57,7 @@ const EXPENSE_DEFAULT_BG = 'rgba(148,163,184,0.18)'
 const BANK_BG = 'rgba(125,211,252,0.18)'
 
 function expenseBg(categoryId: number | null): Record<string, string> {
-  const bg = categoryId !== null ? EXPENSE_PASTELS[categoryId % EXPENSE_PASTELS.length] : EXPENSE_DEFAULT_BG
+  const bg = categoryId !== null ? (EXPENSE_PASTELS[categoryId % EXPENSE_PASTELS.length] ?? EXPENSE_DEFAULT_BG) : EXPENSE_DEFAULT_BG
   return { backgroundColor: bg }
 }
 function onPortraitChange(e: MediaQueryListEvent): void {
@@ -285,7 +285,7 @@ async function loadAccounts(): Promise<void> {
   const acc = await listAccounts()
   accounts.value = acc
   if (acc.length > 0 && selectedAccountId.value === null) {
-    selectedAccountId.value = acc[0].id
+    selectedAccountId.value = acc[0]?.id ?? null
   }
 }
 
@@ -332,13 +332,17 @@ watch([selectedAccountId, month], () => loadView())
 
 // ── Month navigation ──────────────────────────────────────────────
 function prevMonth(): void {
-  const [y, m] = month.value.split('-').map(Number)
+  const parts = month.value.split('-').map(Number)
+  const y = parts[0] ?? new Date().getFullYear()
+  const m = parts[1] ?? new Date().getMonth() + 1
   const d = new Date(y, m - 2, 1)
   month.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function nextMonth(): void {
-  const [y, m] = month.value.split('-').map(Number)
+  const parts = month.value.split('-').map(Number)
+  const y = parts[0] ?? new Date().getFullYear()
+  const m = parts[1] ?? new Date().getMonth() + 1
   const d = new Date(y, m, 1)
   month.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }

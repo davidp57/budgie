@@ -16,5 +16,5 @@ export async function categorizeSingle(
   const { data } = await client.post<{ results: CategorizeSingleResult[] }>('/api/categorize', {
     transactions: [{ payee_name: payeeName, memo }],
   })
-  return data.results[0]
+  return data.results[0] ?? { category_id: null, confidence: 'none' }
 }
