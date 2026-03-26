@@ -185,6 +185,7 @@ async def get_month_budget_view(
                 envelope_name=env.name,
                 envelope_type=env.envelope_type,
                 emoji=env.emoji,
+                color_index=env.color_index,
                 rollover=env.rollover,
                 target_amount=env.target_amount,
                 categories=cats,

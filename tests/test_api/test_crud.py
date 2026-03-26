@@ -411,3 +411,63 @@ async def test_create_envelope_with_categories(auth_client: AsyncClient) -> None
     assert len(data["categories"]) == 1
     assert data["categories"][0]["name"] == "Groceries"
     assert data["categories"][0]["group_name"] == "Household"
+
+
+async def test_envelope_color_index_default_none(auth_client: AsyncClient) -> None:
+    """A new envelope has color_index=None by default (auto-color from palette)."""
+    response = await auth_client.post("/api/envelopes", json={"name": "Travel"})
+    assert response.status_code == 201
+    assert response.json()["color_index"] is None
+
+
+async def test_envelope_color_index_create(auth_client: AsyncClient) -> None:
+    """Creating an envelope with color_index stores and returns the chosen index."""
+    response = await auth_client.post(
+        "/api/envelopes", json={"name": "Food", "color_index": 3}
+    )
+    assert response.status_code == 201
+    assert response.json()["color_index"] == 3
+
+
+async def test_envelope_color_index_update(auth_client: AsyncClient) -> None:
+    """Updating color_index persists the change and is returned in the response."""
+    create = await auth_client.post("/api/envelopes", json={"name": "Bills"})
+    env_id = create.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/envelopes/{env_id}", json={"color_index": 5}
+    )
+    assert response.status_code == 200
+    assert response.json()["color_index"] == 5
+
+
+async def test_envelope_color_index_reset_to_none(auth_client: AsyncClient) -> None:
+    """Setting color_index to null resets to auto-color (None)."""
+    create = await auth_client.post(
+        "/api/envelopes", json={"name": "Savings", "color_index": 2}
+    )
+    env_id = create.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/envelopes/{env_id}", json={"color_index": None}
+    )
+    assert response.status_code == 200
+    assert response.json()["color_index"] is None
+
+
+async def test_envelope_color_index_in_month_budget(auth_client: AsyncClient) -> None:
+    """color_index is included in EnvelopeLine from GET /api/budget/{month}."""
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Leisure", "color_index": 7}
+    )
+    env_id = envelope.json()["id"]
+    await auth_client.post(
+        "/api/budget/2026-01",
+        json=[{"envelope_id": env_id, "budgeted": 5000}],
+    )
+    response = await auth_client.get("/api/budget/2026-01")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((line for line in lines if line["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["color_index"] == 7

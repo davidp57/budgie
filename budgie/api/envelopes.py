@@ -49,6 +49,7 @@ def _to_envelope_read(env: object) -> EnvelopeRead:
         rollover=env.rollover,
         sort_order=env.sort_order,
         emoji=env.emoji,
+        color_index=env.color_index,
         categories=cats,
     )
 

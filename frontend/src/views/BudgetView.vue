@@ -62,8 +62,30 @@ function nextMonth(): void {
 
 // ── Emoji presets ────────────────────────────────────────────────
 const EMOJI_PRESETS = [
-  '🛒', '🏠', '🚗', '💡', '🎮', '🍽️', '👕', '🏥',
-  '📱', '✈️', '🎓', '💰', '🐱', '🎁', '📦', '🔧',
+  '🛒', '🏠', '🚗', '💡', '🎮', '🍽️',
+  '👕', '🏥', '📱', '✈️', '🎓', '💰',
+  '🐱', '🎁', '📦', '🔧', '💊', '🏋️',
+  '🎬', '🍺', '☕', '🚌', '�', '💇',
+  '🌿', '🎵', '📚', '🧹', '💳', '🛡️',
+]
+
+// ── Color palette swatches (mirrors DrawerCard COLOR_PALETTE order) ──────────
+const COLOR_SWATCHES: string[] = [
+  '#059669', // emerald
+  '#6366f1', // indigo
+  '#ea580c', // orange
+  '#3b82f6', // blue
+  '#db2777', // pink
+  '#d97706', // amber
+  '#8b5cf6', // violet
+  '#14b8a6', // teal
+  '#ef4444', // red
+  '#0ea5e9', // sky
+  '#84cc16', // lime
+  '#06b6d4', // cyan
+  '#d946ef', // fuchsia
+  '#eab308', // yellow
+  '#22c55e', // green
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -79,7 +101,7 @@ function displayEuros(centimes: number): string {
 
 // ── Color index helper ────────────────────────────────────────────────
 function getColorIndex(line: EnvelopeLine): number {
-  return line.envelope_id - 1
+  return line.color_index ?? line.envelope_id - 1
 }
 
 // ── Swipe to delete ──────────────────────────────────────────────
@@ -194,6 +216,7 @@ const editingLine = ref<EnvelopeLine | null>(null)
 const editForm = ref({
   name: '',
   emoji: '📦',
+  color_index: null as number | null,
   envelope_type: 'regular' as EnvelopeType,
   period: 'monthly' as EnvelopePeriod,
   rollover: false,
@@ -210,6 +233,7 @@ function openEdit(line: EnvelopeLine): void {
   editForm.value = {
     name: line.envelope_name,
     emoji: line.emoji || '📦',
+    color_index: line.color_index,
     envelope_type: line.envelope_type,
     period: full?.period ?? 'monthly',
     rollover: line.rollover,
@@ -234,6 +258,7 @@ async function saveEdit(): Promise<void> {
     await updateEnvelope(editingLine.value.envelope_id, {
       name: editForm.value.name.trim(),
       emoji: editForm.value.emoji,
+      color_index: editForm.value.color_index,
       envelope_type: editForm.value.envelope_type,
       period: editForm.value.period,
       rollover: editForm.value.rollover,
@@ -244,9 +269,13 @@ async function saveEdit(): Promise<void> {
     })
     const euros = parseFloat(editForm.value.budgetedEuros.replace(',', '.')) || 0
     const centimes = Math.round(euros * 100)
-    await setMonthBudget(budgetStore.month, [
-      { envelope_id: editingLine.value.envelope_id, budgeted: centimes },
-    ])
+    try {
+      await setMonthBudget(budgetStore.month, [
+        { envelope_id: editingLine.value.envelope_id, budgeted: centimes },
+      ])
+    } catch {
+      editError.value = 'Échec de la mise à jour du budget.'
+    }
     closeEdit()
     await reloadAll()
   } catch {
@@ -276,6 +305,7 @@ const createDialogRef = ref<HTMLDialogElement | null>(null)
 const createForm = ref({
   name: '',
   emoji: '📦',
+  color_index: null as number | null,
   envelope_type: 'regular' as EnvelopeType,
   period: 'monthly' as EnvelopePeriod,
   rollover: false,
@@ -290,6 +320,7 @@ function openCreate(): void {
   createForm.value = {
     name: '',
     emoji: '📦',
+    color_index: null,
     envelope_type: 'regular',
     period: 'monthly',
     rollover: false,
@@ -313,6 +344,7 @@ async function saveCreate(): Promise<void> {
     const envelope = await createEnvelope({
       name: createForm.value.name.trim(),
       emoji: createForm.value.emoji,
+      color_index: createForm.value.color_index,
       envelope_type: createForm.value.envelope_type,
       period: createForm.value.period,
       rollover: createForm.value.rollover,
@@ -646,6 +678,31 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Color picker -->
+        <div class="mb-4">
+          <label class="text-sm text-base-content/60 mb-1 block">Couleur</label>
+          <div class="flex flex-wrap gap-2">
+            <!-- Auto -->
+            <button
+              class="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all"
+              :class="editForm.color_index === null ? 'border-primary scale-110' : 'border-base-300 hover:border-primary/50'"
+              title="Auto"
+              @click="editForm.color_index = null"
+            >
+              A
+            </button>
+            <button
+              v-for="(hex, idx) in COLOR_SWATCHES"
+              :key="idx"
+              class="w-8 h-8 rounded-full border-2 transition-all"
+              :class="editForm.color_index === idx ? 'border-white scale-110' : 'border-transparent hover:scale-105'"
+              :style="editForm.color_index === idx ? { backgroundColor: hex, outline: '2px solid ' + hex, outlineOffset: '2px' } : { backgroundColor: hex }"
+              :title="'Couleur ' + (idx + 1)"
+              @click="editForm.color_index = idx"
+            />
+          </div>
+        </div>
+
         <!-- Name -->
         <div class="form-control mb-3">
           <label class="label"><span class="label-text">Nom</span></label>
@@ -788,6 +845,31 @@ onMounted(async () => {
             >
               {{ e }}
             </button>
+          </div>
+        </div>
+
+        <!-- Color picker -->
+        <div class="mb-4">
+          <label class="text-sm text-base-content/60 mb-1 block">Couleur</label>
+          <div class="flex flex-wrap gap-2">
+            <!-- Auto -->
+            <button
+              class="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all"
+              :class="createForm.color_index === null ? 'border-primary scale-110' : 'border-base-300 hover:border-primary/50'"
+              title="Auto"
+              @click="createForm.color_index = null"
+            >
+              A
+            </button>
+            <button
+              v-for="(hex, idx) in COLOR_SWATCHES"
+              :key="idx"
+              class="w-8 h-8 rounded-full border-2 transition-all"
+              :class="createForm.color_index === idx ? 'border-white scale-110' : 'border-transparent hover:scale-105'"
+              :style="createForm.color_index === idx ? { backgroundColor: hex, outline: '2px solid ' + hex, outlineOffset: '2px' } : { backgroundColor: hex }"
+              :title="'Couleur ' + (idx + 1)"
+              @click="createForm.color_index = idx"
+            />
           </div>
         </div>
 
