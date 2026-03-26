@@ -69,7 +69,9 @@ onUnmounted(() => mqlPortrait.removeEventListener('change', onPortraitChange))
 // ── State ─────────────────────────────────────────────────────────
 const accounts = ref<Account[]>([])
 const selectedAccountId = ref<number | null>(null)
-const month = ref<string>(new Date().toISOString().slice(0, 7)) // YYYY-MM
+const month = ref<string>(
+  `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+) // YYYY-MM (local time)
 
 const viewData = ref<ReconciliationView | null>(null)
 const loading = ref(false)
@@ -326,7 +328,7 @@ onMounted(async () => {
   }
 })
 
-watch([selectedAccountId, month], loadView)
+watch([selectedAccountId, month], () => loadView())
 
 // ── Month navigation ──────────────────────────────────────────────
 function prevMonth(): void {
@@ -792,8 +794,8 @@ const modalHasDelta = computed<boolean>(() => {
           <!-- Rows -->
           <div>
             <div
-              v-for="(row, i) in rows"
-              :key="i"
+              v-for="row in rows"
+              :key="`${row.bank?.id ?? 'x'}-${row.expense?.id ?? 'x'}-${row.linked ? 'L' : row.suggested ? 'S' : 'U'}`"
               class="border-b border-base-200 transition-colors"
               :class="{ 'match-anim': animBankId !== null && row.linked && row.bank?.id === animBankId, 'bg-purple-50/30': row.suggested }"
               style="display:grid;grid-template-columns:1fr 48px 1fr;"

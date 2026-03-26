@@ -45,6 +45,15 @@ const error = ref('')
 const virtualUnlinked = ref<Transaction[]>([])
 const linkDecisions = ref<Record<number, number>>({})
 
+// Precomputed suggestion map: preview index → best matching virtual transaction
+const suggestionMap = computed<Map<number, Transaction | null>>(() => {
+  const map = new Map<number, Transaction | null>()
+  for (let i = 0; i < preview.value.length; i++) {
+    map.set(i, findSuggestionFor(preview.value[i]!))
+  }
+  return map
+})
+
 onMounted(async () => {
   try {
     accounts.value = await listAccounts()
@@ -67,7 +76,7 @@ function extractError(err: unknown, fallback: string): string {
   return fallback
 }
 
-function findSuggestion(txn: ImportedTransaction): Transaction | null {
+function findSuggestionFor(txn: ImportedTransaction): Transaction | null {
   const txnDate = new Date(txn.date).getTime()
   const candidates = virtualUnlinked.value.filter((v) => {
     if (Math.sign(v.amount) !== Math.sign(txn.amount)) return false
@@ -126,7 +135,7 @@ async function onConfirm(): Promise<void> {
   try {
     const enriched = preview.value.map((txn, i) => {
       const decision = linkDecisions.value[i]
-      const suggestion = findSuggestion(txn)
+      const suggestion = suggestionMap.value.get(i) ?? null
       const virtualId =
         decision !== undefined && decision > 0
           ? decision
@@ -256,17 +265,17 @@ function closeAndReload(): void {
                           <button class="ml-1 opacity-60 hover:opacity-100" @click="dismissLink(i)">✕</button>
                         </span>
                       </template>
-                      <template v-else-if="findSuggestion(txn)">
+                      <template v-else-if="suggestionMap.get(i)"><!-- computed index -->
                         <div class="flex flex-col gap-1">
                           <span class="text-xs text-base-content/60">
-                            {{ findSuggestion(txn)?.memo ?? '—' }}
-                            ({{ formatAmount(findSuggestion(txn)!.amount) }},
-                            {{ findSuggestion(txn)?.date }})
+                            {{ suggestionMap.get(i)?.memo ?? '\u2014' }}
+                            ({{ formatAmount(suggestionMap.get(i)!.amount) }},
+                            {{ suggestionMap.get(i)?.date }})
                           </span>
                           <div class="flex gap-1">
                             <button
                               class="btn btn-xs btn-success"
-                              @click="acceptLink(i, findSuggestion(txn)!.id)"
+                              @click="acceptLink(i, suggestionMap.get(i)!.id)"
                             >✓ Lier</button>
                             <button class="btn btn-xs btn-ghost" @click="dismissLink(i)">✕</button>
                           </div>

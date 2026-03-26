@@ -5,7 +5,7 @@ transaction (planned/real) can be linked to a bank-imported transaction
 for the reconciliation (pointage) feature.
 
 Revision ID: d4e5f6a7b8c9
-Revises: b2c3d4e5f6a7
+Revises: 69e73afdd24c
 Create Date: 2026-03-25 00:00:00.000000
 
 """

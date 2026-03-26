@@ -189,6 +189,7 @@ async function removeCategory(id: number): Promise<void> {
             type="checkbox"
             class="toggle toggle-primary"
             :checked="theme === 'dark'"
+            aria-label="Activer le thème sombre"
             @change="toggleTheme"
           />
           <span class="text-sm">🌙 Sombre</span>

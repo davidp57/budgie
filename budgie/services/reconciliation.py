@@ -186,7 +186,7 @@ def _to_expense_read(tx: Transaction, cat_name: str | None = None) -> BudgetExpe
         amount=tx.amount,
         category_id=tx.category_id,
         category_name=cat_name,
-        memo=tx.memo,
+        memo=None,
         status=tx.status,
     )
 
@@ -379,14 +379,25 @@ async def link(
     bank = await _get_tx(db, req.bank_tx_id, user_id)
     if bank is None:
         raise ValueError(f"Bank transaction {req.bank_tx_id} not found")
+    if bank.import_hash is None:
+        raise ValueError(
+            f"Transaction {req.bank_tx_id} is not a bank-imported transaction"
+        )
 
     expense = await _get_tx(db, req.expense_id, user_id)
     if expense is None:
         raise ValueError(f"Expense {req.expense_id} not found")
+    if expense.import_hash is not None:
+        raise ValueError(f"Transaction {req.expense_id} is not a budget expense")
 
-    # Check the bank tx is not already linked via another expense
+    # Check the bank tx is not already linked via another expense (scoped to user)
     existing_result = await db.execute(
-        select(Transaction).where(Transaction.reconciled_with_id == req.bank_tx_id)
+        select(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .where(
+            Transaction.reconciled_with_id == req.bank_tx_id,
+            Account.user_id == user_id,
+        )
     )
     if existing_result.scalar_one_or_none() is not None:
         raise ValueError(
