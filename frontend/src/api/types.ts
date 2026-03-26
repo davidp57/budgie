@@ -234,9 +234,81 @@ export interface ImportResult {
 
 export interface CategoryRule {
   id: number
+  user_id: number
   pattern: string
+  match_field: 'payee' | 'memo'
+  match_type: 'contains' | 'exact' | 'regex'
   category_id: number
   priority: number
+}
+
+export interface CategoryRuleCreate {
+  pattern: string
+  match_field: 'payee' | 'memo'
+  match_type: 'contains' | 'exact' | 'regex'
+  category_id: number
+  priority?: number
+}
+
+// ── Reconciliation ───────────────────────────────────────────────
+
+export interface BankTx {
+  id: number
+  date: string // YYYY-MM-DD
+  label: string
+  amount: number // centimes
+  import_hash: string
+}
+
+export interface ReconciliationExpense {
+  id: number
+  date: string // YYYY-MM-DD
+  label: string
+  amount: number // centimes
+  category_id: number | null
+  category_name: string | null
+  memo: string | null
+  status: TransactionStatus
+}
+
+export interface ReconciliationLink {
+  bank_tx_id: number
+  expense_id: number
+  created_rule?: CategoryRule | null
+}
+
+export interface ReconciliationSuggestion {
+  bank_tx: BankTx
+  expense: ReconciliationExpense
+  score: number
+}
+
+export interface ReconciliationView {
+  account_id: number
+  month: string // YYYY-MM
+  bank_txs: BankTx[]
+  expenses: ReconciliationExpense[]
+  links: ReconciliationLink[]
+  suggestions: ReconciliationSuggestion[]
+}
+
+export interface LinkRequest {
+  bank_tx_id: number
+  expense_id: number
+  adjust_amount?: boolean
+  memo?: string | null
+}
+
+export interface ClotureRequest {
+  account_id: number
+  month: string // YYYY-MM
+}
+
+export interface ClotureResponse {
+  linked_count: number
+  total_bank_txs: number
+  total_expenses: number
+  reconciled_count: number
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
