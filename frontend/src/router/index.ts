@@ -37,6 +37,16 @@ const router = createRouter({
       component: () => import('@/views/TransactionsView.vue'),
     },
     {
+      path: '/reconciliation',
+      name: 'reconciliation',
+      component: () => import('@/views/ReconciliationView.vue'),
+    },
+    {
+      path: '/import',
+      name: 'import',
+      component: () => import('@/views/ImportView.vue'),
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

@@ -44,8 +44,8 @@ const monthLabel = computed(() => {
   return `${months[parseInt(m, 10) - 1]} ${y}`
 })
 
-const totalAvailable = computed(() =>
-  budgetStore.envelopeLines.reduce((sum, l) => sum + l.available, 0),
+const totalBudgeted = computed(() =>
+  budgetStore.envelopeLines.reduce((sum, l) => sum + l.budgeted, 0),
 )
 
 function prevMonth(): void {
@@ -432,7 +432,7 @@ onMounted(async () => {
       {{ budgetStore.envelopeLines.length }} tiroir{{
         budgetStore.envelopeLines.length > 1 ? 's' : ''
       }}
-      · disponible {{ formatAmount(totalAvailable) }}
+      · alloué {{ formatAmount(totalBudgeted) }}
     </p>
 
     <!-- Loading skeleton -->
@@ -485,6 +485,7 @@ onMounted(async () => {
             :show-calendar="false"
             :show-subtitle="false"
             :show-goal-bar="false"
+            :full-fill="true"
             @tap="openEdit(line)"
           >
             <!-- Emoji slot: click to cycle -->
@@ -540,7 +541,7 @@ onMounted(async () => {
                 class="text-[42px] leading-none font-extrabold tabular-nums tracking-tight drop-shadow-lg cursor-pointer"
                 @click.stop="startEditAmount(line)"
               >
-                {{ formatAmount(line.available) }}
+                {{ formatAmount(line.budgeted) }}
               </span>
               <!-- Goal: inline-editable, shown bigger for cumulative envelopes -->
               <div v-if="line.envelope_type === 'cumulative'" class="mt-1">

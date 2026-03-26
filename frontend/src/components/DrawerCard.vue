@@ -50,6 +50,8 @@ const props = withDefaults(defineProps<{
   showCalendar?: boolean
   showSubtitle?: boolean
   showGoalBar?: boolean
+  /** Force fill to 100% regardless of available/budgeted ratio (use in definition/config screens). */
+  fullFill?: boolean
 }>(), {
   showMoney: true,
   showCalendar: true,
@@ -69,8 +71,9 @@ const colors = computed<CardColors>(() => {
 
 const drawerType = computed<EnvelopeType>(() => props.line.envelope_type ?? 'regular')
 
-// Fill % = remaining budget ratio
+// Fill % = remaining budget ratio (or 100% in definition/config mode)
 const fillPercent = computed(() => {
+  if (props.fullFill) return 100
   if (props.line.budgeted === 0) return 0
   const ratio = props.line.available / props.line.budgeted
   return Math.max(0, Math.min(100, Math.round(ratio * 100)))

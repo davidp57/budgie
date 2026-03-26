@@ -67,6 +67,12 @@ class Transaction(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+    reconciled_with_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("transactions.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+    )
 
     # Relationships
     account: Mapped[Account] = relationship(back_populates="transactions")

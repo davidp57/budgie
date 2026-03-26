@@ -64,6 +64,7 @@ Core features: bank transaction import (CSV, Excel, QIF, OFX), assisted/automati
   - API calls centralized in `src/api/` module using axios.
   - Components should be small, single-responsibility.
   - Use DaisyUI component classes — avoid custom CSS when a DaisyUI component exists.
+  - **After every change to a `.vue` file, run `npx vue-tsc --noEmit` (frontend equivalent of `mypy`) before considering the task done.** This catches template errors, broken bindings, and type mismatches that Vite only reports at runtime.
 
 - **Database**:
   - Monetary values are **integer centimes** (never floats).

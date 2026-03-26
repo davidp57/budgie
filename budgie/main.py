@@ -29,6 +29,7 @@ from budgie.api import (
     envelopes,
     imports,
     payees,
+    reconciliation,
     transactions,
     users,
     webauthn,
@@ -106,6 +107,7 @@ app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
+app.include_router(reconciliation.router)
 app.include_router(webauthn.router)
 
 # ── Production static file serving ──────────────────────────────────────────

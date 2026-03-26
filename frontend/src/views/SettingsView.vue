@@ -18,10 +18,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { createPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
 import { usePinStorage } from '@/composables/usePinStorage'
+import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
 const router = useRouter()
 const pinStorage = usePinStorage()
+const { theme, toggle: toggleTheme } = useTheme()
 
 function logout(): void {
   auth.logout()
@@ -176,6 +178,23 @@ async function removeCategory(id: number): Promise<void> {
 <template>
   <div class="flex flex-col gap-8 max-w-2xl">
     <h1 class="text-2xl font-bold">Settings</h1>
+
+    <!-- Theme section -->
+    <section class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Apparence</h2>
+        <div class="flex items-center gap-4">
+          <span class="text-sm">☀️ Clair</span>
+          <input
+            type="checkbox"
+            class="toggle toggle-primary"
+            :checked="theme === 'dark'"
+            @change="toggleTheme"
+          />
+          <span class="text-sm">🌙 Sombre</span>
+        </div>
+      </div>
+    </section>
 
     <!-- Accounts section -->
     <section class="card bg-base-100 shadow">
