@@ -64,6 +64,9 @@ async def create_rule(
         match_type=schema.match_type,
         category_id=schema.category_id,
         priority=schema.priority,
+        transaction_type=schema.transaction_type,
+        min_amount=schema.min_amount,
+        max_amount=schema.max_amount,
     )
     db.add(rule)
     await db.commit()

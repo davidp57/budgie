@@ -12,7 +12,7 @@ Les items sont regroupés par priorité et peuvent évoluer.
 ### Corrections & petites améliorations
 
 - [x] **Choix de couleur d'une enveloppe** — permettre aux utilisateurs d'assigner une couleur personnalisée à chaque enveloppe directement depuis la vue budget
-- [ ] **Plage de montant dans les règles de catégorie** — ajouter des conditions min/max optionnelles lors de la création ou modification d'une règle d'auto-catégorisation (ex. : seulement les transactions entre −50 € et −5 €)
+- [x] **Plage de montant dans les règles de catégorie** — ajouter des conditions min/max optionnelles lors de la création ou modification d'une règle d'auto-catégorisation (ex. : seulement les transactions entre −50 € et −5 €)
 
 ### Vue des dépenses par catégorie
 

@@ -27,6 +27,11 @@ class CategoryRule(Base):
         match_type: Type of matching (contains, exact, regex).
         category_id: Category to assign when the rule matches.
         priority: Higher priority rules are evaluated first.
+        transaction_type: Sign filter — ``"any"`` matches both debits and
+            credits; ``"debit"`` restricts to negative amounts; ``"credit"``
+            restricts to positive amounts.
+        min_amount: Optional lower bound on abs(amount) in centimes (inclusive).
+        max_amount: Optional upper bound on abs(amount) in centimes (inclusive).
     """
 
     __tablename__ = "category_rules"
@@ -42,6 +47,11 @@ class CategoryRule(Base):
         ForeignKey("categories.id"), nullable=False
     )
     priority: Mapped[int] = mapped_column(Integer, default=0)
+    transaction_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="any", server_default="any"
+    )  # any, debit, credit
+    min_amount: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    max_amount: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     # Relationships
     user: Mapped[User] = relationship(back_populates="category_rules")

@@ -12,6 +12,7 @@ import {
   deleteCategoryGroup,
   listGroupsWithCategories,
 } from '@/api/categories'
+import { resetUserData } from '@/api/dataReset'
 import { getPreferences, updatePreferences } from '@/api/users'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
@@ -172,6 +173,26 @@ async function addCategory(): Promise<void> {
 async function removeCategory(id: number): Promise<void> {
   await deleteCategory(id)
   await loadAll()
+}
+
+// ── Data reset ────────────────────────────────────────────────────────────
+const resetModalOpen = ref(false)
+const resetLoading = ref(false)
+const resetResult = ref<{ transactions_deleted: number; rules_deleted: number } | null>(null)
+const resetError = ref('')
+
+async function confirmReset(): Promise<void> {
+  resetError.value = ''
+  resetResult.value = null
+  resetLoading.value = true
+  try {
+    resetResult.value = await resetUserData()
+    resetModalOpen.value = false
+  } catch {
+    resetError.value = 'Reset failed. Please try again.'
+  } finally {
+    resetLoading.value = false
+  }
 }
 </script>
 
@@ -422,6 +443,65 @@ async function removeCategory(id: number): Promise<void> {
         </p>
       </div>
     </section>
+
+    <!-- Danger zone -->
+    <section class="card bg-base-100 shadow border border-error/30">
+      <div class="card-body">
+        <h2 class="card-title text-error">Zone dangereuse</h2>
+        <p class="text-sm text-base-content/60">
+          Ces actions sont irréversibles. Les comptes, enveloppes et
+          allocations budgétaires sont conservés.
+        </p>
+
+        <div v-if="resetResult" class="alert alert-success text-sm py-2">
+          {{ resetResult.transactions_deleted }} transaction(s) et
+          {{ resetResult.rules_deleted }} règle(s) supprimées.
+        </div>
+
+        <div v-if="resetError" class="alert alert-error text-sm py-2">{{ resetError }}</div>
+
+        <button
+          class="btn btn-error btn-outline btn-sm w-fit gap-2"
+          @click="resetModalOpen = true"
+        >
+          🗑 RAZ données (dépenses + règles)
+        </button>
+      </div>
+    </section>
+
+    <!-- Reset confirmation modal -->
+    <dialog :open="resetModalOpen" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg text-error">Confirmer la remise à zéro</h3>
+        <p class="py-4 text-sm">
+          Toutes vos <strong>dépenses</strong> (transactions budgétaires
+          manuelles, liées ou non à une transaction bancaire) et toutes vos
+          <strong>règles de catégorisation</strong> seront définitivement
+          supprimées.<br />
+          Les transactions importées de la banque, les comptes, les enveloppes
+          et les allocations sont conservés.<br /><br />
+          Cette action est <strong>irréversible</strong>.
+        </p>
+        <div class="modal-action gap-2">
+          <button
+            class="btn btn-ghost btn-sm"
+            :disabled="resetLoading"
+            @click="resetModalOpen = false"
+          >
+            Annuler
+          </button>
+          <button
+            class="btn btn-error btn-sm gap-1"
+            :disabled="resetLoading"
+            @click="confirmReset"
+          >
+            <span v-if="resetLoading" class="loading loading-spinner loading-xs"></span>
+            Oui, tout supprimer
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="resetModalOpen = false"></div>
+    </dialog>
 
     <!-- Logout (visible on mobile where sidebar is hidden) -->
     <section class="card bg-base-100 shadow lg:hidden">

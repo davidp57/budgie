@@ -32,6 +32,7 @@ from budgie.schemas.reconciliation import (
     LinkRead,
     LinkRequest,
     ReconciliationViewResponse,
+    RuleMatchRead,
     SuggestionRead,
 )
 
@@ -40,10 +41,11 @@ from budgie.schemas.reconciliation import (
 # ---------------------------------------------------------------------------
 
 # Strips common French bank prefixes at the start of memo strings.
-# e.g. "CARTE ", "VIR SEPA ", "PRLV SEPA ", "RETRAIT DAB ", etc.
+# e.g. "CARTE ", "VIR SEPA ", "PRLV SEPA ", "RETRAIT DAB ", "AVOIR CB ", etc.
 _RE_MEMO_PREFIX = re.compile(
     r"^("
-    r"CARTE\s+"
+    r"AVOIR\s+(?:CB\s+)?"
+    r"|CARTE\s+"
     r"|VIR(?:EMENT)?\s+(?:SEPA\s+)?"
     r"|PRLV(?:MT)?\s+(?:SEPA\s+)?"
     r"|PRELEVEMENT\s+(?:SEPA\s+)?"
@@ -110,19 +112,38 @@ def _is_bank(tx: Transaction) -> bool:
 
 
 def _matches_rule(rule: CategoryRule, tx: Transaction) -> bool:
-    """Test whether *tx* matches *rule* using the rule's match logic."""
+    """Test whether *tx* matches *rule* using the rule's match logic.
+
+    Checks the text pattern, then the transaction_type filter, then
+    the optional min_amount / max_amount bounds (on abs(amount) in centimes).
+    """
     # Bank imports store the merchant name in memo; we match against it
     # regardless of whether the rule targets the payee or memo field.
     value = tx.memo or ""
     if not value:
         return False
     if rule.match_type == "contains":
-        return rule.pattern.lower() in value.lower()
-    if rule.match_type == "exact":
-        return rule.pattern.lower() == value.lower()
-    if rule.match_type == "regex":
-        return re.search(rule.pattern, value, re.IGNORECASE) is not None
-    return False
+        text_match = rule.pattern.lower() in value.lower()
+    elif rule.match_type == "exact":
+        text_match = rule.pattern.lower() == value.lower()
+    elif rule.match_type == "regex":
+        text_match = re.search(rule.pattern, value, re.IGNORECASE) is not None
+    else:
+        return False
+    if not text_match:
+        return False
+
+    # Transaction type filter
+    if rule.transaction_type == "debit" and tx.amount >= 0:
+        return False
+    if rule.transaction_type == "credit" and tx.amount <= 0:
+        return False
+
+    # Amount bounds (compared against abs(amount) in centimes)
+    abs_amount = abs(tx.amount)
+    if rule.min_amount is not None and abs_amount < rule.min_amount:
+        return False
+    return rule.max_amount is None or abs_amount <= rule.max_amount
 
 
 def _score(bank: Transaction, exp: Transaction) -> float:
@@ -175,6 +196,7 @@ def _to_bank_read(tx: Transaction) -> BankTxRead:
         label=tx.memo or "",
         amount=tx.amount,
         import_hash=tx.import_hash,
+        rule_pattern=_extract_rule_pattern(tx.memo) if tx.memo else None,
     )
 
 
@@ -245,12 +267,26 @@ async def get_view(
     ]
 
     # Suggestions for unlinked transactions
+    unlinked_banks_for_view = [
+        b for b in bank_list if b.id not in linked_bank_ids
+    ]
+    unlinked_expenses_for_view = [
+        e for e in expense_list if e.id not in linked_expense_ids
+    ]
     suggestions = await _build_suggestions(
         db,
         user_id,
-        [b for b in bank_list if b.id not in linked_bank_ids],
-        [e for e in expense_list if e.id not in linked_expense_ids],
+        unlinked_banks_for_view,
+        unlinked_expenses_for_view,
         cat_names,
+    )
+
+    suggestion_bank_ids = {s.bank_tx.id for s in suggestions}
+    rule_matches = await _build_rule_matches(
+        db,
+        user_id,
+        unlinked_banks_for_view,
+        suggestion_bank_ids,
     )
 
     return ReconciliationViewResponse(
@@ -263,7 +299,62 @@ async def get_view(
         ],
         links=links,
         suggestions=suggestions,
+        rule_matches=rule_matches,
     )
+
+
+async def _build_rule_matches(
+    db: AsyncSession,
+    user_id: int,
+    unlinked_banks: list[Transaction],
+    suggestion_bank_ids: set[int],
+) -> list[RuleMatchRead]:
+    """Find bank transactions that match a rule but have no pairable expense.
+
+    For each unlinked bank transaction that is not already covered by a
+    suggestion, look for the highest-priority matching rule.  Returns one
+    :class:`RuleMatchRead` per matched bank transaction.
+
+    Args:
+        db: Async database session.
+        user_id: Authenticated user.
+        unlinked_banks: Bank transactions without a confirmed link.
+        suggestion_bank_ids: Bank tx IDs already promoted to suggestions.
+
+    Returns:
+        List of :class:`RuleMatchRead` (one per matched, non-suggested bank tx).
+    """
+    rules_result = await db.execute(
+        select(CategoryRule)
+        .where(CategoryRule.user_id == user_id)
+        .order_by(CategoryRule.priority.desc())
+    )
+    rules = list(rules_result.scalars().all())
+    if not rules:
+        return []
+
+    # Pre-load names for all categories referenced by rules
+    rule_cat_ids = {r.category_id for r in rules}
+    cat_result = await db.execute(
+        select(Category).where(Category.id.in_(rule_cat_ids))
+    )
+    cat_names: dict[int, str] = {c.id: c.name for c in cat_result.scalars().all()}
+
+    result: list[RuleMatchRead] = []
+    for bank in unlinked_banks:
+        if bank.id in suggestion_bank_ids:
+            continue
+        for rule in rules:
+            if _matches_rule(rule, bank):
+                result.append(
+                    RuleMatchRead(
+                        bank_tx=_to_bank_read(bank),
+                        category_id=rule.category_id,
+                        category_name=cat_names.get(rule.category_id),
+                    )
+                )
+                break  # first (highest-priority) matching rule wins
+    return result
 
 
 async def _build_suggestions(
@@ -416,7 +507,7 @@ async def link(
     # meaningful label and the expense belongs to a known category.
     new_rule: CategoryRule | None = None
     pattern = _extract_rule_pattern(bank.memo) if bank.memo else None
-    if pattern and expense.category_id is not None:
+    if not req.skip_rule and pattern and expense.category_id is not None:
         existing_result = await db.execute(
             select(CategoryRule).where(
                 CategoryRule.user_id == user_id,
@@ -427,6 +518,17 @@ async def link(
             )
         )
         if existing_result.scalar_one_or_none() is None:
+            abs_amount = abs(bank.amount)
+            if req.rule_amount_mode == "exact":
+                min_amount: int | None = abs_amount
+                max_amount: int | None = abs_amount
+            elif req.rule_amount_mode == "percent":
+                ratio = req.rule_amount_tolerance_pct / 100
+                min_amount = round(abs_amount * (1 - ratio))
+                max_amount = round(abs_amount * (1 + ratio))
+            else:
+                min_amount = None
+                max_amount = None
             new_rule = CategoryRule(
                 user_id=user_id,
                 pattern=pattern,
@@ -434,6 +536,9 @@ async def link(
                 match_type="contains",
                 category_id=expense.category_id,
                 priority=0,
+                transaction_type=req.rule_transaction_type,
+                min_amount=min_amount,
+                max_amount=max_amount,
             )
             db.add(new_rule)
 

@@ -33,6 +33,9 @@ import {
   type ReconciliationLink,
   type ReconciliationSuggestion,
   type ReconciliationView,
+  type RuleAmountMode,
+  type RuleMatch,
+  type RuleTransactionType,
 } from '@/api/types'
 
 // ── Responsive ────────────────────────────────────────────────────
@@ -81,8 +84,17 @@ const error = ref('')
 const localLinks = ref<ReconciliationLink[]>([])
 // Suggestions from backend (can be locally dismissed)
 const localSuggestions = ref<ReconciliationSuggestion[]>([])
-// Bank tx IDs whose suggestion has been dismissed locally
+// Rule matches from backend (bank txs matched by a rule but no existing expense)
+const localRuleMatches = ref<RuleMatch[]>([])
+// Bank tx IDs whose suggestion/rule-match has been dismissed locally
 const dismissed = ref<Set<number>>(new Set())
+
+// Search filter
+const filterQuery = ref<string>('')
+
+// Status filter: which rows to show by reconciliation state
+type StatusFilter = 'all' | 'linked' | 'suggested' | 'rule_match' | 'unmatched'
+const statusFilter = ref<StatusFilter>('all')
 
 // Selection state
 const selBankId = ref<number | null>(null)
@@ -119,6 +131,20 @@ const sortedBankTxs = computed<BankTx[]>(() =>
   }),
 )
 
+// Mobile filtered lists derived from displayedRows
+const filteredVisibleBankIds = computed<Set<number>>(
+  () => new Set(displayedRows.value.flatMap((r) => (r.bank ? [r.bank.id] : []))),
+)
+const filteredVisibleExpIds = computed<Set<number>>(
+  () => new Set(displayedRows.value.flatMap((r) => (r.expense ? [r.expense.id] : []))),
+)
+const filteredSortedBankTxs = computed<BankTx[]>(() =>
+  sortedBankTxs.value.filter((b) => filteredVisibleBankIds.value.has(b.id)),
+)
+const filteredSortedExpenses = computed<ReconciliationExpense[]>(() =>
+  sortedExpenses.value.filter((e) => filteredVisibleExpIds.value.has(e.id)),
+)
+
 // Index in sortedExpenses where the blueprint card should be inserted
 const mobileBlueprintInsertIndex = computed<number>(() => {
   if (selBankId.value === null) return -1
@@ -152,6 +178,12 @@ const showNewExpenseModal = ref(false)
 const newExpLabel = ref('')
 const newExpAmount = ref<number>(0)
 const newExpCategoryId = ref<number | null>(null)
+
+// Rule options shown in the new expense wizard
+const createRuleEnabled = ref<boolean>(true)
+const ruleAmountMode = ref<RuleAmountMode>('none')
+const ruleAmountTolerancePct = ref<number>(10)
+const ruleTransactionType = ref<RuleTransactionType>('any')
 
 // Delete confirmation
 const pendingDelete = ref<{ id: number; kind: 'bank' | 'expense'; label: string } | null>(null)
@@ -191,6 +223,15 @@ const activeSuggestions = computed<ReconciliationSuggestion[]>(() =>
   ),
 )
 
+const activeRuleMatches = computed<RuleMatch[]>(() =>
+  localRuleMatches.value.filter(
+    (rm) =>
+      !dismissed.value.has(rm.bank_tx.id) &&
+      !isLinkedBank(rm.bank_tx.id) &&
+      !activeSuggestions.value.some((s) => s.bank_tx.id === rm.bank_tx.id),
+  ),
+)
+
 function isLinkedBank(id: number): boolean {
   return localLinks.value.some((l) => l.bank_tx_id === id)
 }
@@ -217,18 +258,20 @@ function suggestionForExpense(id: number): ReconciliationSuggestion | undefined 
   return activeSuggestions.value.find((s) => s.expense.id === id)
 }
 
-// Rows for split layout: links → suggestions → unmatched
+// Rows for split layout: links → suggestions → rule matches → unmatched
 interface Row {
   bank: BankTx | null
   expense: ReconciliationExpense | null
   linked: boolean
   suggested: boolean
+  ruleMatch: { category_id: number; category_name: string | null } | null
   date: string
 }
 
 const rows = computed<Row[]>(() => {
   const suggBankIds = new Set(activeSuggestions.value.map((s) => s.bank_tx.id))
   const suggExpIds = new Set(activeSuggestions.value.map((s) => s.expense.id))
+  const ruleMatchBankIds = new Set(activeRuleMatches.value.map((rm) => rm.bank_tx.id))
 
   const all: Row[] = []
 
@@ -236,42 +279,115 @@ const rows = computed<Row[]>(() => {
   for (const lk of localLinks.value) {
     const b = bankTxs.value.find((t) => t.id === lk.bank_tx_id)
     const e = expenses.value.find((x) => x.id === lk.expense_id)
-    if (b && e) all.push({ bank: b, expense: e, linked: true, suggested: false, date: b.date })
+    if (b && e)
+      all.push({ bank: b, expense: e, linked: true, suggested: false, ruleMatch: null, date: b.date })
   }
 
   // Suggestions
   for (const s of activeSuggestions.value) {
-    all.push({ bank: s.bank_tx, expense: s.expense, linked: false, suggested: true, date: s.bank_tx.date })
+    all.push({
+      bank: s.bank_tx,
+      expense: s.expense,
+      linked: false,
+      suggested: true,
+      ruleMatch: null,
+      date: s.bank_tx.date,
+    })
   }
 
-  // Unmatched bank transactions
+  // Rule matches (bank tx matched by rule, no existing expense)
+  for (const rm of activeRuleMatches.value) {
+    all.push({
+      bank: rm.bank_tx,
+      expense: null,
+      linked: false,
+      suggested: false,
+      ruleMatch: { category_id: rm.category_id, category_name: rm.category_name },
+      date: rm.bank_tx.date,
+    })
+  }
+
+  // Unmatched bank transactions (not in suggestions or rule matches)
   for (const b of bankTxs.value) {
-    if (!isLinkedBank(b.id) && !suggBankIds.has(b.id)) {
-      all.push({ bank: b, expense: null, linked: false, suggested: false, date: b.date })
+    if (!isLinkedBank(b.id) && !suggBankIds.has(b.id) && !ruleMatchBankIds.has(b.id)) {
+      all.push({ bank: b, expense: null, linked: false, suggested: false, ruleMatch: null, date: b.date })
     }
   }
 
   // Unmatched expenses
   for (const e of expenses.value) {
     if (!isLinkedExpense(e.id) && !suggExpIds.has(e.id)) {
-      all.push({ bank: null, expense: e, linked: false, suggested: false, date: e.date })
+      all.push({ bank: null, expense: e, linked: false, suggested: false, ruleMatch: null, date: e.date })
     }
   }
 
   return all.sort((a, b) => {
     const dateDiff = b.date.localeCompare(a.date)
     if (dateDiff !== 0) return dateDiff
-    // Secondary sort: bank tx ID ascending to keep a stable, consistent order within the same day
     const aId = a.bank?.id ?? a.expense?.id ?? 0
     const bId = b.bank?.id ?? b.expense?.id ?? 0
     return aId - bId
   })
 })
 
-const linkedCount = computed(() => localLinks.value.length)
-const realExpenses = computed(() => expenses.value.filter((e) => e.status !== 'planned'))
+// Filter rows by a text query (case-insensitive, active after 3 chars).
+// When a bank tx or expense matches, include its paired partner row too.
+const filteredRows = computed<Row[]>(() => {
+  const q = filterQuery.value.trim().toLowerCase()
+  if (q.length < 3) return rows.value
 
-// Month navigation
+  // Collect IDs that directly match the query
+  const matchBankIds = new Set<number>()
+  const matchExpIds = new Set<number>()
+  for (const row of rows.value) {
+    if (row.bank && row.bank.label.toLowerCase().includes(q)) matchBankIds.add(row.bank.id)
+    if (row.expense && row.expense.label.toLowerCase().includes(q)) matchExpIds.add(row.expense.id)
+  }
+
+  return rows.value.filter((row) => {
+    if (row.bank && matchBankIds.has(row.bank.id)) return true
+    if (row.expense && matchExpIds.has(row.expense.id)) return true
+    // Partner row: keep it if its bank side appears in a row with a matching expense
+    if (row.bank) {
+      const paired = rows.value.some((r) => r.bank?.id === row.bank!.id && r.expense && matchExpIds.has(r.expense.id))
+      if (paired) return true
+    }
+    // Partner row: keep it if its expense side appears in a row with a matching bank tx
+    if (row.expense) {
+      const paired = rows.value.some((r) => r.expense?.id === row.expense!.id && r.bank && matchBankIds.has(r.bank.id))
+      if (paired) return true
+    }
+    return false
+  })
+})
+
+const linkedCount = computed(() => localLinks.value.length)
+const unmatchedCount = computed(
+  () => rows.value.filter((r) => !r.linked && !r.suggested && r.ruleMatch === null).length,
+)
+
+// Counts per status bucket within the current text filter (used by pill buttons)
+const filteredTextActive = computed(() => filterQuery.value.trim().length >= 3)
+const filteredLinkedCount = computed(() => filteredRows.value.filter((r) => r.linked).length)
+const filteredSuggestedCount = computed(() => filteredRows.value.filter((r) => r.suggested).length)
+const filteredRuleMatchCount = computed(() => filteredRows.value.filter((r) => r.ruleMatch !== null).length)
+const filteredUnmatchedCount = computed(
+  () => filteredRows.value.filter((r) => !r.linked && !r.suggested && r.ruleMatch === null).length,
+)
+
+// Final displayed rows: text filter → status filter
+const displayedRows = computed<Row[]>(() => {
+  const f = statusFilter.value
+  if (f === 'all') return filteredRows.value
+  return filteredRows.value.filter((row) => {
+    if (f === 'linked') return row.linked
+    if (f === 'suggested') return row.suggested
+    if (f === 'rule_match') return row.ruleMatch !== null
+    if (f === 'unmatched') return !row.linked && !row.suggested && row.ruleMatch === null
+    return true
+  })
+})
+const realExpenses = computed(() => expenses.value.filter((e) => e.status !== 'planned'))
 const monthLabel = computed<string>(() => {
   const [y, m] = month.value.split('-')
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('fr-FR', {
@@ -299,7 +415,14 @@ async function loadView(preserveScroll = false): Promise<void> {
     viewData.value = data
     localLinks.value = [...data.links]
     localSuggestions.value = [...data.suggestions]
+    localRuleMatches.value = [...(data.rule_matches ?? [])]
     dismissed.value = new Set()
+    // Only reset filters when doing a full navigation (month/account change),
+    // not when refreshing after an action (preserveScroll = true).
+    if (!preserveScroll) {
+      filterQuery.value = ''
+      statusFilter.value = 'all'
+    }
     selBankId.value = null
     selExpId.value = null
   } catch {
@@ -417,33 +540,153 @@ function dismissSuggestion(bankId: number): void {
   dismissed.value = new Set([...dismissed.value, bankId])
 }
 
-// ── New expense modal ─────────────────────────────────────────────
-async function openNewExpenseModal(): Promise<void> {
+// ── Rule match: one-click create + link ───────────────────────────
+async function _createAndLink(bankId: number, categoryId: number): Promise<void> {
+  const bank = bankTxs.value.find((b) => b.id === bankId)
+  if (!bank || selectedAccountId.value === null) return
+  const newTx = await createTransaction({
+    account_id: selectedAccountId.value,
+    date: bank.date,
+    category_id: categoryId,
+    amount: bank.amount,
+    memo: titleCase(bank.label),
+    status: 'real',
+  })
+  const req: LinkRequest = { bank_tx_id: bankId, expense_id: newTx.id, adjust_amount: false, memo: null }
+  const link = await createLink(req)
+  localLinks.value = [...localLinks.value, link]
+  animBankId.value = bankId
+  setTimeout(() => { if (animBankId.value === bankId) animBankId.value = null }, 1500)
+}
+
+// ── Bulk actions ──────────────────────────────────────────────────
+async function confirmAllSuggestions(): Promise<void> {
+  linking.value = true
+  try {
+    for (const s of [...activeSuggestions.value]) {
+      const req: LinkRequest = {
+        bank_tx_id: s.bank_tx.id,
+        expense_id: s.expense.id,
+        adjust_amount: true,
+        memo: titleCase(s.bank_tx.label),
+      }
+      const link = await createLink(req)
+      localLinks.value = [...localLinks.value, link]
+      if (link.created_rule) {
+        rulesCount.value += 1
+        toastStore.success(`Règle créée pour « ${categoryNameById(link.created_rule.category_id)} »`)
+      }
+    }
+    selBankId.value = null
+    selExpId.value = null
+  } catch {
+    error.value = 'Erreur lors de la liaison en masse.'
+  } finally {
+    linking.value = false
+  }
+}
+
+async function confirmAllRuleMatches(): Promise<void> {
+  if (selectedAccountId.value === null) return
+  linking.value = true
+  try {
+    for (const rm of [...activeRuleMatches.value]) {
+      await _createAndLink(rm.bank_tx.id, rm.category_id)
+    }
+    selBankId.value = null
+    await loadView(true)
+  } catch {
+    error.value = 'Erreur lors de la création en masse.'
+  } finally {
+    linking.value = false
+  }
+}
+
+async function confirmAll(): Promise<void> {
+  if (selectedAccountId.value === null) return
+  linking.value = true
+  try {
+    for (const s of [...activeSuggestions.value]) {
+      const req: LinkRequest = {
+        bank_tx_id: s.bank_tx.id,
+        expense_id: s.expense.id,
+        adjust_amount: true,
+        memo: titleCase(s.bank_tx.label),
+      }
+      const link = await createLink(req)
+      localLinks.value = [...localLinks.value, link]
+      if (link.created_rule) {
+        rulesCount.value += 1
+        toastStore.success(`Règle créée pour « ${categoryNameById(link.created_rule.category_id)} »`)
+      }
+    }
+    for (const rm of [...activeRuleMatches.value]) {
+      await _createAndLink(rm.bank_tx.id, rm.category_id)
+    }
+    selBankId.value = null
+    selExpId.value = null
+    if (activeRuleMatches.value.length > 0) {
+      await loadView(true)
+    }
+  } catch {
+    error.value = 'Erreur lors de la liaison en masse.'
+  } finally {
+    linking.value = false
+  }
+}
+
+
+async function openNewExpenseModal(preselectedCategoryId?: number): Promise<void> {
   if (selBankId.value === null) return
   const bank = bankTxs.value.find((b) => b.id === selBankId.value)
   if (!bank) return
   newExpLabel.value = titleCase(bank.label)
   newExpAmount.value = Math.abs(bank.amount) / 100
-  // Show modal immediately with no pre-selection while the API resolves
-  newExpCategoryId.value = null
   suggestedCategoryName.value = ''
-  showNewExpenseModal.value = true
-  // Apply rules-based categorization
-  try {
-    const result = await categorizeSingle(null, bank.label)
-    if (result.category_id !== null) {
-      newExpCategoryId.value = result.category_id
-      const cat = allCategories.value.find((c) => c.id === result.category_id)
-      suggestedCategoryName.value = cat?.name ?? ''
+  // Pre-select transaction type from the bank tx sign
+  ruleTransactionType.value = bank.amount < 0 ? 'debit' : bank.amount > 0 ? 'credit' : 'any'
+  ruleAmountMode.value = 'none'
+  ruleAmountTolerancePct.value = 10
+
+  if (preselectedCategoryId !== undefined) {
+    // Category already known from rule match — no need to call the categorize API
+    newExpCategoryId.value = preselectedCategoryId
+    const cat = allCategories.value.find((c) => c.id === preselectedCategoryId)
+    suggestedCategoryName.value = cat?.name ?? ''
+    showNewExpenseModal.value = true
+  } else {
+    // Show modal immediately; resolve category asynchronously
+    newExpCategoryId.value = null
+    showNewExpenseModal.value = true
+    // Apply rules-based categorization
+    // Pass bank.label as both payeeName and memo: bank transactions have a single
+    // label field, so both "payee" and "memo" rules should be able to match it.
+    // Pass bank.amount so amount-range constraints are properly evaluated.
+    try {
+      const result = await categorizeSingle(bank.label, bank.label, bank.amount)
+      if (result.category_id !== null) {
+        newExpCategoryId.value = result.category_id
+        const cat = allCategories.value.find((c) => c.id === result.category_id)
+        suggestedCategoryName.value = cat?.name ?? ''
+      }
+    } catch {
+      // Silently ignore — user can select manually
     }
-  } catch {
-    // Silently ignore — user can select manually
   }
+}
+
+function openRuleMatchWizard(bankId: number, categoryId: number): void {
+  selBankId.value = bankId
+  openNewExpenseModal(categoryId)
 }
 
 function closeNewExpenseModal(): void {
   showNewExpenseModal.value = false
   suggestedCategoryName.value = ''
+  createRuleEnabled.value = true
+  ruleAmountMode.value = 'none'
+  ruleAmountTolerancePct.value = 10
+  ruleTransactionType.value = 'any'
 }
 
 async function onCategoryCreated(cat: Category): Promise<void> {
@@ -454,11 +697,17 @@ async function onCategoryCreated(cat: Category): Promise<void> {
 
 async function confirmNewExpense(): Promise<void> {
   if (selectedAccountId.value === null || selBankId.value === null) return
+  if (newExpCategoryId.value === null) return  // category is mandatory
   const bank = bankTxs.value.find((b) => b.id === selBankId.value)
   if (!bank) return
   linking.value = true
   try {
     const sign = bank.amount < 0 ? -1 : 1
+    // Capture rule options before closeNewExpenseModal() resets them
+    const capturedCreateRule = createRuleEnabled.value
+    const capturedRuleTransactionType = ruleTransactionType.value
+    const capturedRuleAmountMode = ruleAmountMode.value
+    const capturedRuleAmountTolerancePct = ruleAmountTolerancePct.value
     const newTx = await createTransaction({
       account_id: selectedAccountId.value,
       date: bank.date,
@@ -473,6 +722,10 @@ async function confirmNewExpense(): Promise<void> {
       expense_id: newTx.id,
       adjust_amount: false,
       memo: null,
+      skip_rule: !capturedCreateRule,
+      rule_transaction_type: capturedRuleTransactionType,
+      rule_amount_mode: capturedRuleAmountMode,
+      rule_amount_tolerance_pct: capturedRuleAmountTolerancePct,
     }
     await doLink(req)
     await loadView(true)
@@ -638,6 +891,11 @@ const modalBank = computed<BankTx | undefined>(() =>
   modalBankId.value !== null ? bankTxs.value.find((b) => b.id === modalBankId.value) : undefined,
 )
 
+// The bank transaction currently selected in the new-expense wizard
+const wizardBank = computed<BankTx | undefined>(() =>
+  selBankId.value !== null ? bankTxs.value.find((b) => b.id === selBankId.value) : undefined,
+)
+
 const modalExpense = computed<ReconciliationExpense | undefined>(() =>
   modalExpId.value !== null ? expenses.value.find((e) => e.id === modalExpId.value) : undefined,
 )
@@ -652,8 +910,8 @@ const modalHasDelta = computed<boolean>(() => {
   <div class="bg-base-200">
 
   <!-- PAGE HEADER sticky -->
-  <div class="bg-base-100 border-b border-base-200 sticky top-0 z-30">
-      <div class="max-w-7xl mx-auto px-3 py-2 flex items-center gap-2 flex-wrap">
+  <div class="@container bg-base-100 border-b border-base-200 sticky top-0 z-30">
+      <div class="max-w-[120rem] mx-auto px-3 py-2 flex items-center gap-x-2 gap-y-1 flex-wrap">
         <h1 class="text-base font-bold text-base-content hidden sm:block">↔ Pointage</h1>
 
         <!-- Account selector -->
@@ -672,8 +930,57 @@ const modalHasDelta = computed<boolean>(() => {
           <button class="btn btn-ghost btn-xs" @click="nextMonth">▶</button>
         </div>
 
-        <!-- Actions -->
-        <div class="ml-auto flex gap-1.5">
+        <!-- Search filter + status pills
+             Container wide enough → inline between month-nav and actions (1 row)
+             Container too narrow  → order-last + full width → own row at bottom -->
+        <div class="order-last w-full flex items-center gap-1 @min-[1200px]:order-none @min-[1200px]:w-auto">
+          <div class="relative flex items-center shrink-0">
+            <input
+              v-model="filterQuery"
+              type="text"
+              placeholder="🔍 Filtrer…"
+              class="input input-bordered input-xs sm:input-sm w-36 sm:w-48"
+              :class="filterQuery ? 'pr-6' : ''"
+            >
+            <button
+              v-if="filterQuery"
+              class="absolute right-1.5 text-base-content/40 hover:text-base-content transition-colors"
+              tabindex="-1"
+              @click="filterQuery = ''"
+            >✕</button>
+          </div>
+          <span v-if="filteredTextActive" class="badge badge-neutral badge-sm font-mono shrink-0">{{ filteredRows.length }}</span>
+          <button
+            class="btn btn-xs rounded-full shrink-0"
+            :class="statusFilter === 'all' ? 'btn-neutral' : 'btn-ghost text-base-content/60'"
+            @click="statusFilter = 'all'"
+          >Toutes</button>
+          <button
+            class="btn btn-xs rounded-full shrink-0"
+            :class="statusFilter === 'linked' ? 'btn-success text-white' : 'btn-ghost text-base-content/60'"
+            @click="statusFilter = 'linked'"
+          >✅ Liées <span class="badge badge-xs ml-0.5">{{ filteredTextActive ? filteredLinkedCount : linkedCount }}</span></button>
+          <button
+            class="btn btn-xs rounded-full shrink-0"
+            :class="statusFilter === 'suggested' ? 'btn-primary' : 'btn-ghost text-base-content/60'"
+            @click="statusFilter = 'suggested'"
+          >💡 Suggestions <span class="badge badge-xs ml-0.5">{{ filteredTextActive ? filteredSuggestedCount : activeSuggestions.length }}</span></button>
+          <button
+            class="btn btn-xs rounded-full shrink-0"
+            :class="statusFilter === 'rule_match' ? 'btn-warning' : 'btn-ghost text-base-content/60'"
+            @click="statusFilter = 'rule_match'"
+          >✨ À créer <span class="badge badge-xs ml-0.5">{{ filteredTextActive ? filteredRuleMatchCount : activeRuleMatches.length }}</span></button>
+          <button
+            class="btn btn-xs rounded-full shrink-0"
+            :class="statusFilter === 'unmatched' ? 'btn-ghost border border-base-content/30 text-base-content' : 'btn-ghost text-base-content/60'"
+            @click="statusFilter = 'unmatched'"
+          >⚪ Non liées <span class="badge badge-xs ml-0.5">{{ filteredTextActive ? filteredUnmatchedCount : unmatchedCount }}</span></button>
+        </div>
+
+        <!-- Actions
+             < sm : w-full → own line (3-row layout)
+             sm+  : ml-auto → pushed to the right of its line -->
+        <div class="w-full flex gap-1.5 justify-end shrink-0 sm:w-auto sm:ml-auto">
           <button
             class="btn btn-outline btn-xs sm:btn-sm gap-1"
             @click="showRulesModal = true"
@@ -784,24 +1091,54 @@ const modalHasDelta = computed<boolean>(() => {
               <span class="badge badge-ghost badge-sm font-mono">{{ linkedCount }}/{{ bankTxs.length }}</span>
             </div>
             <div />
-            <div class="px-4 py-3 flex items-center gap-2">
+            <div class="px-4 py-3 flex items-center gap-2 flex-wrap">
               <span class="font-semibold text-sm text-base-content/80">💸 Dépenses</span>
               <span class="badge badge-ghost badge-sm font-mono">{{ expenses.length }}</span>
-              <button
-                v-if="selBankId !== null"
-                class="btn btn-primary btn-xs ml-auto"
-                @click="openNewExpenseModal"
-              >+ Nouvelle</button>
+              <div class="ml-auto flex items-center gap-1 flex-wrap">
+                <button
+                  v-if="selBankId !== null"
+                  class="btn btn-primary btn-xs"
+                  @click="() => openNewExpenseModal()"
+                >+ Nouvelle</button>
+                <template v-if="activeSuggestions.length > 0 || activeRuleMatches.length > 0">
+                  <div class="divider divider-horizontal mx-0" />
+                  <button
+                    v-if="activeSuggestions.length > 0"
+                    class="btn btn-outline btn-xs gap-1"
+                    :disabled="linking"
+                    :title="`Valider les ${activeSuggestions.length} suggestion(s)`"
+                    @click="confirmAllSuggestions"
+                  >⇢ Sugg. <span class="badge badge-xs badge-neutral">{{ activeSuggestions.length }}</span></button>
+                  <button
+                    v-if="activeRuleMatches.length > 0"
+                    class="btn btn-outline btn-xs gap-1"
+                    :disabled="linking"
+                    :title="`Créer et lier les ${activeRuleMatches.length} correspondance(s)`"
+                    @click="confirmAllRuleMatches"
+                  >✨ Créer <span class="badge badge-xs badge-neutral">{{ activeRuleMatches.length }}</span></button>
+                  <button
+                    v-if="activeSuggestions.length + activeRuleMatches.length > 1"
+                    class="btn btn-primary btn-xs"
+                    :disabled="linking"
+                    title="Tout pointer automatiquement"
+                    @click="confirmAll"
+                  >✅ Tout</button>
+                </template>
+              </div>
             </div>
           </div>
 
           <!-- Rows -->
           <div>
             <div
-              v-for="row in rows"
-              :key="`${row.bank?.id ?? 'x'}-${row.expense?.id ?? 'x'}-${row.linked ? 'L' : row.suggested ? 'S' : 'U'}`"
+              v-for="row in displayedRows"
+              :key="`${row.bank?.id ?? 'x'}-${row.expense?.id ?? 'x'}-${row.linked ? 'L' : row.suggested ? 'S' : row.ruleMatch ? 'R' : 'U'}`"
               class="border-b border-base-200 transition-colors"
-              :class="{ 'match-anim': animBankId !== null && row.linked && row.bank?.id === animBankId, 'bg-purple-50/30': row.suggested }"
+              :class="{
+                'match-anim': animBankId !== null && row.linked && row.bank?.id === animBankId,
+                'bg-purple-50/30': row.suggested,
+                'bg-amber-50/20': row.ruleMatch !== null,
+              }"
               style="display:grid;grid-template-columns:1fr 48px 1fr;"
             >
               <!-- Bank cell -->
@@ -813,6 +1150,7 @@ const modalHasDelta = computed<boolean>(() => {
                       'is-linked': row.linked,
                       'is-selected': selBankId === row.bank.id && !row.linked,
                       'is-suggested': row.suggested && selBankId !== row.bank.id && !row.linked,
+                      'is-rule-match': row.ruleMatch !== null && !row.linked,
                     }"
                     :style="{ backgroundColor: BANK_BG }"
                     @click="!row.linked && clickBank(row.bank.id)"
@@ -823,6 +1161,7 @@ const modalHasDelta = computed<boolean>(() => {
                         <p class="card-sub text-xs text-base-content/50 mt-0.5 flex flex-wrap gap-1">
                           {{ fmtDate(row.bank.date) }}
                           <span v-if="row.suggested" class="badge badge-sm" style="background:#ede9fe;color:#7c3aed;border-color:#c4b5fd;">💡 suggestion</span>
+                          <span v-else-if="row.ruleMatch !== null" class="badge badge-sm" style="background:#fef3c7;color:#d97706;border-color:#fde68a;">✨ correspondance</span>
                           <span v-else-if="!row.linked" class="badge badge-ghost badge-sm text-base-content/50">⚪ non pointée</span>
                         </p>
                       </div>
@@ -880,8 +1219,35 @@ const modalHasDelta = computed<boolean>(() => {
 
               <!-- Expense cell -->
               <div class="recon-cell px-4 py-3 grid" style="min-height:72px;">
-                <template v-if="selBankId !== null && row.bank?.id === selBankId && !row.linked && !row.expense">
-                  <div class="blueprint-card slide-in" @click="openNewExpenseModal">
+                <template v-if="row.ruleMatch !== null && !row.linked">
+                  <!-- Virtual blueprint expense: pre-filled from bank tx + matched rule category -->
+                  <div
+                    class="rule-match-blueprint w-full"
+                    :style="expenseBg(row.ruleMatch.category_id)"
+                    @click="openRuleMatchWizard(row.bank!.id, row.ruleMatch.category_id)"
+                  >
+                    <div class="flex justify-between items-start gap-2">
+                      <div class="flex-1 min-w-0">
+                        <p class="font-medium text-sm text-base-content/75 truncate italic" :style="labelFontSize(row.bank!.label)">
+                          {{ titleCase(row.bank!.label) }}
+                        </p>
+                        <p class="card-sub text-xs text-base-content/50 mt-0.5">
+                          <template v-if="row.ruleMatch.category_name">{{ row.ruleMatch.category_name }} · </template>
+                          {{ fmtDate(row.bank!.date) }}
+                          <span class="badge badge-sm ml-1" style="background:#fef3c7;color:#d97706;border-color:#fde68a;">✨ à créer</span>
+                        </p>
+                      </div>
+                      <span
+                        class="font-bold text-sm shrink-0"
+                        :class="row.bank!.amount >= 0 ? 'text-green-400' : 'text-red-400'"
+                      >
+                        {{ fmtAmt(row.bank!.amount) }}
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <template v-else-if="selBankId !== null && row.bank?.id === selBankId && !row.linked && !row.expense">
+                  <div class="blueprint-card slide-in" @click="() => openNewExpenseModal()">
                     <span class="bp-icon text-3xl leading-none opacity-80">+</span>
                     <span class="bp-label text-xs font-semibold tracking-wide opacity-70">Créer une dépense liée</span>
                   </div>
@@ -966,7 +1332,7 @@ const modalHasDelta = computed<boolean>(() => {
             <!-- Bank panel -->
             <div class="scroll-snap-start flex-none w-full">
               <div
-                v-for="b in sortedBankTxs"
+                v-for="b in filteredSortedBankTxs"
                 :key="b.id"
                 class="mobile-card"
                 :class="{
@@ -1033,14 +1399,14 @@ const modalHasDelta = computed<boolean>(() => {
 
             <!-- Expenses panel -->
             <div class="scroll-snap-start flex-none w-full">
-              <template v-for="(e, i) in sortedExpenses" :key="e.id">
+              <template v-for="(e, i) in filteredSortedExpenses" :key="e.id">
                 <!-- Blueprint card: inline at the right date position -->
                 <div
                   v-if="selBankId !== null && i === mobileBlueprintInsertIndex"
                   ref="mobileBlueprintInlineRef"
                   class="px-3 py-1.5"
                 >
-                  <button class="blueprint-card slide-in" @click="openNewExpenseModal">
+                  <button class="blueprint-card slide-in" @click="() => openNewExpenseModal()">
                     <span class="text-4xl leading-none opacity-80">+</span>
                     <span class="text-xs font-semibold tracking-wide opacity-70">Nouvelle dépense liée</span>
                   </button>
@@ -1103,11 +1469,11 @@ const modalHasDelta = computed<boolean>(() => {
               </template>
               <!-- Blueprint at end if selected bank tx date is older than all expenses -->
               <div
-                v-if="selBankId !== null && mobileBlueprintInsertIndex >= sortedExpenses.length"
+                v-if="selBankId !== null && mobileBlueprintInsertIndex >= filteredSortedExpenses.length"
                 ref="mobileBlueprintEndRef"
                 class="px-3 py-1.5"
               >
-                <button class="blueprint-card slide-in" @click="openNewExpenseModal">
+                <button class="blueprint-card slide-in" @click="() => openNewExpenseModal()">
                   <span class="text-4xl leading-none opacity-80">+</span>
                   <span class="text-xs font-semibold tracking-wide opacity-70">Nouvelle dépense liée</span>
                 </button>
@@ -1260,32 +1626,32 @@ const modalHasDelta = computed<boolean>(() => {
       >
         <div class="bg-base-100 rounded-2xl shadow-2xl w-full mx-4 overflow-y-auto new-expense-modal-box" style="max-height:92vh;max-width:28rem;padding:1.75rem;">
           <h2 class="text-xl font-bold text-base-content mb-0.5">✨ Nouvelle dépense</h2>
-          <p v-if="selBankId !== null" class="text-sm text-base-content/60 mb-4">
-            Créer et lier à "{{ titleCase(bankTxs.find((b) => b.id === selBankId)?.label ?? '') }}"
+          <p v-if="wizardBank" class="text-sm text-base-content/60 mb-4">
+            Créer et lier à "{{ titleCase(wizardBank.label) }}"
           </p>
 
           <!-- Bank tx info + expense form (side by side in landscape) -->
           <div class="new-expense-cols">
             <!-- Bank tx info -->
             <div
-              v-if="selBankId !== null && bankTxs.find((b) => b.id === selBankId)"
+              v-if="wizardBank"
               class="rounded-xl bg-info/10 border border-info/20 p-4 mb-3"
             >
               <p class="text-xs font-bold text-info uppercase tracking-wide mb-2">🏦 Transaction bancaire</p>
               <div class="flex justify-between items-start gap-2">
                 <div>
                   <p class="font-semibold text-sm text-base-content">
-                    {{ bankTxs.find((b) => b.id === selBankId)?.label }}
+                    {{ wizardBank.label }}
                   </p>
                   <p class="text-xs text-base-content/50 mt-0.5">
-                    {{ fmtDate(bankTxs.find((b) => b.id === selBankId)!.date) }}
+                    {{ fmtDate(wizardBank.date) }}
                   </p>
                 </div>
                 <span
                   class="font-bold text-base shrink-0"
-                  :class="(bankTxs.find((b) => b.id === selBankId)?.amount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'"
+                  :class="wizardBank.amount >= 0 ? 'text-green-600' : 'text-red-600'"
                 >
-                  {{ fmtAmt(bankTxs.find((b) => b.id === selBankId)!.amount) }}
+                  {{ fmtAmt(wizardBank.amount) }}
                 </span>
               </div>
             </div>
@@ -1323,9 +1689,84 @@ const modalHasDelta = computed<boolean>(() => {
               </div>
             </div>
           </div><!-- end .new-expense-cols -->
+
+          <!-- Rule preview: shown when the bank label yields a usable pattern -->
+          <div
+            v-if="wizardBank?.rule_pattern"
+            class="rounded-xl p-3 mb-3"
+            style="background:oklch(var(--wa)/0.07);border:1px solid oklch(var(--wa)/0.3);"
+          >
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-xs font-bold uppercase tracking-wide" style="color:oklch(var(--wa));">
+                🏷️ Règle de catégorisation
+              </p>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <span class="text-xs text-base-content/60">{{ createRuleEnabled ? 'Créer' : 'Ne pas créer' }}</span>
+                <input v-model="createRuleEnabled" type="checkbox" class="toggle toggle-xs toggle-warning" />
+              </label>
+            </div>
+            <p class="text-xs font-mono text-base-content/80 mb-3 truncate">
+              contient <strong>« {{ wizardBank.rule_pattern }} »</strong>
+            </p>
+
+            <!-- Options (only when rule creation is enabled) -->
+            <template v-if="createRuleEnabled">
+            <!-- Transaction type -->
+            <p class="text-xs font-semibold text-base-content/60 mb-1">Type de transaction :</p>
+            <div class="flex flex-wrap gap-x-3 gap-y-1 mb-2">
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input v-model="ruleTransactionType" type="radio" value="any" class="radio radio-xs" />
+                <span class="text-xs">Toutes</span>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input v-model="ruleTransactionType" type="radio" value="debit" class="radio radio-xs" />
+                <span class="text-xs">Dépenses (négatives)</span>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input v-model="ruleTransactionType" type="radio" value="credit" class="radio radio-xs" />
+                <span class="text-xs">Revenus (positifs)</span>
+              </label>
+            </div>
+
+            <!-- Amount constraint -->
+            <p class="text-xs font-semibold text-base-content/60 mb-1">Contrainte de montant :</p>
+            <div class="flex flex-col gap-1">
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input v-model="ruleAmountMode" type="radio" value="none" class="radio radio-xs" />
+                <span class="text-xs">Sans contrainte</span>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input v-model="ruleAmountMode" type="radio" value="exact" class="radio radio-xs" />
+                <span class="text-xs">Ce montant exactement ({{ fmtAmt(Math.abs(wizardBank.amount)) }})</span>
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input v-model="ruleAmountMode" type="radio" value="percent" class="radio radio-xs" />
+                <span class="text-xs">±</span>
+                <input
+                  v-model.number="ruleAmountTolerancePct"
+                  type="number"
+                  min="1"
+                  max="99"
+                  class="input input-xs input-bordered w-14"
+                  :disabled="ruleAmountMode !== 'percent'"
+                  @click.stop
+                />
+                <span class="text-xs">%</span>
+              </label>
+            </div>
+            </template>
+          </div>
+
+          <p v-if="newExpCategoryId === null" class="text-xs text-error mt-1 mb-2">
+            ⚠️ La catégorie est obligatoire.
+          </p>
           <div class="flex gap-2 justify-end">
             <button class="btn btn-ghost btn-sm" @click="closeNewExpenseModal">Annuler</button>
-            <button class="btn btn-primary btn-sm" :disabled="linking" @click="confirmNewExpense">
+            <button
+              class="btn btn-primary btn-sm"
+              :disabled="linking || newExpCategoryId === null"
+              @click="confirmNewExpense"
+            >
               <span v-if="linking" class="loading loading-spinner loading-xs" />
               ✅ Confirmer
             </button>
@@ -1365,7 +1806,7 @@ const modalHasDelta = computed<boolean>(() => {
       v-if="showRulesModal"
       :category-groups="allCategoryGroups"
       @close="showRulesModal = false"
-      @changed="rulesCount = $event"
+      @changed="rulesCount = $event; loadView(true)"
     />
 
     <!-- Import modal -->
@@ -1399,6 +1840,27 @@ const modalHasDelta = computed<boolean>(() => {
 .expense-card.is-linked:hover       { border-color: oklch(var(--su) / 0.55); }
 .expense-card.is-planned            { border-style: dashed; border-color: oklch(var(--bc) / 0.2); background-color: oklch(var(--bc) / 0.04); }
 .expense-card.is-planned:hover:not(.is-linked) { border-color: oklch(var(--wa) / 0.5); background-color: oklch(var(--wa) / 0.1); }
+
+/* ── Rule match bank card ────────────────────────────────────────── */
+.bank-card.is-rule-match {
+  border-color: oklch(var(--wa) / 0.4);
+  border-style: dashed;
+}
+.bank-card.is-rule-match:hover { border-color: oklch(var(--wa) / 0.9) !important; }
+
+/* ── Rule match virtual expense card ────────────────────────────── */
+.rule-match-blueprint {
+  border: 2px dashed oklch(var(--wa) / 0.6);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  opacity: 0.82;
+  transition: border-color .15s, opacity .15s;
+}
+.rule-match-blueprint:hover {
+  border-color: oklch(var(--wa) / 1);
+  opacity: 1;
+}
 
 /* ── Suggestions ─────────────────────────────────────────────────── */
 .bank-card.is-suggested,

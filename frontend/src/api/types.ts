@@ -244,6 +244,9 @@ export interface CategoryRule {
   match_type: 'contains' | 'exact' | 'regex'
   category_id: number
   priority: number
+  transaction_type: 'any' | 'debit' | 'credit'
+  min_amount: number | null
+  max_amount: number | null
 }
 
 export interface CategoryRuleCreate {
@@ -252,6 +255,9 @@ export interface CategoryRuleCreate {
   match_type: 'contains' | 'exact' | 'regex'
   category_id: number
   priority?: number
+  transaction_type?: 'any' | 'debit' | 'credit'
+  min_amount?: number | null
+  max_amount?: number | null
 }
 
 // ── Reconciliation ───────────────────────────────────────────────
@@ -262,6 +268,7 @@ export interface BankTx {
   label: string
   amount: number // centimes
   import_hash: string
+  rule_pattern: string | null
 }
 
 export interface ReconciliationExpense {
@@ -287,6 +294,12 @@ export interface ReconciliationSuggestion {
   score: number
 }
 
+export interface RuleMatch {
+  bank_tx: BankTx
+  category_id: number
+  category_name: string | null
+}
+
 export interface ReconciliationView {
   account_id: number
   month: string // YYYY-MM
@@ -294,13 +307,21 @@ export interface ReconciliationView {
   expenses: ReconciliationExpense[]
   links: ReconciliationLink[]
   suggestions: ReconciliationSuggestion[]
+  rule_matches: RuleMatch[]
 }
+
+export type RuleAmountMode = 'none' | 'exact' | 'percent'
+export type RuleTransactionType = 'any' | 'debit' | 'credit'
 
 export interface LinkRequest {
   bank_tx_id: number
   expense_id: number
   adjust_amount?: boolean
   memo?: string | null
+  rule_transaction_type?: RuleTransactionType
+  rule_amount_mode?: RuleAmountMode
+  rule_amount_tolerance_pct?: number
+  skip_rule?: boolean
 }
 
 export interface ClotureRequest {
