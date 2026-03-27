@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-03-27
+
 ### Added
 
 - **Amount range on category rules** — `min_amount` / `max_amount` optional fields on `CategoryRule`; rules only match transactions whose absolute amount falls within the defined range
