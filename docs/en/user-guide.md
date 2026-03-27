@@ -317,6 +317,12 @@ In **Settings → Rules**:
 - **Type**: contains, exact match, or regular expression
 - **Category**: the category to assign
 - **Priority**: higher priority rules are evaluated first
+- **Amount range** *(optional)*: restrict the rule to transactions whose absolute amount falls between a minimum and/or maximum value
+- **Transaction type** *(optional)*: restrict the rule to debits only, credits only, or both (default: any)
+
+### Automatic Rule Creation During Reconciliation
+
+In the **Reconciliation view**, when linking a bank transaction to an expense via the wizard, a categorization rule can be created automatically. A **toggle** in the wizard lets you skip rule creation if you do not want a rule saved for that particular link.
 
 ---
 

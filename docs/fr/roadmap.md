@@ -12,7 +12,10 @@ Les items sont regroupés par priorité et peuvent évoluer.
 ### Corrections & petites améliorations
 
 - [x] **Choix de couleur d'une enveloppe** — permettre aux utilisateurs d'assigner une couleur personnalisée à chaque enveloppe directement depuis la vue budget
-- [x] **Plage de montant dans les règles de catégorie** — ajouter des conditions min/max optionnelles lors de la création ou modification d'une règle d'auto-catégorisation (ex. : seulement les transactions entre −50 € et −5 €)
+- [x] **Plage de montant dans les règles de catégorie** — conditions min/max optionnelles sur une règle d'auto-catégorisation (ex. : seulement les transactions entre −50 € et −5 €)
+- [x] **Type de transaction dans les règles de catégorie** — filtrer par débit, crédit ou tous
+- [x] **Bouton effacer la recherche** — icône ✕ pour vider rapidement le filtre texte dans la vue pointage
+- [x] **Toggle skip-règle dans le wizard de pointage** — lors de la liaison bancaire, choisir si une règle de catégorisation doit être créée ou non
 
 ### Vue des dépenses par catégorie
 

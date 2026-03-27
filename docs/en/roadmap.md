@@ -11,8 +11,11 @@ Items are grouped by priority and may change as the project evolves.
 
 ### Bug Fixes & Small Improvements
 
-- [ ] **Envelope color picker** — let users assign a custom color to each envelope directly from the budget view
-- [ ] **Amount range in category rules** — add optional min/max amount conditions when creating or editing auto-categorization rules (e.g. only match transactions between −50 € and −5 €)
+- [x] **Envelope color picker** — let users assign a custom color to each envelope directly from the budget view
+- [x] **Amount range in category rules** — optional min/max amount conditions on auto-categorization rules (e.g. only match transactions between −50 € and −5 €)
+- [x] **Transaction type on category rules** — filter by debit, credit, or any
+- [x] **Clear search button** — ✕ icon to quickly empty the text filter in the reconciliation view
+- [x] **Skip-rule toggle in reconciliation wizard** — when linking a bank transaction, choose whether to create a categorization rule or not
 
 ### Category Spending View
 

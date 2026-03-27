@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Amount range on category rules** — `min_amount` / `max_amount` optional fields on `CategoryRule`; rules only match transactions whose absolute amount falls within the defined range
+- **Transaction type on category rules** — `transaction_type` field (`debit` / `credit` / `any`) on `CategoryRule`; rules can now be restricted to debits or credits only
+- **Skip-rule toggle in reconciliation wizard** — when linking a bank transaction to an expense, a toggle lets the user choose whether to create a matching rule (default: create)
+
+### Fixed
+
+- **Rule matching** — `_matches_rule` now correctly enforces amount bounds and transaction type; previously only the text pattern was checked
+- **Rule options not sent** — in the reconciliation wizard, rule options (amount mode, tolerance, transaction type) were reset before being read; values are now captured before the modal closes
+
+### Changed
+
+- **Reconciliation view** — refreshes automatically when rules are created, edited or deleted from the Rules modal
+- **Reconciliation view** — text search field now has a ✕ clear button
+- **Reconciliation view** — header layout uses CSS container queries for reliable single-line display on wide screens
+
+---
+
 ## [0.3.0] — 2026-03-24
 
 ### Added
