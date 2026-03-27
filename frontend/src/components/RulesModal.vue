@@ -35,6 +35,7 @@ function categoryName(id: number): string {
 
 const FIELD_LABELS: Record<string, string> = { payee: 'bénéficiaire', memo: 'mémo' }
 const TYPE_LABELS: Record<string, string> = { contains: 'contient', exact: 'exact', regex: 'regex' }
+const TX_TYPE_LABELS: Record<string, string> = { any: 'toute', debit: 'dépense', credit: 'revenu/avoir' }
 
 // ── Load ──────────────────────────────────────────────────────────
 async function load(): Promise<void> {
@@ -75,8 +76,20 @@ const editForm = ref<CategoryRuleCreate>({
   match_type: 'contains',
   category_id: 0,
   priority: 0,
+  transaction_type: 'any',
 })
 const saving = ref(false)
+
+function eursToCentimes(v: number | null): number | null {
+  return v !== null ? Math.round(v * 100) : null
+}
+
+function centimesToEurs(v: number | null): number | null {
+  return v !== null ? v / 100 : null
+}
+
+const editMinEur = ref<number | null>(null)
+const editMaxEur = ref<number | null>(null)
 
 function startEdit(rule: CategoryRule): void {
   editingId.value = rule.id
@@ -86,7 +99,10 @@ function startEdit(rule: CategoryRule): void {
     match_type: rule.match_type,
     category_id: rule.category_id,
     priority: rule.priority,
+    transaction_type: rule.transaction_type ?? 'any',
   }
+  editMinEur.value = centimesToEurs(rule.min_amount)
+  editMaxEur.value = centimesToEurs(rule.max_amount)
 }
 
 function cancelEdit(): void {
@@ -97,7 +113,12 @@ async function submitEdit(): Promise<void> {
   if (!editingId.value) return
   saving.value = true
   try {
-    const updated = await updateRule(editingId.value, editForm.value)
+    const updated = await updateRule(editingId.value, {
+      ...editForm.value,
+      min_amount: eursToCentimes(editMinEur.value),
+      max_amount: eursToCentimes(editMaxEur.value),
+      transaction_type: editForm.value.transaction_type ?? 'any',
+    })
     rules.value = rules.value.map((r) => (r.id === updated.id ? updated : r))
     editingId.value = null
     emit('changed', rules.value.length)
@@ -116,19 +137,30 @@ const addForm = ref<CategoryRuleCreate>({
   match_type: 'contains',
   category_id: 0,
   priority: 0,
+  transaction_type: 'any',
 })
 const adding = ref(false)
 
+const addMinEur = ref<number | null>(null)
+const addMaxEur = ref<number | null>(null)
+
 function openAdd(): void {
   showAddForm.value = true
-  addForm.value = { pattern: '', match_field: 'memo', match_type: 'contains', category_id: 0, priority: 0 }
+  addForm.value = { pattern: '', match_field: 'memo', match_type: 'contains', category_id: 0, priority: 0, transaction_type: 'any' }
+  addMinEur.value = null
+  addMaxEur.value = null
 }
 
 async function submitAdd(): Promise<void> {
   if (!addForm.value.pattern.trim() || !addForm.value.category_id) return
   adding.value = true
   try {
-    const rule = await createRule(addForm.value)
+    const rule = await createRule({
+      ...addForm.value,
+      min_amount: eursToCentimes(addMinEur.value),
+      max_amount: eursToCentimes(addMaxEur.value),
+      transaction_type: addForm.value.transaction_type ?? 'any',
+    })
     rules.value = [...rules.value, rule]
     showAddForm.value = false
     emit('changed', rules.value.length)
@@ -229,6 +261,34 @@ async function submitAdd(): Promise<void> {
                       class="input input-bordered input-sm"
                     >
                   </label>
+                  <label class="form-control sm:col-span-2">
+                    <div class="label py-0"><span class="label-text text-xs">Type de transaction</span></div>
+                    <select v-model="editForm.transaction_type" class="select select-bordered select-sm">
+                      <option value="any">Toute transaction (±)</option>
+                      <option value="debit">Dépense uniquement (débit −)</option>
+                      <option value="credit">Revenu / avoir uniquement (crédit +)</option>
+                    </select>
+                  </label>
+                  <label class="form-control">
+                    <div class="label py-0"><span class="label-text text-xs">Montant min (€)</span></div>
+                    <input
+                      v-model.number="editMinEur"
+                      type="number"
+                      step="0.01"
+                      class="input input-bordered input-sm"
+                      placeholder="ex&nbsp;: -50"
+                    >
+                  </label>
+                  <label class="form-control">
+                    <div class="label py-0"><span class="label-text text-xs">Montant max (€)</span></div>
+                    <input
+                      v-model.number="editMaxEur"
+                      type="number"
+                      step="0.01"
+                      class="input input-bordered input-sm"
+                      placeholder="ex&nbsp;: -5"
+                    >
+                  </label>
                 </div>
                 <div class="flex gap-2">
                   <button class="btn btn-primary btn-sm" :disabled="saving" @click="submitEdit">
@@ -248,6 +308,14 @@ async function submitAdd(): Promise<void> {
                     <span class="badge badge-ghost badge-xs ml-1">{{ TYPE_LABELS[rule.match_type] ?? rule.match_type }}</span>
                     → <span class="font-medium">{{ categoryName(rule.category_id) }}</span>
                     <span v-if="rule.priority !== 0" class="ml-2 opacity-50">prio&nbsp;{{ rule.priority }}</span>
+                    <span v-if="rule.transaction_type && rule.transaction_type !== 'any'" class="ml-2 opacity-50">
+                      {{ TX_TYPE_LABELS[rule.transaction_type] ?? rule.transaction_type }}
+                    </span>
+                    <span v-if="rule.min_amount !== null || rule.max_amount !== null" class="ml-2 opacity-50">
+                      [{{ rule.min_amount !== null ? (rule.min_amount / 100).toFixed(2) + '€' : '-∞' }}
+                      —
+                      {{ rule.max_amount !== null ? (rule.max_amount / 100).toFixed(2) + '€' : '+∞' }}]
+                    </span>
                   </span>
                 </div>
                 <div class="flex gap-1 shrink-0">
@@ -318,6 +386,34 @@ async function submitAdd(): Promise<void> {
                   v-model.number="addForm.priority"
                   type="number"
                   class="input input-bordered input-sm"
+                >
+              </label>
+              <label class="form-control sm:col-span-2">
+                <div class="label py-0"><span class="label-text text-xs">Type de transaction</span></div>
+                <select v-model="addForm.transaction_type" class="select select-bordered select-sm">
+                  <option value="any">Toute transaction (±)</option>
+                  <option value="debit">Dépense uniquement (débit −)</option>
+                  <option value="credit">Revenu / avoir uniquement (crédit +)</option>
+                </select>
+              </label>
+              <label class="form-control">
+                <div class="label py-0"><span class="label-text text-xs">Montant min (€)</span></div>
+                <input
+                  v-model.number="addMinEur"
+                  type="number"
+                  step="0.01"
+                  class="input input-bordered input-sm"
+                  placeholder="ex&nbsp;: -50"
+                >
+              </label>
+              <label class="form-control">
+                <div class="label py-0"><span class="label-text text-xs">Montant max (€)</span></div>
+                <input
+                  v-model.number="addMaxEur"
+                  type="number"
+                  step="0.01"
+                  class="input input-bordered input-sm"
+                  placeholder="ex&nbsp;: -5"
                 >
               </label>
             </div>

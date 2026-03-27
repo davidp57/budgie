@@ -26,6 +26,7 @@ from budgie.api import (
     categorize,
     category_groups,
     category_rules,
+    data_reset,
     envelopes,
     imports,
     payees,
@@ -108,6 +109,7 @@ app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
 app.include_router(reconciliation.router)
+app.include_router(data_reset.router)
 app.include_router(webauthn.router)
 
 # ── Production static file serving ──────────────────────────────────────────

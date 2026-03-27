@@ -471,3 +471,118 @@ async def test_envelope_color_index_in_month_budget(auth_client: AsyncClient) ->
     match = next((line for line in lines if line["envelope_id"] == env_id), None)
     assert match is not None
     assert match["color_index"] == 7
+
+
+# ── CategoryRule amount range ─────────────────────────────────────
+
+
+async def test_category_rule_min_max_default_none(auth_client: AsyncClient) -> None:
+    """Creating a rule without min/max returns null for both fields."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "NETFLIX",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["min_amount"] is None
+    assert data["max_amount"] is None
+
+
+async def test_category_rule_amount_range_create(auth_client: AsyncClient) -> None:
+    """Creating a rule with min/max persists both values."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G2", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C2", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "SHOP",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+            "min_amount": -5000,
+            "max_amount": -500,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["min_amount"] == -5000
+    assert data["max_amount"] == -500
+
+
+async def test_category_rule_amount_range_update(auth_client: AsyncClient) -> None:
+    """Updating a rule with min/max persists the new values."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G3", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C3", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+    rule = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "TRAIN",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+        },
+    )
+    rule_id = rule.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/category-rules/{rule_id}",
+        json={"min_amount": -10000, "max_amount": -1000},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["min_amount"] == -10000
+    assert data["max_amount"] == -1000
+
+
+async def test_category_rule_amount_range_validation_min_gt_max(
+    auth_client: AsyncClient,
+) -> None:
+    """Creating a rule with min_amount > max_amount returns 422."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G4", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C4", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "X",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+            "min_amount": -500,
+            "max_amount": -5000,
+        },
+    )
+    assert response.status_code == 422

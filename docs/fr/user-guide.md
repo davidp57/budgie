@@ -317,6 +317,12 @@ Dans **Paramètres → Règles** :
 - **Type** : contient, correspondance exacte, ou expression régulière
 - **Catégorie** : la catégorie à affecter
 - **Priorité** : les règles à haute priorité sont évaluées en premier
+- **Plage de montant** *(optionnel)* : limiter la règle aux transactions dont le montant absolu est compris entre un minimum et/ou un maximum (en centimes ou euros selon l'affichage)
+- **Type de transaction** *(optionnel)* : restreindre la règle aux débits, aux crédits, ou l'appliquer dans les deux sens (défaut : tous)
+
+### Création automatique de règles lors du pointage
+
+Dans la **vue Pointage**, lorsque vous liez une transaction bancaire à une dépense via l'assistant, une règle de catégorisation peut être créée automatiquement. Un **toggle** dans l'assistant vous permet de désactiver cette création si vous ne souhaitez pas qu'une règle soit enregistrée pour ce lien particulier.
 
 ---
 

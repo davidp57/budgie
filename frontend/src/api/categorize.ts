@@ -12,9 +12,10 @@ export interface CategorizeSingleResult {
 export async function categorizeSingle(
   payeeName: string | null,
   memo: string | null,
+  amount?: number | null,
 ): Promise<CategorizeSingleResult> {
   const { data } = await client.post<{ results: CategorizeSingleResult[] }>('/api/categorize', {
-    transactions: [{ payee_name: payeeName, memo }],
+    transactions: [{ payee_name: payeeName, memo, amount: amount ?? null }],
   })
   return data.results[0] ?? { category_id: null, confidence: 'none' }
 }

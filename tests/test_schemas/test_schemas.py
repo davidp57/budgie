@@ -461,3 +461,51 @@ def test_account_create_wallet():
 
     account = AccountCreate(name="Portefeuille", account_type="wallet")
     assert account.account_type == "wallet"
+
+
+# ── CategoryRule amount range schemas ────────────────────────────
+
+
+def test_category_rule_amount_range_create():
+    """min_amount and max_amount are accepted and stored on CategoryRuleCreate."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    rule = CategoryRuleCreate(
+        pattern="shop",
+        match_field="payee",
+        match_type="contains",
+        category_id=1,
+        min_amount=-5000,
+        max_amount=-500,
+    )
+    assert rule.min_amount == -5000
+    assert rule.max_amount == -500
+
+
+def test_category_rule_amount_range_defaults_none():
+    """min_amount and max_amount default to None."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    rule = CategoryRuleCreate(
+        pattern="shop",
+        match_field="payee",
+        match_type="contains",
+        category_id=1,
+    )
+    assert rule.min_amount is None
+    assert rule.max_amount is None
+
+
+def test_category_rule_amount_range_min_gt_max_invalid():
+    """min_amount > max_amount must raise ValidationError."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    with pytest.raises(ValidationError):
+        CategoryRuleCreate(
+            pattern="shop",
+            match_field="payee",
+            match_type="contains",
+            category_id=1,
+            min_amount=-500,
+            max_amount=-5000,
+        )

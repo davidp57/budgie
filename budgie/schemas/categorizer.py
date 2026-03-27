@@ -11,10 +11,13 @@ class CategorizeRequest(BaseModel):
     Attributes:
         payee_name: The payee / merchant name extracted from the bank export.
         memo: Optional free-text memo or description for the transaction.
+        amount: Optional transaction amount in centimes, used to filter rules
+            that have a min_amount / max_amount constraint.
     """
 
     payee_name: str | None = None
     memo: str | None = None
+    amount: int | None = None
 
 
 class CategorizeResult(BaseModel):
