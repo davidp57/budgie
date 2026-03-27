@@ -321,12 +321,26 @@ async def test_reset_deletes_split_transactions(
     assert resp.json()["transactions_deleted"] == 1
 
     # Parent and splits are all gone
-    remaining_tx = (await db_session.execute(
-        sa_select(Transaction).where(Transaction.account_id == account.id)
-    )).scalars().all()
+    remaining_tx = (
+        (
+            await db_session.execute(
+                sa_select(Transaction).where(Transaction.account_id == account.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert remaining_tx == []
 
-    remaining_splits = (await db_session.execute(
-        sa_select(SplitTransaction).where(SplitTransaction.parent_id == parent.id)
-    )).scalars().all()
+    remaining_splits = (
+        (
+            await db_session.execute(
+                sa_select(SplitTransaction).where(
+                    SplitTransaction.parent_id == parent.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert remaining_splits == []

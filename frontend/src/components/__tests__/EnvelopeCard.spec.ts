@@ -8,6 +8,7 @@ const baseEnvelope: EnvelopeLine = {
   envelope_name: 'Food',
   envelope_type: 'regular',
   emoji: '🍞',
+  color_index: null,
   rollover: false,
   target_amount: null,
   categories: [{ id: 1, name: 'Groceries', group_name: 'Food' }],

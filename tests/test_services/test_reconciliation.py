@@ -677,10 +677,14 @@ async def test_link_skip_rule(db_session: AsyncSession) -> None:
     from sqlalchemy import select as sa_select
 
     rules = (
-        await db_session.execute(
-            sa_select(CategoryRule).where(CategoryRule.user_id == user.id)
+        (
+            await db_session.execute(
+                sa_select(CategoryRule).where(CategoryRule.user_id == user.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert rules == []
 
 
