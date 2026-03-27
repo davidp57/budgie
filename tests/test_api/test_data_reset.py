@@ -1,6 +1,7 @@
 """Tests for the data reset endpoint (DELETE /api/user/reset)."""
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -220,6 +221,32 @@ async def test_reset_only_affects_current_user(
     )
     assert tx_resp.status_code == 201
 
+    # Create a category rule for Bob
+    bob_grp = await client.post(
+        "/api/category-groups",
+        json={"name": "BobGroup", "sort_order": 0},
+        headers=bob_headers,
+    )
+    assert bob_grp.status_code == 201
+    bob_cat = await client.post(
+        "/api/categories",
+        json={"group_id": bob_grp.json()["id"], "name": "BobCat", "sort_order": 0},
+        headers=bob_headers,
+    )
+    assert bob_cat.status_code == 201
+    bob_rule = await client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "BOB-STORE",
+            "match_field": "memo",
+            "match_type": "contains",
+            "category_id": bob_cat.json()["id"],
+            "priority": 0,
+        },
+        headers=bob_headers,
+    )
+    assert bob_rule.status_code == 201
+
     # Now reset alice's data
     resp = await auth_client.delete("/api/user/reset")
     assert resp.status_code == 200
@@ -228,6 +255,11 @@ async def test_reset_only_affects_current_user(
     bob_txs_resp = await client.get("/api/transactions", headers=bob_headers)
     assert bob_txs_resp.status_code == 200
     assert len(bob_txs_resp.json()) == 1
+
+    # Bob's category rule still exists
+    bob_rules_resp = await client.get("/api/category-rules", headers=bob_headers)
+    assert bob_rules_resp.status_code == 200
+    assert len(bob_rules_resp.json()) == 1
 
 
 async def test_reset_returns_correct_counts(auth_client: AsyncClient) -> None:
@@ -243,3 +275,58 @@ async def test_reset_returns_correct_counts(auth_client: AsyncClient) -> None:
     body = resp.json()
     assert body["transactions_deleted"] == 3
     assert body["rules_deleted"] == 1
+
+
+async def test_reset_deletes_split_transactions(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Split transactions are deleted before their parent expense on reset."""
+    import datetime
+
+    from budgie.models.account import Account
+    from budgie.models.transaction import SplitTransaction, Transaction
+    from budgie.models.user import User
+    from sqlalchemy import select as sa_select
+
+    # Retrieve the alice user and account from DB (created by auth_client fixture)
+    user_row = (
+        await db_session.execute(sa_select(User).where(User.username == "alice"))
+    ).scalar_one()
+    account = Account(
+        user_id=user_row.id, name="Split Test", account_type="checking", on_budget=True
+    )
+    db_session.add(account)
+    await db_session.flush()
+
+    # Create a parent expense transaction directly in DB
+    parent = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-2000,
+        memo="Supermarket",
+        status="real",
+    )
+    db_session.add(parent)
+    await db_session.flush()
+
+    # Create two split transactions
+    db_session.add(SplitTransaction(parent_id=parent.id, amount=-1200, memo="Food"))
+    db_session.add(SplitTransaction(parent_id=parent.id, amount=-800, memo="Hygiene"))
+    await db_session.flush()
+
+    # Reset via API
+    resp = await auth_client.delete("/api/user/reset")
+    assert resp.status_code == 200
+    assert resp.json()["transactions_deleted"] == 1
+
+    # Parent and splits are all gone
+    remaining_tx = (await db_session.execute(
+        sa_select(Transaction).where(Transaction.account_id == account.id)
+    )).scalars().all()
+    assert remaining_tx == []
+
+    remaining_splits = (await db_session.execute(
+        sa_select(SplitTransaction).where(SplitTransaction.parent_id == parent.id)
+    )).scalars().all()
+    assert remaining_splits == []

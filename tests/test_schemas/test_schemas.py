@@ -475,11 +475,11 @@ def test_category_rule_amount_range_create():
         match_field="payee",
         match_type="contains",
         category_id=1,
-        min_amount=-5000,
-        max_amount=-500,
+        min_amount=500,
+        max_amount=5000,
     )
-    assert rule.min_amount == -5000
-    assert rule.max_amount == -500
+    assert rule.min_amount == 500
+    assert rule.max_amount == 5000
 
 
 def test_category_rule_amount_range_defaults_none():

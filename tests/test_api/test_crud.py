@@ -520,14 +520,14 @@ async def test_category_rule_amount_range_create(auth_client: AsyncClient) -> No
             "match_field": "payee",
             "match_type": "contains",
             "category_id": cat_id,
-            "min_amount": -5000,
-            "max_amount": -500,
+            "min_amount": 500,
+            "max_amount": 5000,
         },
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["min_amount"] == -5000
-    assert data["max_amount"] == -500
+    assert data["min_amount"] == 500
+    assert data["max_amount"] == 5000
 
 
 async def test_category_rule_amount_range_update(auth_client: AsyncClient) -> None:
@@ -553,12 +553,12 @@ async def test_category_rule_amount_range_update(auth_client: AsyncClient) -> No
 
     response = await auth_client.put(
         f"/api/category-rules/{rule_id}",
-        json={"min_amount": -10000, "max_amount": -1000},
+        json={"min_amount": 1000, "max_amount": 10000},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["min_amount"] == -10000
-    assert data["max_amount"] == -1000
+    assert data["min_amount"] == 1000
+    assert data["max_amount"] == 10000
 
 
 async def test_category_rule_amount_range_validation_min_gt_max(
@@ -581,8 +581,8 @@ async def test_category_rule_amount_range_validation_min_gt_max(
             "match_field": "payee",
             "match_type": "contains",
             "category_id": cat_id,
-            "min_amount": -500,
-            "max_amount": -5000,
+            "min_amount": 5000,
+            "max_amount": 500,
         },
     )
     assert response.status_code == 422

@@ -646,6 +646,44 @@ async def test_link_rule_transaction_type(db_session: AsyncSession) -> None:
     assert result.created_rule.transaction_type == "debit"
 
 
+@pytest.mark.asyncio
+async def test_link_skip_rule(db_session: AsyncSession) -> None:
+    """skip_rule=True prevents any CategoryRule from being created."""
+    from budgie.schemas.reconciliation import LinkRequest
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+    cat = await _create_category(db_session, user.id, "Bills")
+
+    bank = _bank_tx(acc.id, -3000, label="PRLV SEPA ORANGE SA CONTRAT 12345")
+    exp = _expense(acc.id, -3000, category_id=cat.id, label="Orange mobile")
+    db_session.add_all([bank, exp])
+    await db_session.flush()
+
+    result = await svc.link(
+        db_session,
+        user.id,
+        LinkRequest(
+            bank_tx_id=bank.id,
+            expense_id=exp.id,
+            skip_rule=True,
+            rule_amount_mode="exact",
+            rule_transaction_type="debit",
+        ),
+    )
+
+    assert result.created_rule is None
+
+    from sqlalchemy import select as sa_select
+
+    rules = (
+        await db_session.execute(
+            sa_select(CategoryRule).where(CategoryRule.user_id == user.id)
+        )
+    ).scalars().all()
+    assert rules == []
+
+
 # ---------------------------------------------------------------------------
 # _matches_rule — amount & transaction_type filters
 # ---------------------------------------------------------------------------

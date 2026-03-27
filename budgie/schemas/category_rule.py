@@ -31,8 +31,8 @@ class CategoryRuleCreate(BaseModel):
     category_id: int
     priority: int = 0
     transaction_type: TransactionType = "any"
-    min_amount: int | None = None
-    max_amount: int | None = None
+    min_amount: int | None = Field(default=None, ge=0)
+    max_amount: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def check_amount_range(self) -> Self:
@@ -96,5 +96,5 @@ class CategoryRuleUpdate(BaseModel):
     category_id: int | None = None
     priority: int | None = None
     transaction_type: TransactionType | None = None
-    min_amount: int | None = None
-    max_amount: int | None = None
+    min_amount: int | None = Field(default=None, ge=0)
+    max_amount: int | None = Field(default=None, ge=0)

@@ -317,7 +317,7 @@ Dans **Paramètres → Règles** :
 - **Type** : contient, correspondance exacte, ou expression régulière
 - **Catégorie** : la catégorie à affecter
 - **Priorité** : les règles à haute priorité sont évaluées en premier
-- **Plage de montant** *(optionnel)* : limiter la règle aux transactions dont le montant absolu est compris entre un minimum et/ou un maximum (en centimes ou euros selon l'affichage)
+- **Plage de montant** *(optionnel)* : limiter la règle aux transactions dont le montant absolu est compris entre un minimum et/ou un maximum (en centimes ou en euros selon l'affichage)
 - **Type de transaction** *(optionnel)* : restreindre la règle aux débits, aux crédits, ou l'appliquer dans les deux sens (défaut : tous)
 
 ### Création automatique de règles lors du pointage
