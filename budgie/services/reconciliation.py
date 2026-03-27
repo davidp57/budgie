@@ -267,9 +267,7 @@ async def get_view(
     ]
 
     # Suggestions for unlinked transactions
-    unlinked_banks_for_view = [
-        b for b in bank_list if b.id not in linked_bank_ids
-    ]
+    unlinked_banks_for_view = [b for b in bank_list if b.id not in linked_bank_ids]
     unlinked_expenses_for_view = [
         e for e in expense_list if e.id not in linked_expense_ids
     ]
@@ -335,9 +333,7 @@ async def _build_rule_matches(
 
     # Pre-load names for all categories referenced by rules
     rule_cat_ids = {r.category_id for r in rules}
-    cat_result = await db.execute(
-        select(Category).where(Category.id.in_(rule_cat_ids))
-    )
+    cat_result = await db.execute(select(Category).where(Category.id.in_(rule_cat_ids)))
     cat_names: dict[int, str] = {c.id: c.name for c in cat_result.scalars().all()}
 
     result: list[RuleMatchRead] = []

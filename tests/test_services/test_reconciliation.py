@@ -614,7 +614,7 @@ async def test_link_rule_percent_tolerance(db_session: AsyncSession) -> None:
     )
 
     assert result.created_rule is not None
-    assert result.created_rule.min_amount == 800   # 1000 * 0.80
+    assert result.created_rule.min_amount == 800  # 1000 * 0.80
     assert result.created_rule.max_amount == 1200  # 1000 * 1.20
 
 
