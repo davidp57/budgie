@@ -276,7 +276,7 @@ async function submitAdd(): Promise<void> {
                       type="number"
                       step="0.01"
                       class="input input-bordered input-sm"
-                      placeholder="ex&nbsp;: -50"
+                      placeholder="ex&nbsp;: 50"
                     >
                   </label>
                   <label class="form-control">
@@ -286,7 +286,7 @@ async function submitAdd(): Promise<void> {
                       type="number"
                       step="0.01"
                       class="input input-bordered input-sm"
-                      placeholder="ex&nbsp;: -5"
+                      placeholder="ex&nbsp;: 5"
                     >
                   </label>
                 </div>
@@ -403,7 +403,7 @@ async function submitAdd(): Promise<void> {
                   type="number"
                   step="0.01"
                   class="input input-bordered input-sm"
-                  placeholder="ex&nbsp;: -50"
+                  placeholder="ex&nbsp;: 50"
                 >
               </label>
               <label class="form-control">
@@ -413,7 +413,7 @@ async function submitAdd(): Promise<void> {
                   type="number"
                   step="0.01"
                   class="input input-bordered input-sm"
-                  placeholder="ex&nbsp;: -5"
+                  placeholder="ex&nbsp;: 5"
                 >
               </label>
             </div>

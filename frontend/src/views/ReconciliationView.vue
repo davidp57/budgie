@@ -707,7 +707,7 @@ async function confirmNewExpense(): Promise<void> {
     const capturedCreateRule = createRuleEnabled.value
     const capturedRuleTransactionType = ruleTransactionType.value
     const capturedRuleAmountMode = ruleAmountMode.value
-    const capturedRuleAmountTolerancePct = ruleAmountTolerancePct.value
+    const capturedRuleAmountTolerancePct = Math.max(1, Math.min(99, ruleAmountTolerancePct.value))
     const newTx = await createTransaction({
       account_id: selectedAccountId.value,
       date: bank.date,

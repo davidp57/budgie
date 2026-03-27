@@ -15,11 +15,12 @@ async def reset_user_data(
     db: DBSession,
     current_user: CurrentUser,
 ) -> dict[str, int]:
-    """Delete all transactions and category rules for the authenticated user.
+    """Delete manually-created transactions and all category rules for the current user.
 
-    Transactions are deleted first (splits cascade, reconciliation links are
-    set to NULL), then category rules.  Accounts, envelopes, and budget
-    allocations are preserved.
+    Only expense transactions (``import_hash IS NULL``) are deleted; bank-imported
+    transactions are preserved.  Split transactions belonging to deleted expenses
+    are deleted first (FK constraint), then the expenses themselves, then the
+    category rules.  Accounts, envelopes, and budget allocations are preserved.
 
     Args:
         db: Database session.
