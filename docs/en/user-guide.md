@@ -205,7 +205,7 @@ The navigation (AppNav) offers 5 sections:
 | 🏠 | **Home** | Month summary: income, expenses, balance, previous/next month navigation |
 | 💰 | **Budget** | Envelope view with inline budget editing |
 | ⚡ | **Quick Expense** | Fast transaction entry with presets |
-| 📋 | **Transactions** | Paginated list with filters, swipe-to-delete |
+| 📋 | **Expenses** | Expenses with filters, sort, grouping, edit and monthly dashboard |
 | ⚙️ | **Settings** | Accounts, categories, envelopes, rules, import, theme |
 
 ### Home Page
@@ -226,12 +226,19 @@ The budget page shows your envelopes as **cards** (DrawerCards). Each card displ
 
 Click an envelope to filter the corresponding transactions in the bottom panel.
 
-### Transactions Page
+### Expenses Page
 
-A paginated list of all transactions with:
-- Filters by account and type (real / forecast)
-- Swipe left to delete a transaction
-- Optimistic deletion with undo toast
+The **Expenses** page (`/depenses`) shows virtual transactions (manually entered expenses) for the selected month. Key features:
+
+- **Month navigation** ◄ / ► to browse months
+- **Filters**: by envelope (drawer) and by category group
+- **Sort**: by date, amount, or label
+- **Group by**: envelope, category, or category group
+- **Inline edit modal**: change date, amount, memo, category, and envelope
+- **Delete** with confirmation
+- **Dashboard mode** 🥧: doughnut charts per envelope showing spending by category
+  - Click a slice to drill down and see the matching expense list
+- Reconciled expenses show a link to the matched bank transaction
 
 ---
 
@@ -357,7 +364,7 @@ Click the **Budgeted** amount of any envelope to enter a new value. Changes are 
 
 ### Creating a Forecast
 
-In the **Transactions** view, create a new virtual transaction with:
+In the **Expenses** view, create a new virtual transaction with:
 - **Amount**, **estimated date**, **category**, **memo**, **account**
 
 The forecast appears with an ⏳ icon and dashed style. The envelope's **Available** amount is immediately reduced.
@@ -368,7 +375,7 @@ When importing a bank statement, Budgie suggests linking real transactions to ma
 
 ### Viewing Pending Forecasts
 
-In **Transactions**, filter on **Forecasts** to see forecasts not yet realized.
+In **Expenses**, filter by envelope or group to see forecasts not yet realized.
 
 ---
 
