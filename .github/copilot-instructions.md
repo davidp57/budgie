@@ -148,17 +148,20 @@ When the user asks to prepare a PR, follow these steps in order:
 
 When the user asks to do a release, follow these steps in order:
 
-1. **Ask for the version number** — never choose it yourself. Wait for the user to confirm (e.g. `v1.0.0`).
-2. **Bump version** — update `version` in `pyproject.toml` to the new value.
-3. **Update README** — update any version-specific info if needed.
-4. **Quality checks** — run all backend and frontend checks; fix all issues before proceeding.
-5. **Commit** — one clean commit: `release: vX.Y.Z`.
-6. **Tag** — create an annotated git tag `vX.Y.Z`.
-7. **Push** — ask the user before pushing the commit and tag to GitHub.
+1. **Propose a version number** — suggest a semver version based on the changes since the last release (patch / minor / major), and ask the user to confirm before proceeding.
+2. **Write release notes** — draft concise, user-focused release notes **in both English and French**.
+   - Structure: short intro sentence + bullet list of notable changes. No technical jargon.
+   - Present them to the user for confirmation before continuing.
+3. **Bump version** — update `version` in `pyproject.toml` to the confirmed value.
+4. **Update README** — update any version-specific info if needed.
+5. **Quality checks** — run all backend and frontend checks; fix all issues before proceeding.
+6. **Commit** — one clean commit: `release: vX.Y.Z`.
+7. **Tag** — create an annotated git tag `vX.Y.Z`.
+8. **Push** — ask the user before pushing the commit and tag to GitHub.
 
 ### Commands
 
-> **Version policy**: Never change the version number in `pyproject.toml` or anywhere else unless explicitly asked by the user.
+> **Version policy**: Never change the version number in `pyproject.toml` or anywhere else unless the user has confirmed it.
 
 ```bash
 # Backend
