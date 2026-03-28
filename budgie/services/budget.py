@@ -114,34 +114,33 @@ async def get_month_budget_view(
         cum_activity_by_cat = {row[0]: row[1] for row in cum_act_result.all()}
 
     # 3b. Activity this month via direct envelope_id (manual expenses path)
-    direct_act_result = await db.execute(
-        select(Transaction.envelope_id, func.sum(Transaction.amount))
-        .join(Account, Transaction.account_id == Account.id)
-        .where(
-            Transaction.envelope_id.in_(env_ids),
-            func.strftime("%Y-%m", Transaction.date) == month,
-            Account.user_id == user_id,
+    direct_activity_this_month: dict[int, int] = {}
+    direct_cum_activity: dict[int, int] = {}
+    if env_ids:
+        direct_act_result = await db.execute(
+            select(Transaction.envelope_id, func.sum(Transaction.amount))
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Transaction.envelope_id.in_(env_ids),
+                func.strftime("%Y-%m", Transaction.date) == month,
+                Account.user_id == user_id,
+            )
+            .group_by(Transaction.envelope_id)
         )
-        .group_by(Transaction.envelope_id)
-    )
-    direct_activity_this_month: dict[int, int] = {
-        row[0]: row[1] for row in direct_act_result.all()
-    }
+        direct_activity_this_month = {row[0]: row[1] for row in direct_act_result.all()}
 
-    # 4b. Cumulative activity via direct envelope_id
-    direct_cum_act_result = await db.execute(
-        select(Transaction.envelope_id, func.sum(Transaction.amount))
-        .join(Account, Transaction.account_id == Account.id)
-        .where(
-            Transaction.envelope_id.in_(env_ids),
-            func.strftime("%Y-%m", Transaction.date) <= month,
-            Account.user_id == user_id,
+        # 4b. Cumulative activity via direct envelope_id
+        direct_cum_act_result = await db.execute(
+            select(Transaction.envelope_id, func.sum(Transaction.amount))
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Transaction.envelope_id.in_(env_ids),
+                func.strftime("%Y-%m", Transaction.date) <= month,
+                Account.user_id == user_id,
+            )
+            .group_by(Transaction.envelope_id)
         )
-        .group_by(Transaction.envelope_id)
-    )
-    direct_cum_activity: dict[int, int] = {
-        row[0]: row[1] for row in direct_cum_act_result.all()
-    }
+        direct_cum_activity = {row[0]: row[1] for row in direct_cum_act_result.all()}
 
     # Aggregate activity per envelope (category path)
     activity_this_month: dict[int, int] = defaultdict(int)

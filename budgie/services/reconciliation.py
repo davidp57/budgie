@@ -262,9 +262,7 @@ async def get_view(
     env_ids = {tx.envelope_id for tx in expense_list if tx.envelope_id is not None}
     env_names: dict[int, str] = {}
     if env_ids:
-        env_result = await db.execute(
-            select(Envelope).where(Envelope.id.in_(env_ids))
-        )
+        env_result = await db.execute(select(Envelope).where(Envelope.id.in_(env_ids)))
         env_names = {e.id: e.name for e in env_result.scalars().all()}
 
     # Build confirmed links: expense.reconciled_with_id → bank tx

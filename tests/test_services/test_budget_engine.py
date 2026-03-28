@@ -612,9 +612,7 @@ async def test_activity_hybrid_category_and_direct(db_session: AsyncSession) -> 
         db_session, account.id, datetime.date(2026, 3, 1), -2000, category_id=cat.id
     )
     # Direct envelope transaction (no category, no envelope_id — NOT counted)
-    await _make_transaction(
-        db_session, account.id, datetime.date(2026, 3, 5), -1000
-    )
+    await _make_transaction(db_session, account.id, datetime.date(2026, 3, 5), -1000)
     # Direct envelope transaction WITH envelope_id
     txn = Transaction(
         account_id=account.id,

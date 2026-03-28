@@ -25,9 +25,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Upgrade schema: add envelope_id to transactions."""
     with op.batch_alter_table("transactions", recreate="auto") as batch_op:
-        batch_op.add_column(
-            sa.Column("envelope_id", sa.Integer(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("envelope_id", sa.Integer(), nullable=True))
         batch_op.create_foreign_key(
             "fk_transactions_envelope_id",
             "envelopes",

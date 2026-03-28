@@ -140,6 +140,8 @@ When the user asks to prepare a PR, follow these steps in order:
 2. **Documentation** — verify and update all relevant docs (user guides EN + FR, README, docstrings).
 3. **Quality checks** — run all backend and frontend checks; fix all issues before proceeding.
 4. **Temporary PR description** — create a temporary markdown file (e.g. `.github/pull_request_description.md`) to help the user fill in the PR on GitHub. This file must **not** be committed.
+   - The PR description **must be written in English**.
+   - Keep it **concise**: one short summary paragraph + a bullet list of key changes. No lengthy prose.
 5. **Commit** — commit all the above changes (tests, docs) in one clean commit. Do **not** commit the PR description file.
 
 ### Release workflow

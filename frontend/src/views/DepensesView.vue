@@ -33,7 +33,7 @@ import DonutChart from '@/components/DonutChart.vue'
 
 // ── Data ──────────────────────────────────────────────────────────
 
-const expenses = ref<Transaction[]>([])
+const allExpenses = ref<Transaction[]>([])
 const groups = ref<CategoryGroupWithCategories[]>([])
 const envelopes = ref<Envelope[]>([])
 const loading = ref(true)
@@ -47,6 +47,30 @@ const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padS
 const filterMonth = ref(currentMonth)
 const filterEnvelopeId = ref<number | null>(null)
 const filterGroupId = ref<number | null>(null)
+
+// List of expenses filtered by the current UI filters.
+// The dashboard always uses the full allExpenses set.
+const expenses = computed<Transaction[]>(() => {
+  let result = allExpenses.value
+  if (filterEnvelopeId.value !== null) {
+    const targetEnv = envelopes.value.find((e) => e.id === filterEnvelopeId.value)
+    result = result.filter((t) => {
+      if (t.envelope_id === filterEnvelopeId.value) return true
+      if (targetEnv && t.category_id !== null) {
+        return (targetEnv.categories as CategoryRef[]).some((c) => c.id === t.category_id)
+      }
+      return false
+    })
+  }
+  if (filterGroupId.value !== null) {
+    result = result.filter((t) => {
+      if (t.category_id === null) return false
+      const grp = groups.value.find((g) => g.categories.some((c) => c.id === t.category_id))
+      return grp?.id === filterGroupId.value
+    })
+  }
+  return result
+})
 
 // ── View mode (list / dashboard) ─────────────────────────────────
 
@@ -75,6 +99,7 @@ const editForm = ref({
 })
 const editSaving = ref(false)
 const deleteConfirm = ref(false)
+const editError = ref('')
 
 // ── Load ─────────────────────────────────────────────────────────
 
@@ -88,19 +113,11 @@ async function load(): Promise<void> {
       listTransactions({
         expensesOnly: true,
         month: filterMonth.value || undefined,
-        envelopeId: filterEnvelopeId.value ?? undefined,
       }),
     ])
     groups.value = grps
     envelopes.value = envs
-    // Apply category group filter client-side (avoids extra API param)
-    expenses.value = filterGroupId.value
-      ? txns.filter((t) => {
-          if (t.category_id === null) return false
-          const grp = grps.find((g) => g.categories.some((c) => c.id === t.category_id))
-          return grp?.id === filterGroupId.value
-        })
-      : txns
+    allExpenses.value = txns
   } catch {
     error.value = 'Erreur lors du chargement des dépenses.'
   } finally {
@@ -177,8 +194,16 @@ const grouped = computed<Group[]>(() => {
 
     if (groupBy.value === 'envelope') {
       const name = resolvedEnvelopeName(txn)
-      key = name ?? '__none__'
-      label = name ?? 'Sans tiroir'
+      if (txn.envelope_id != null) {
+        key = `env-${txn.envelope_id}`
+        label = name ?? 'Sans tiroir'
+      } else if (name != null) {
+        key = 'uncategorised'
+        label = name
+      } else {
+        key = '__none__'
+        label = 'Sans tiroir'
+      }
     } else if (groupBy.value === 'category') {
       key = txn.category_id !== null ? String(txn.category_id) : '__none__'
       label = categoryName(txn.category_id)
@@ -224,18 +249,20 @@ function openEdit(txn: Transaction): void {
     envelope_id: txn.envelope_id,
   }
   deleteConfirm.value = false
+  editError.value = ''
 }
 
 function closeEdit(): void {
   editTxn.value = null
   deleteConfirm.value = false
+  editError.value = ''
 }
 
 async function saveEdit(): Promise<void> {
   if (!editTxn.value) return
   const raw = parseFloat(editForm.value.amount.replace(',', '.'))
   if (isNaN(raw)) {
-    error.value = 'Montant invalide.'
+    editError.value = 'Montant invalide.'
     return
   }
   const payload: TransactionUpdate = {
@@ -248,11 +275,11 @@ async function saveEdit(): Promise<void> {
   editSaving.value = true
   try {
     const updated = await updateTransaction(editTxn.value.id, payload)
-    const idx = expenses.value.findIndex((t) => t.id === editTxn.value!.id)
-    if (idx !== -1) expenses.value[idx] = updated
+    const idx = allExpenses.value.findIndex((t) => t.id === editTxn.value!.id)
+    if (idx !== -1) allExpenses.value[idx] = updated
     closeEdit()
   } catch {
-    error.value = 'Erreur lors de la sauvegarde.'
+    editError.value = 'Erreur lors de la sauvegarde.'
   } finally {
     editSaving.value = false
   }
@@ -264,10 +291,10 @@ async function confirmDelete(): Promise<void> {
   editSaving.value = true
   try {
     await deleteTransaction(id)
-    expenses.value = expenses.value.filter((t) => t.id !== id)
+    allExpenses.value = allExpenses.value.filter((t) => t.id !== id)
     closeEdit()
   } catch {
-    error.value = 'Erreur lors de la suppression.'
+    editError.value = 'Erreur lors de la suppression.'
   } finally {
     editSaving.value = false
   }
@@ -335,7 +362,7 @@ const sliceFilteredExpenses = computed<Transaction[]>(() => {
   const sel = dashboardSelection.value
   if (!sel) return []
 
-  return expenses.value.filter((txn) => {
+  return allExpenses.value.filter((txn) => {
     // Match the envelope
     const envId = txn.envelope_id
     let txnEnvKey: string
@@ -367,8 +394,8 @@ interface EnvelopeChartData {
 }
 
 const dashboardData = computed<EnvelopeChartData[]>(() => {
-  // Use ALL expenses for the month (ignore list filters for the dashboard)
-  const all = expenses.value
+  // Use ALL expenses for the month (independent of list filters)
+  const all = allExpenses.value
 
   // Build a map: envelopeKey → { meta, categoryTotals }
   const map = new Map<string, {
@@ -826,7 +853,7 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
         </div>
 
         <!-- Error -->
-        <div v-if="error" class="alert alert-error text-sm mb-3">{{ error }}</div>
+        <div v-if="editError" class="alert alert-error text-sm mb-3">{{ editError }}</div>
 
         <!-- Actions -->
         <div class="modal-action flex flex-wrap gap-2">
