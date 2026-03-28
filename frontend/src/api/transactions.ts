@@ -6,6 +6,8 @@ export async function listTransactions(options?: {
   status?: string
   month?: string
   categoryIds?: number[]
+  envelopeId?: number
+  expensesOnly?: boolean
   limit?: number
   offset?: number
 }): Promise<Transaction[]> {
@@ -14,6 +16,8 @@ export async function listTransactions(options?: {
   if (options?.status !== undefined) params.transaction_status = options.status
   if (options?.month !== undefined) params.month = options.month
   if (options?.categoryIds?.length) params.category_ids = options.categoryIds
+  if (options?.envelopeId !== undefined) params.envelope_id = options.envelopeId
+  if (options?.expensesOnly !== undefined) params.expenses_only = options.expensesOnly
   if (options?.limit !== undefined) params.limit = options.limit
   if (options?.offset !== undefined) params.offset = options.offset
   const { data } = await client.get<Transaction[]>('/api/transactions', { params })

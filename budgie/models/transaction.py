@@ -20,6 +20,7 @@ from budgie.database import Base
 if TYPE_CHECKING:
     from budgie.models.account import Account
     from budgie.models.category import Category
+    from budgie.models.envelope import Envelope
     from budgie.models.payee import Payee
 
 
@@ -33,7 +34,9 @@ class Transaction(Base):
         account_id: The account this transaction belongs to.
         date: Date of the transaction.
         payee_id: Optional payee reference.
-        category_id: Optional category for budgeting.
+        category_id: Optional category for budgeting (used for bank imports).
+        envelope_id: Optional direct envelope link for manually-created
+            expenses. Takes priority over ``category_id`` in budget calculations.
         amount: Amount in integer centimes (negative = expense).
         memo: Optional memo/description.
         status: Transaction status — planned (future), real, or reconciled.
@@ -73,11 +76,18 @@ class Transaction(Base):
         nullable=True,
         default=None,
     )
+    envelope_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("envelopes.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+    )
 
     # Relationships
     account: Mapped[Account] = relationship(back_populates="transactions")
     payee: Mapped[Payee | None] = relationship()
     category: Mapped[Category | None] = relationship()
+    envelope: Mapped[Envelope | None] = relationship()
     splits: Mapped[list[SplitTransaction]] = relationship(
         back_populates="parent", cascade="all, delete-orphan"
     )

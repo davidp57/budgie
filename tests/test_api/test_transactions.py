@@ -430,3 +430,116 @@ async def test_list_transactions_no_limit_returns_all(auth_client: AsyncClient) 
     resp = await auth_client.get("/api/transactions")
     assert resp.status_code == 200
     assert len(resp.json()) == 5
+
+
+# ── expenses_only filter ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_expenses_only_excludes_bank_imports(auth_client: AsyncClient) -> None:
+    """GET /transactions?expenses_only=true returns only expense transactions."""
+    account_id = await _create_account(auth_client)
+
+    # Create a manual expense (no import_hash)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-01-10",
+            "amount": -3000,
+            "memo": "Grocery run",
+        },
+    )
+    # Create a bank import (with import_hash)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-01-11",
+            "amount": -4500,
+            "memo": "CARREFOUR",
+            "import_hash": "abc123hash",
+        },
+    )
+
+    resp = await auth_client.get("/api/transactions?expenses_only=true")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["memo"] == "Grocery run"
+    assert items[0]["import_hash"] is None
+
+
+@pytest.mark.asyncio
+async def test_expenses_only_false_returns_all(auth_client: AsyncClient) -> None:
+    """GET /transactions?expenses_only=false returns all transactions (default)."""
+    account_id = await _create_account(auth_client)
+
+    await auth_client.post(
+        "/api/transactions",
+        json={"account_id": account_id, "date": "2024-01-10", "amount": -1000},
+    )
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-01-11",
+            "amount": -2000,
+            "import_hash": "def456hash",
+        },
+    )
+
+    resp = await auth_client.get("/api/transactions?expenses_only=false")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_expenses_only_includes_linked_transaction(
+    auth_client: AsyncClient,
+) -> None:
+    """When an expense is reconciled, linked_transaction is populated."""
+    account_id = await _create_account(auth_client)
+
+    # Create a bank import
+    bank_resp = await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-02-01",
+            "amount": -5000,
+            "memo": "LIDL achat",
+            "import_hash": "bankhash99",
+        },
+    )
+    bank_id = bank_resp.json()["id"]
+
+    # Create a manual expense and reconcile it with the bank tx
+    exp_resp = await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2024-02-01",
+            "amount": -5000,
+            "memo": "Courses",
+        },
+    )
+    exp_id = exp_resp.json()["id"]
+
+    # Point the expense at the bank tx via reconciliation endpoint
+    link_resp = await auth_client.post(
+        "/api/reconciliation/link",
+        json={"expense_id": exp_id, "bank_tx_id": bank_id},
+    )
+    assert link_resp.status_code in (200, 201)
+
+    # Fetch expenses only — linked_transaction should be populated
+    resp = await auth_client.get("/api/transactions?expenses_only=true")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    item = items[0]
+    assert item["reconciled_with_id"] == bank_id
+    assert item["linked_transaction"] is not None
+    assert item["linked_transaction"]["memo"] == "LIDL achat"
+    assert item["linked_transaction"]["amount"] == -5000

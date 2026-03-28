@@ -205,7 +205,7 @@ La navigation (AppNav) propose 5 sections :
 | 🏠 | **Accueil** | Résumé du mois : revenus, dépenses, solde, mois précédent/suivant |
 | 💰 | **Budget** | Vue des enveloppes avec édition inline du budget alloué |
 | ⚡ | **Dépense rapide** | Saisie rapide d'une transaction avec préréglages |
-| 📋 | **Transactions** | Liste paginée avec filtres, swipe-to-delete |
+| 📋 | **Dépenses** | Vue des dépenses avec filtres, tri, regroupement, édition et dashboard mensuel |
 | ⚙️ | **Paramètres** | Comptes, catégories, enveloppes, règles, import, thème |
 
 ### Page Accueil
@@ -226,12 +226,19 @@ La page budget affiche vos enveloppes sous forme de **cartes** (DrawerCards). Ch
 
 Cliquez sur une enveloppe pour filtrer les transactions correspondantes dans le panneau du bas.
 
-### Page Transactions
+### Page Dépenses
 
-Liste paginée de toutes les transactions, avec :
-- Filtres par compte et par type (réel / prévision)
-- Glissement vers la gauche pour supprimer une transaction
-- Suppression optimiste avec toast d'annulation
+La page **Dépenses** (`/depenses`) affiche les transactions virtuelles (saisies manuellement) pour le mois sélectionné. Fonctionnalités principales :
+
+- **Navigation par mois** ◄ / ► pour parcourir les mois
+- **Filtres** : par tiroir (enveloppe) et par groupe de catégories
+- **Tri** : par date, montant ou libellé
+- **Regroupement** : par tiroir, catégorie ou groupe de catégories
+- **Modal d'édition** : modifier la date, le montant, le mémo, la catégorie et le tiroir
+- **Suppression** avec confirmation
+- **Mode Dashboard** 🥧 : camemberts par tiroir montrant les dépenses par catégorie
+  - Cliquez sur une tranche pour afficher la liste des dépenses correspondantes
+- Les dépenses réconciliées affichent un lien vers la transaction bancaire pointée
 
 ---
 
@@ -357,7 +364,7 @@ Cliquez sur le montant **Budgété** d'une enveloppe pour saisir un nouveau mont
 
 ### Créer une prévision
 
-Dans la vue **Transactions**, créez une nouvelle transaction virtuelle avec :
+Dans la vue **Dépenses**, créez une nouvelle transaction virtuelle avec :
 - **Montant**, **date estimée**, **catégorie**, **mémo**, **compte**
 
 La prévision apparaît avec une icône ⏳ et un style en pointillé. Le **Disponible** de l'enveloppe est immédiatement réduit.
@@ -368,7 +375,7 @@ Lors de l'import du relevé bancaire, Budgie suggère de lier les transactions r
 
 ### Consulter les prévisions en attente
 
-Dans **Transactions**, filtrez sur **Prévisions** pour voir les prévisions non encore réalisées.
+Dans **Dépenses**, filtrez par tiroir ou par groupe pour voir les prévisions non encore réalisées.
 
 ---
 
@@ -376,14 +383,16 @@ Dans **Transactions**, filtrez sur **Prévisions** pour voir les prévisions non
 
 La page **QuickExpense** (⚡) permet de saisir une transaction en quelques secondes :
 
-1. Entrez le **montant**
-2. Sélectionnez une **catégorie** et un **compte**
-3. Ajoutez un **mémo** optionnel
+1. Appuyez sur un **tiroir** dans la vue Budget pour ouvrir la saisie rapide
+2. Entrez le **montant**
+3. Ajoutez optionnellement un **mémo**, une **date**, ou marquez la dépense comme **prévue**
 4. Validez
+
+La transaction est liée directement au tiroir (enveloppe) — aucune catégorie n’est requise. Si vous souhaitez préciser une catégorie, vous pouvez modifier la transaction après saisie.
 
 ### Préréglages
 
-Vous pouvez créer des **préréglages** pour les dépenses fréquentes (ex. « Boulangerie — 1,20 € — Alimentation »). Un clic suffit ensuite pour pré-remplir le formulaire.
+Vous pouvez créer des **préréglages** pour les dépenses fréquentes (ex. « Boulangerie — 1,20 € »). Un clic suffit ensuite pour pré-remplir le formulaire.
 
 ### Suggestions par géolocalisation
 

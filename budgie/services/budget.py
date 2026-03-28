@@ -80,6 +80,7 @@ async def get_month_budget_view(
     }
 
     # 3. Activity this month per category (signed amounts, virtual included)
+    #    Only for transactions WITHOUT a direct envelope_id (fallback path)
     activity_by_cat: dict[int, int] = {}
     cum_activity_by_cat: dict[int, int] = {}
 
@@ -89,6 +90,7 @@ async def get_month_budget_view(
             .join(Account, Transaction.account_id == Account.id)
             .where(
                 Transaction.category_id.in_(all_cat_ids),
+                Transaction.envelope_id.is_(None),
                 func.strftime("%Y-%m", Transaction.date) == month,
                 Account.user_id == user_id,
             )
@@ -96,12 +98,14 @@ async def get_month_budget_view(
         )
         activity_by_cat = {row[0]: row[1] for row in act_result.all()}
 
-        # 4. Cumulative activity per category (all months ≤ current)
+        # 4. Cumulative activity per category
+        #    (all months ≤ current, no direct envelope_id)
         cum_act_result = await db.execute(
             select(Transaction.category_id, func.sum(Transaction.amount))
             .join(Account, Transaction.account_id == Account.id)
             .where(
                 Transaction.category_id.in_(all_cat_ids),
+                Transaction.envelope_id.is_(None),
                 func.strftime("%Y-%m", Transaction.date) <= month,
                 Account.user_id == user_id,
             )
@@ -109,7 +113,36 @@ async def get_month_budget_view(
         )
         cum_activity_by_cat = {row[0]: row[1] for row in cum_act_result.all()}
 
-    # Aggregate activity per envelope
+    # 3b. Activity this month via direct envelope_id (manual expenses path)
+    direct_activity_this_month: dict[int, int] = {}
+    direct_cum_activity: dict[int, int] = {}
+    if env_ids:
+        direct_act_result = await db.execute(
+            select(Transaction.envelope_id, func.sum(Transaction.amount))
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Transaction.envelope_id.in_(env_ids),
+                func.strftime("%Y-%m", Transaction.date) == month,
+                Account.user_id == user_id,
+            )
+            .group_by(Transaction.envelope_id)
+        )
+        direct_activity_this_month = {row[0]: row[1] for row in direct_act_result.all()}
+
+        # 4b. Cumulative activity via direct envelope_id
+        direct_cum_act_result = await db.execute(
+            select(Transaction.envelope_id, func.sum(Transaction.amount))
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Transaction.envelope_id.in_(env_ids),
+                func.strftime("%Y-%m", Transaction.date) <= month,
+                Account.user_id == user_id,
+            )
+            .group_by(Transaction.envelope_id)
+        )
+        direct_cum_activity = {row[0]: row[1] for row in direct_cum_act_result.all()}
+
+    # Aggregate activity per envelope (category path)
     activity_this_month: dict[int, int] = defaultdict(int)
     cum_activity: dict[int, int] = defaultdict(int)
     for cat_id, amount in activity_by_cat.items():
@@ -120,6 +153,11 @@ async def get_month_budget_view(
         env_id = cat_to_env.get(cat_id)
         if env_id is not None:
             cum_activity[env_id] += amount
+    # Add direct envelope_id path
+    for env_id, amount in direct_activity_this_month.items():
+        activity_this_month[env_id] += int(amount)
+    for env_id, amount in direct_cum_activity.items():
+        cum_activity[env_id] += int(amount)
 
     # 5. Cumulative budgeted per envelope (for rollover)
     cum_budgeted_result = await db.execute(

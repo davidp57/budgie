@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Direct envelope link on transactions** — transactions now carry an optional `envelope_id` field that links them directly to an envelope, independently of any associated category. This enables the QuickExpense flow to record expenses without requiring a category selector.
+- **QuickExpense: category-free entry** — the Quick Expense sheet now sends `envelope_id` directly instead of auto-selecting the first category of the envelope. Users can enter a transaction for any envelope even if no category is configured.
+- **Reconciliation: envelope name display** — the reconciliation view shows the envelope name (🗂) on expenses entered via the direct link, alongside the existing category name for bank-imported transactions.
+- **Filter transactions by envelope** — `GET /api/transactions?envelope_id=X` returns only transactions whose `envelope_id` equals `X`.
+
+### Changed
+
+- **Budget activity dual-path** — the budget engine now aggregates activity from two paths: direct `envelope_id` (manual expenses) and category-based `category_id` (bank imports). Both are merged without double-counting.
+- **Reconciliation `link()`** — when linking a bank transaction to an expense, `envelope_id` is propagated from the expense to the bank transaction.
+
 ---
 
 ## [0.5.0] - 2026-03-27

@@ -15,6 +15,8 @@ async def get_transactions(
     status: str | None = None,
     month: str | None = None,
     category_ids: list[int] | None = None,
+    envelope_id: int | None = None,
+    expenses_only: bool = False,
     limit: int | None = None,
     offset: int | None = None,
 ) -> list[Transaction]:
@@ -29,6 +31,10 @@ async def get_transactions(
         category_ids: If provided, filter to transactions whose category_id is
             in this list. Pass an empty list to return uncategorised transactions
             only.
+        envelope_id: If provided, filter to transactions with this direct
+            envelope_id.
+        expenses_only: If True, return only manually-created budget expenses
+            (transactions where import_hash IS NULL).
         limit: Maximum number of rows to return. None means no limit.
         offset: Number of rows to skip before returning. None means 0.
 
@@ -49,6 +55,10 @@ async def get_transactions(
         query = query.where(func.strftime("%Y-%m", Transaction.date) == month)
     if category_ids is not None:
         query = query.where(Transaction.category_id.in_(category_ids))
+    if envelope_id is not None:
+        query = query.where(Transaction.envelope_id == envelope_id)
+    if expenses_only:
+        query = query.where(Transaction.import_hash.is_(None))
     if offset is not None:
         query = query.offset(offset)
     if limit is not None:

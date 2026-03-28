@@ -32,9 +32,9 @@ const router = createRouter({
       component: () => import('@/views/BudgetView.vue'),
     },
     {
-      path: '/transactions',
-      name: 'transactions',
-      component: () => import('@/views/TransactionsView.vue'),
+      path: '/depenses',
+      name: 'depenses',
+      component: () => import('@/views/DepensesView.vue'),
     },
     {
       path: '/reconciliation',
