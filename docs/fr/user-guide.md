@@ -376,14 +376,16 @@ Dans **Transactions**, filtrez sur **Prévisions** pour voir les prévisions non
 
 La page **QuickExpense** (⚡) permet de saisir une transaction en quelques secondes :
 
-1. Entrez le **montant**
-2. Sélectionnez une **catégorie** et un **compte**
-3. Ajoutez un **mémo** optionnel
+1. Appuyez sur un **tiroir** dans la vue Budget pour ouvrir la saisie rapide
+2. Entrez le **montant**
+3. Ajoutez optionnellement un **mémo**, une **date**, ou marquez la dépense comme **prévue**
 4. Validez
+
+La transaction est liée directement au tiroir (enveloppe) — aucune catégorie n’est requise. Si vous souhaitez préciser une catégorie, vous pouvez modifier la transaction après saisie.
 
 ### Préréglages
 
-Vous pouvez créer des **préréglages** pour les dépenses fréquentes (ex. « Boulangerie — 1,20 € — Alimentation »). Un clic suffit ensuite pour pré-remplir le formulaire.
+Vous pouvez créer des **préréglages** pour les dépenses fréquentes (ex. « Boulangerie — 1,20 € »). Un clic suffit ensuite pour pré-remplir le formulaire.
 
 ### Suggestions par géolocalisation
 

@@ -14,8 +14,9 @@
  */
 
 import { computed, nextTick, onMounted, ref } from 'vue'
-import type { EnvelopeLine } from '@/api/types'
+import type { Category, CategoryGroupWithCategories, EnvelopeLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
+import { listCategoryGroups } from '@/api/categories'
 import { createTransaction } from '@/api/transactions'
 import { useToastStore } from '@/stores/toast'
 import { usePresetsStore, type QuickPreset } from '@/stores/presets'
@@ -52,6 +53,41 @@ const showDate = ref(false)
 const isPlanned = ref(false)
 const customDate = ref(new Date().toISOString().slice(0, 10))
 const submitting = ref(false)
+
+// ── Category selection (optional) ────────────────────────────────
+const selectedCategoryId = ref<number | null>(null)
+const allGroups = ref<CategoryGroupWithCategories[]>([])
+const categoryPickerRef = ref<HTMLDialogElement | null>(null)
+
+async function openCategoryPicker(): Promise<void> {
+  if (!allGroups.value.length) {
+    allGroups.value = await listCategoryGroups()
+  }
+  categoryPickerRef.value?.showModal()
+}
+
+function selectCategory(cat: Category): void {
+  selectedCategoryId.value = cat.id
+  categoryPickerRef.value?.close()
+}
+
+function clearCategory(): void {
+  selectedCategoryId.value = null
+}
+
+const selectedCategoryName = computed(() => {
+  if (!selectedCategoryId.value) return null
+  // Search in envelope categories first, then all groups
+  const fromEnvelope = props.drawer.categories.find(
+    (c) => c.id === selectedCategoryId.value,
+  )
+  if (fromEnvelope) return fromEnvelope.name
+  for (const g of allGroups.value) {
+    const found = g.categories.find((c) => c.id === selectedCategoryId.value)
+    if (found) return found.name
+  }
+  return null
+})
 
 // Parse amount string to centimes (strict validation)
 // Accept both comma and dot as decimal separator
@@ -147,19 +183,12 @@ async function submit(): Promise<void> {
   submitting.value = true
 
   try {
-    // Use first category of the drawer
-    const categoryId = props.drawer.categories[0]?.id
-    if (!categoryId) {
-      toast.error('⚠️ Ce tiroir n\u2019a aucune catégorie — ajoute-en une dans les réglages')
-      submitting.value = false
-      return
-    }
-
     await createTransaction({
       account_id: props.accountId,
       date: showDate.value ? customDate.value : new Date().toISOString().slice(0, 10),
       amount: -amountCentimes.value, // Expense = negative
-      category_id: categoryId,
+      envelope_id: props.drawer.envelope_id,
+      category_id: selectedCategoryId.value ?? undefined,
       memo: showDescription.value && description.value ? description.value : undefined,
       status: isPlanned.value ? 'planned' : 'real',
     })
@@ -348,6 +377,36 @@ const numpadKeys = [
           >🔮 Prévue</button>
         </div>
 
+        <!-- Category chips (optional) -->
+        <div v-if="drawer.categories.length || selectedCategoryId" class="flex gap-2 pb-2 flex-wrap items-center">
+          <span class="text-xs text-base-content/40">Catégorie :</span>
+          <!-- Chips for this envelope's categories -->
+          <button
+            v-for="cat in drawer.categories"
+            :key="cat.id"
+            class="btn btn-xs"
+            :class="selectedCategoryId === cat.id ? 'btn-secondary' : 'btn-ghost'"
+            @click="selectedCategoryId === cat.id ? clearCategory() : (selectedCategoryId = cat.id)"
+          >{{ cat.name }}</button>
+          <!-- Selected category from "Autre…" (not in envelope's list) -->
+          <button
+            v-if="selectedCategoryId && !drawer.categories.find(c => c.id === selectedCategoryId)"
+            class="btn btn-xs btn-secondary"
+            @click="clearCategory"
+          >{{ selectedCategoryName }} ✕</button>
+          <!-- Autre… button -->
+          <button
+            class="btn btn-xs btn-ghost text-base-content/50"
+            @click="openCategoryPicker"
+          >Autre…</button>
+        </div>
+        <div v-else class="flex gap-2 pb-2">
+          <button
+            class="btn btn-xs btn-ghost text-base-content/40"
+            @click="openCategoryPicker"
+          >🏷 Catégorie…</button>
+        </div>
+
         <!-- Nearby places (conditional) -->
         <div v-if="showLocation" class="mt-1 mb-1">
           <div v-if="nearby.loading.value" class="text-center py-2">
@@ -474,6 +533,40 @@ const numpadKeys = [
           </button>
           <button class="btn btn-primary btn-sm" @click="savePresets">
             OK
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Category Picker Dialog                                     -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <dialog ref="categoryPickerRef" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box max-h-[70vh] overflow-y-auto">
+        <h3 class="text-lg font-bold mb-3">🏷 Choisir une catégorie</h3>
+        <div v-if="!allGroups.length" class="text-center py-6">
+          <span class="loading loading-spinner loading-sm" />
+        </div>
+        <div v-else class="space-y-3">
+          <div v-for="group in allGroups" :key="group.id">
+            <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-1">
+              {{ group.name }}
+            </p>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="cat in group.categories"
+                :key="cat.id"
+                class="btn btn-xs"
+                :class="selectedCategoryId === cat.id ? 'btn-secondary' : 'btn-ghost'"
+                @click="selectCategory(cat)"
+              >{{ cat.name }}</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-action mt-4">
+          <button class="btn btn-ghost btn-sm" @click="categoryPickerRef?.close()">
+            Annuler
           </button>
         </div>
       </div>

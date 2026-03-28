@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from budgie.models.account import Account
 from budgie.models.category import Category
 from budgie.models.category_rule import CategoryRule
+from budgie.models.envelope import Envelope
 from budgie.models.transaction import Transaction
 from budgie.schemas.category_rule import CategoryRuleRead
 from budgie.schemas.reconciliation import (
@@ -200,7 +201,11 @@ def _to_bank_read(tx: Transaction) -> BankTxRead:
     )
 
 
-def _to_expense_read(tx: Transaction, cat_name: str | None = None) -> BudgetExpenseRead:
+def _to_expense_read(
+    tx: Transaction,
+    cat_name: str | None = None,
+    env_name: str | None = None,
+) -> BudgetExpenseRead:
     return BudgetExpenseRead(
         id=tx.id,
         date=tx.date,
@@ -208,6 +213,8 @@ def _to_expense_read(tx: Transaction, cat_name: str | None = None) -> BudgetExpe
         amount=tx.amount,
         category_id=tx.category_id,
         category_name=cat_name,
+        envelope_id=tx.envelope_id,
+        envelope_name=env_name,
         memo=None,
         status=tx.status,
     )
@@ -251,6 +258,15 @@ async def get_view(
         cat_result = await db.execute(select(Category).where(Category.id.in_(cat_ids)))
         cat_names = {c.id: c.name for c in cat_result.scalars().all()}
 
+    # Collect envelope names for expenses with direct envelope_id
+    env_ids = {tx.envelope_id for tx in expense_list if tx.envelope_id is not None}
+    env_names: dict[int, str] = {}
+    if env_ids:
+        env_result = await db.execute(
+            select(Envelope).where(Envelope.id.in_(env_ids))
+        )
+        env_names = {e.id: e.name for e in env_result.scalars().all()}
+
     # Build confirmed links: expense.reconciled_with_id → bank tx
     linked_expense_ids = {
         tx.id for tx in expense_list if tx.reconciled_with_id is not None
@@ -292,7 +308,11 @@ async def get_view(
         month=month,
         bank_txs=[_to_bank_read(b) for b in bank_list],
         expenses=[
-            _to_expense_read(e, cat_names.get(e.category_id))  # type: ignore[arg-type]
+            _to_expense_read(
+                e,
+                cat_names.get(e.category_id),  # type: ignore[arg-type]
+                env_names.get(e.envelope_id) if e.envelope_id is not None else None,
+            )
             for e in expense_list
         ],
         links=links,
@@ -498,6 +518,10 @@ async def link(
         expense.memo = req.memo
 
     expense.reconciled_with_id = bank.id
+
+    # Propagate envelope_id from expense to bank tx
+    if expense.envelope_id is not None:
+        bank.envelope_id = expense.envelope_id
 
     # Auto-create a categorization rule on first link, if the bank tx has a
     # meaningful label and the expense belongs to a known category.

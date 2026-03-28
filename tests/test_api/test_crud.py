@@ -586,3 +586,66 @@ async def test_category_rule_amount_range_validation_min_gt_max(
         },
     )
     assert response.status_code == 422
+
+
+# ── Tests: envelope_id on transactions ───────────────────────────
+
+
+async def test_transaction_create_with_envelope_id(auth_client: AsyncClient) -> None:
+    """Creating a transaction with envelope_id persists and returns it."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Cash", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Petty Cash"})
+    envelope_id = envelope.json()["id"]
+
+    response = await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-10",
+            "amount": -2500,
+            "cleared": "uncleared",
+            "envelope_id": envelope_id,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["envelope_id"] == envelope_id
+
+
+async def test_list_transactions_filter_by_envelope_id(
+    auth_client: AsyncClient,
+) -> None:
+    """GET /api/transactions?envelope_id filters to matching transactions only."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+
+    env1 = await auth_client.post("/api/envelopes", json={"name": "Food"})
+    env2 = await auth_client.post("/api/envelopes", json={"name": "Transport"})
+    env1_id = env1.json()["id"]
+    env2_id = env2.json()["id"]
+
+    for envelope_id, amount in [(env1_id, -1000), (env1_id, -2000), (env2_id, -500)]:
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": "2026-03-01",
+                "amount": amount,
+                "cleared": "uncleared",
+                "envelope_id": envelope_id,
+            },
+        )
+
+    response = await auth_client.get(f"/api/transactions?envelope_id={env1_id}")
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 2
+    assert all(tx["envelope_id"] == env1_id for tx in results)

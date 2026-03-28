@@ -3,11 +3,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
 
 from budgie.api.deps import CurrentUser, DBSession
+from budgie.models.transaction import Transaction
 from budgie.schemas.transaction import (
     PlannedMatchRequest,
     TransactionCreate,
+    TransactionLinkedInfo,
     TransactionRead,
     TransactionUpdate,
 )
@@ -90,6 +93,8 @@ async def list_transactions(
     transaction_status: str | None = None,
     month: str | None = None,
     category_ids: Annotated[list[int] | None, Query()] = None,
+    envelope_id: int | None = None,
+    expenses_only: bool = False,
     limit: int | None = None,
     offset: int | None = None,
 ) -> list[TransactionRead]:
@@ -103,6 +108,8 @@ async def list_transactions(
         month: Optional YYYY-MM month filter.
         category_ids: Optional list of category IDs to filter by (repeatable
             query param: ?category_ids=1&category_ids=2).
+        envelope_id: Optional filter by direct envelope_id.
+        expenses_only: If True, return only budget expenses (no bank imports).
         limit: Maximum number of transactions to return.
         offset: Number of transactions to skip.
 
@@ -117,10 +124,30 @@ async def list_transactions(
         transaction_status,
         month,
         cat_filter,
+        envelope_id=envelope_id,
+        expenses_only=expenses_only,
         limit=limit,
         offset=offset,
     )
-    return [TransactionRead.model_validate(t) for t in txns]
+
+    # Batch-load linked bank transactions to avoid N+1 queries
+    linked_ids = [t.reconciled_with_id for t in txns if t.reconciled_with_id]
+    linked_map: dict[int, Transaction] = {}
+    if linked_ids:
+        result = await db.execute(
+            select(Transaction).where(Transaction.id.in_(linked_ids))
+        )
+        linked_map = {t.id: t for t in result.scalars()}
+
+    reads: list[TransactionRead] = []
+    for t in txns:
+        read = TransactionRead.model_validate(t)
+        if t.reconciled_with_id and t.reconciled_with_id in linked_map:
+            read.linked_transaction = TransactionLinkedInfo.model_validate(
+                linked_map[t.reconciled_with_id]
+            )
+        reads.append(read)
+    return reads
 
 
 @router.post("", response_model=TransactionRead, status_code=status.HTTP_201_CREATED)

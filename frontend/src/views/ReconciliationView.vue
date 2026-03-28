@@ -16,7 +16,7 @@ import {
 } from '@/api/reconciliation'
 import { listRules } from '@/api/categoryRules'
 import { categorizeSingle } from '@/api/categorize'
-import { createTransaction, deleteTransaction } from '@/api/transactions'
+import { createTransaction, deleteTransaction, updateTransaction } from '@/api/transactions'
 import ImportModal from '@/components/ImportModal.vue'
 import RulesModal from '@/components/RulesModal.vue'
 import CategoryPicker from '@/components/CategoryPicker.vue'
@@ -165,6 +165,7 @@ const modalBankId = ref<number | null>(null)
 const modalExpId = ref<number | null>(null)
 const modalMemo = ref('')
 const modalAdjust = ref(true)
+const modalCategoryId = ref<number | null>(null)
 
 // Saving state
 const linking = ref(false)
@@ -695,6 +696,11 @@ async function onCategoryCreated(cat: Category): Promise<void> {
   newExpCategoryId.value = cat.id
 }
 
+async function onModalCategoryCreated(cat: Category): Promise<void> {
+  allCategoryGroups.value = await listCategoryGroups()
+  modalCategoryId.value = cat.id
+}
+
 async function confirmNewExpense(): Promise<void> {
   if (selectedAccountId.value === null || selBankId.value === null) return
   if (newExpCategoryId.value === null) return  // category is mandatory
@@ -758,10 +764,12 @@ async function executeDelete(): Promise<void> {
 // ── Link modal ────────────────────────────────────────────────────
 function openLinkModal(bankId: number, expenseId: number): void {
   const bank = bankTxs.value.find((b) => b.id === bankId)
+  const expense = viewData.value?.expenses.find((e) => e.id === expenseId)
   modalBankId.value = bankId
   modalExpId.value = expenseId
   modalMemo.value = bank ? titleCase(bank.label) : ''
   modalAdjust.value = true
+  modalCategoryId.value = expense?.category_id ?? null
   showLinkModal.value = true
 }
 
@@ -769,10 +777,19 @@ function closeLinkModal(): void {
   showLinkModal.value = false
   modalBankId.value = null
   modalExpId.value = null
+  modalCategoryId.value = null
 }
 
 async function confirmLinkModal(): Promise<void> {
   if (modalBankId.value === null || modalExpId.value === null) return
+  // If the expense had no category and one was chosen, save it first
+  if (modalExpense.value && !modalExpense.value.category_id && modalCategoryId.value !== null) {
+    await updateTransaction(modalExpId.value, { category_id: modalCategoryId.value })
+    // Update local state so rule creation uses the right category
+    modalExpense.value.category_id = modalCategoryId.value
+    const cat = allCategoryGroups.value.flatMap((g) => g.categories).find((c) => c.id === modalCategoryId.value)
+    if (cat) modalExpense.value.category_name = cat.name
+  }
   const req: LinkRequest = {
     bank_tx_id: modalBankId.value,
     expense_id: modalExpId.value,
@@ -1274,7 +1291,8 @@ const modalHasDelta = computed<boolean>(() => {
                           {{ row.expense.label }}
                         </p>
                         <p class="card-sub text-xs text-base-content/50 mt-0.5">
-                          <template v-if="row.expense.category_name">{{ row.expense.category_name }} · </template>
+                          <template v-if="row.expense.envelope_name">🗂 {{ row.expense.envelope_name }} · </template>
+                          <template v-else-if="row.expense.category_name">{{ row.expense.category_name }} · </template>
                           {{ fmtDate(row.expense.date) }}
                           <span v-if="row.expense.status === 'planned'" class="badge badge-warning badge-sm ml-1">🗓 prévu</span>
                           <span v-else-if="row.suggested" class="badge badge-sm ml-1" style="background:#ede9fe;color:#7c3aed;border-color:#c4b5fd;">💡</span>
@@ -1431,7 +1449,8 @@ const modalHasDelta = computed<boolean>(() => {
                       {{ e.label }}
                     </p>
                     <p class="text-xs text-base-content/50 flex flex-wrap gap-1 mt-0.5">
-                      <template v-if="e.category_name">{{ e.category_name }} · </template>
+                      <template v-if="e.envelope_name">🗂 {{ e.envelope_name }} · </template>
+                      <template v-else-if="e.category_name">{{ e.category_name }} · </template>
                       {{ fmtDate(e.date) }}
                       <span v-if="e.status === 'planned'" class="badge badge-warning badge-xs">🗓 prévu</span>
                       <span v-else-if="isLinkedExpense(e.id)" class="badge badge-success badge-xs">🔗 liée</span>
@@ -1560,7 +1579,8 @@ const modalHasDelta = computed<boolean>(() => {
               <div>
                 <p class="font-semibold text-sm text-base-content">{{ modalExpense.label }}</p>
                 <p class="text-xs text-base-content/50 mt-0.5">
-                  <template v-if="modalExpense.category_name">{{ modalExpense.category_name }} · </template>
+                  <template v-if="modalExpense.envelope_name">🗂 {{ modalExpense.envelope_name }} · </template>
+                  <template v-else-if="modalExpense.category_name">{{ modalExpense.category_name }} · </template>
                   {{ fmtDate(modalExpense.date) }}
                 </p>
               </div>
@@ -1571,6 +1591,19 @@ const modalHasDelta = computed<boolean>(() => {
                 {{ fmtAmt(modalExpense.amount) }}
               </span>
             </div>
+          </div>
+
+          <!-- Category picker — only shown when expense has no category -->
+          <div
+            v-if="modalExpense && !modalExpense.category_id"
+            class="rounded-xl border border-base-300 bg-base-200/50 p-4 mb-3"
+          >
+            <p class="text-xs font-bold text-base-content/60 uppercase tracking-wide mb-2">🏷 Catégorie (optionnel)</p>
+            <CategoryPicker
+              v-model="modalCategoryId"
+              :groups="allCategoryGroups"
+              @category-created="onModalCategoryCreated"
+            />
           </div>
 
           <!-- Amount delta warning -->

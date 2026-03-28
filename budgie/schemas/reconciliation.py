@@ -37,6 +37,8 @@ class BudgetExpenseRead(BaseModel):
     amount: int  # centimes
     category_id: int | None
     category_name: str | None
+    envelope_id: int | None
+    envelope_name: str | None
     memo: str | None
     status: str  # planned, real, reconciled
 

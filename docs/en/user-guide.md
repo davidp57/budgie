@@ -376,14 +376,16 @@ In **Transactions**, filter on **Forecasts** to see forecasts not yet realized.
 
 The **Quick Expense** page (⚡) lets you enter a transaction in seconds:
 
-1. Enter the **amount**
-2. Select a **category** and **account**
-3. Add an optional **memo**
+1. Tap on an **envelope** in the budget view to open the Quick Expense sheet
+2. Enter the **amount**
+3. Optionally add a **memo**, **date**, or mark it as **planned**
 4. Submit
+
+The transaction is linked directly to the envelope — no category selection required. If you later want to assign a category, you can edit the transaction.
 
 ### Presets
 
-You can create **presets** for frequent expenses (e.g. "Bakery — €1.20 — Food"). One tap pre-fills the form.
+You can create **presets** for frequent expenses (e.g. “Bakery — €1.20”). One tap pre-fills the form.
 
 ### Geolocation Suggestions
 

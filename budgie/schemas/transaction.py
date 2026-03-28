@@ -31,6 +31,7 @@ class TransactionCreate(BaseModel):
     date: datetime.date
     payee_id: int | None = None
     category_id: int | None = None
+    envelope_id: int | None = None
     amount: int
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus = "uncleared"
@@ -56,12 +57,31 @@ class TransactionUpdate(BaseModel):
     date: datetime.date | None = None
     payee_id: int | None = None
     category_id: int | None = None
+    envelope_id: int | None = None
     amount: int | None = None
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus | None = None
     is_virtual: bool | None = None
     status: TransactionStatus | None = None
     income_for_month: str | None = None
+
+
+class TransactionLinkedInfo(BaseModel):
+    """Compact info about a linked bank transaction.
+
+    Attributes:
+        id: Transaction ID of the linked bank import.
+        memo: Memo/description from the bank.
+        amount: Amount in integer centimes.
+        date: Date of the bank transaction.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    memo: str | None
+    amount: int
+    date: datetime.date
 
 
 class TransactionRead(BaseModel):
@@ -81,6 +101,8 @@ class TransactionRead(BaseModel):
         virtual_linked_id: Deprecated — kept for backward compatibility.
         income_for_month: Budget month this income is assigned to (YYYY-MM), if any.
         import_hash: Import deduplication hash.
+        reconciled_with_id: ID of the linked bank transaction (when pointed).
+        linked_transaction: Compact bank transaction info when pointed.
         created_at: Creation timestamp.
     """
 
@@ -91,6 +113,7 @@ class TransactionRead(BaseModel):
     date: datetime.date
     payee_id: int | None
     category_id: int | None
+    envelope_id: int | None
     amount: int
     memo: str | None
     status: str = "real"
@@ -99,6 +122,8 @@ class TransactionRead(BaseModel):
     virtual_linked_id: int | None = None
     income_for_month: str | None = None
     import_hash: str | None = None
+    reconciled_with_id: int | None = None
+    linked_transaction: TransactionLinkedInfo | None = None
     created_at: datetime.datetime
 
 

@@ -77,17 +77,27 @@ export interface Payee {
 
 export type TransactionStatus = 'planned' | 'real' | 'reconciled'
 
+export interface TransactionLinked {
+  id: number
+  memo: string | null
+  amount: number // centimes
+  date: string // YYYY-MM-DD
+}
+
 export interface Transaction {
   id: number
   account_id: number
   date: string // YYYY-MM-DD
   payee_id: number | null
   category_id: number | null
+  envelope_id: number | null
   amount: number // centimes
   memo: string | null
   status: TransactionStatus
   income_for_month: string | null // YYYY-MM
   import_hash: string | null
+  reconciled_with_id: number | null
+  linked_transaction: TransactionLinked | null
   created_at: string
 }
 
@@ -96,13 +106,17 @@ export interface TransactionCreate {
   date: string
   payee_id?: number | null
   category_id?: number | null
+  envelope_id?: number | null
   amount: number
   memo?: string | null
   status?: TransactionStatus
 }
 
 export interface TransactionUpdate {
+  date?: string | null
   category_id?: number | null
+  envelope_id?: number | null
+  amount?: number | null
   memo?: string | null
   status?: TransactionStatus
   payee_id?: number | null
@@ -278,6 +292,8 @@ export interface ReconciliationExpense {
   amount: number // centimes
   category_id: number | null
   category_name: string | null
+  envelope_id: number | null
+  envelope_name: string | null
   memo: string | null
   status: TransactionStatus
 }

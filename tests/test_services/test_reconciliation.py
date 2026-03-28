@@ -688,6 +688,93 @@ async def test_link_skip_rule(db_session: AsyncSession) -> None:
     assert rules == []
 
 
+# ── Tests: envelope_id propagation ───────────────────────────────
+
+
+async def test_link_propagates_envelope_id(db_session: AsyncSession) -> None:
+    """link() copies expense.envelope_id to the bank transaction."""
+    from budgie.models.envelope import Envelope
+    from budgie.schemas.reconciliation import LinkRequest
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    envelope = Envelope(
+        user_id=user.id, name="Cash Drawer", rollover=False, sort_order=0
+    )
+    db_session.add(envelope)
+    await db_session.flush()
+
+    bank = _bank_tx(acc.id, -4500)
+    exp = Transaction(
+        account_id=acc.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-4500,
+        memo="ATM withdrawal",
+        status="real",
+        envelope_id=envelope.id,
+        import_hash=None,
+    )
+    db_session.add_all([bank, exp])
+    await db_session.flush()
+
+    req = LinkRequest(bank_tx_id=bank.id, expense_id=exp.id, skip_rule=True)
+    await svc.link(db_session, user.id, req)
+
+    await db_session.refresh(bank)
+    assert bank.envelope_id == envelope.id
+
+
+async def test_link_does_not_overwrite_envelope_when_expense_has_none(
+    db_session: AsyncSession,
+) -> None:
+    """link() does not set bank.envelope_id when expense.envelope_id is None."""
+    from budgie.schemas.reconciliation import LinkRequest
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    bank = _bank_tx(acc.id, -2000)
+    exp = _expense(acc.id, -2000)  # envelope_id = None
+    db_session.add_all([bank, exp])
+    await db_session.flush()
+
+    req = LinkRequest(bank_tx_id=bank.id, expense_id=exp.id, skip_rule=True)
+    await svc.link(db_session, user.id, req)
+
+    await db_session.refresh(bank)
+    assert bank.envelope_id is None
+
+
+async def test_get_view_expense_has_envelope_name(db_session: AsyncSession) -> None:
+    """get_view() returns envelope_name on expense when envelope_id is set."""
+    from budgie.models.envelope import Envelope
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    envelope = Envelope(user_id=user.id, name="Groceries", rollover=False, sort_order=0)
+    db_session.add(envelope)
+    await db_session.flush()
+
+    exp = Transaction(
+        account_id=acc.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-1200,
+        memo="Farmers market",
+        status="real",
+        envelope_id=envelope.id,
+        import_hash=None,
+    )
+    db_session.add(exp)
+    await db_session.flush()
+
+    view = await svc.get_view(db_session, user.id, acc.id, "2026-03")
+    assert len(view.expenses) == 1
+    assert view.expenses[0].envelope_id == envelope.id
+    assert view.expenses[0].envelope_name == "Groceries"
+
+
 # ---------------------------------------------------------------------------
 # _matches_rule — amount & transaction_type filters
 # ---------------------------------------------------------------------------

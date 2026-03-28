@@ -5,6 +5,7 @@ import {
   formatAmount,
   type Category,
   type CategoryGroupWithCategories,
+  type Envelope,
   type Transaction,
 } from '@/api/types'
 import CategoryPicker from './CategoryPicker.vue'
@@ -12,6 +13,7 @@ import CategoryPicker from './CategoryPicker.vue'
 const props = defineProps<{
   txn: Transaction
   groups: CategoryGroupWithCategories[]
+  envelopes?: Envelope[]
 }>()
 
 const emit = defineEmits<{
@@ -53,6 +55,11 @@ function categoryName(id: number | null): string {
     if (cat) return cat.name
   }
   return String(id)
+}
+
+function envelopeName(id: number | null): string | null {
+  if (id === null || !props.envelopes) return null
+  return props.envelopes.find((e) => e.id === id)?.name ?? null
 }
 
 async function realizeTransaction(): Promise<void> {
@@ -121,9 +128,15 @@ async function deleteVirtualTransaction(): Promise<void> {
         </div>
       </template>
       <template v-else>
-        <button class="btn btn-ghost btn-xs" @click="startEdit">
-          {{ categoryName(txn.category_id) }}
-        </button>
+        <div class="flex flex-col items-start gap-0.5">
+          <button class="btn btn-ghost btn-xs" @click="startEdit">
+            {{ categoryName(txn.category_id) }}
+          </button>
+          <span
+            v-if="envelopeName(txn.envelope_id)"
+            class="text-[11px] text-base-content/40 pl-1 leading-none"
+          >🗂 {{ envelopeName(txn.envelope_id) }}</span>
+        </div>
       </template>
     </td>
 

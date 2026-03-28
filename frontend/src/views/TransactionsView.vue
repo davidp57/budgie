@@ -2,11 +2,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { listAccounts } from '@/api/accounts'
 import { listGroupsWithCategories } from '@/api/categories'
+import { listEnvelopes } from '@/api/envelopes'
 import { createTransaction, deleteTransaction, listTransactions } from '@/api/transactions'
 import {
   formatAmount,
   type Account,
   type CategoryGroupWithCategories,
+  type Envelope,
   type Transaction,
   type TransactionCreate,
 } from '@/api/types'
@@ -20,6 +22,7 @@ const PAGE_SIZE = 50
 
 const accounts = ref<Account[]>([])
 const groups = ref<CategoryGroupWithCategories[]>([])
+const envelopes = ref<Envelope[]>([])
 const transactions = ref<Transaction[]>([])
 const selectedAccountId = ref<number | null>(null)
 const typeFilter = ref<TypeFilter>('all')
@@ -62,9 +65,10 @@ async function load(): Promise<void> {
   try {
     const status =
       typeFilter.value === 'all' ? undefined : typeFilter.value
-    const [acc, grps, txns] = await Promise.all([
+    const [acc, grps, envs, txns] = await Promise.all([
       listAccounts(),
       listGroupsWithCategories(),
+      listEnvelopes(),
       listTransactions({
         accountId: selectedAccountId.value ?? undefined,
         status,
@@ -74,6 +78,7 @@ async function load(): Promise<void> {
     ])
     accounts.value = acc
     groups.value = grps
+    envelopes.value = envs
     transactions.value = txns
     hasMore.value = txns.length === PAGE_SIZE
   } catch {
@@ -383,6 +388,7 @@ function formatDate(dateStr: string): string {
               :key="txn.id"
               :txn="txn"
               :groups="groups"
+              :envelopes="envelopes"
               @category-saved="onCategorySaved"
               @category-created="reloadGroups"
               @error="error = $event"
