@@ -107,6 +107,7 @@ budgie/
 │   │   │   ├── QuickExpense.vue   # Saisie rapide (bottom sheet / modale)
 │   │   │   ├── SkeletonRow.vue
 │   │   │   ├── ToastContainer.vue
+│   │   │   ├── DonutChart.vue     # Graphique donut réutilisable (Chart.js)
 │   │   │   └── TransactionRow.vue
 │   │   ├── composables/
 │   │   │   ├── useNearbyPlaces.ts
@@ -119,11 +120,12 @@ budgie/
 │   │   ├── views/
 │   │   │   ├── BudgetView.vue
 │   │   │   ├── DashboardView.vue
+│   │   │   ├── DepensesView.vue   # Vue Dépenses + dashboard (ancien TransactionsView)
 │   │   │   ├── HomeView.vue
 │   │   │   ├── ImportView.vue
 │   │   │   ├── LoginView.vue
 │   │   │   ├── SettingsView.vue
-│   │   │   └── TransactionsView.vue
+│   │   │   └── TransactionsView.vue # Transactions bancaires (imports)
 │   │   └── router/
 │   └── public/
 │       └── manifest.json          # PWA manifest
@@ -313,6 +315,8 @@ Tous les modèles sont des classes SQLAlchemy dans `budgie/models/`. Les schéma
 | `cleared` | `str` | `uncleared`, `cleared`, `reconciled` |
 | `is_virtual` | `bool` | `True` pour les prévisions |
 | `virtual_linked_id` | `int` FK → Transaction (nullable) | Lien prévision ↔ réalisation |
+| `envelope_id` | `int` FK → Envelope (nullable) | Lien direct à une enveloppe (sans catégorie) |
+| `reconciled_with_id` | `int` FK → Transaction (nullable) | Transaction bancaire liée à cette dépense |
 | `import_hash` | `str` unique (nullable) | Empreinte SHA-256 pour la déduplication |
 | `created_at` | `datetime` | |
 
@@ -400,7 +404,7 @@ Documentation interactive disponible à `http://localhost:8000/docs` (Swagger UI
 
 | Méthode | Chemin | Params de requête |
 |---|---|---|
-| `GET` | `/api/transactions` | `account_id`, `is_virtual` (bool) |
+| `GET` | `/api/transactions` | `account_id`, `is_virtual` (bool), `envelope_id` (int), `month` (AAAA-MM), `expenses_only` (bool) |
 | `POST` | `/api/transactions` | — |
 | `PUT` | `/api/transactions/{id}` | — |
 | `DELETE` | `/api/transactions/{id}` | — |
