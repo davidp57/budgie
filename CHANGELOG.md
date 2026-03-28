@@ -9,17 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] - 2026-03-28
+
 ### Added
 
-- **Direct envelope link on transactions** — transactions now carry an optional `envelope_id` field that links them directly to an envelope, independently of any associated category. This enables the QuickExpense flow to record expenses without requiring a category selector.
-- **QuickExpense: category-free entry** — the Quick Expense sheet now sends `envelope_id` directly instead of auto-selecting the first category of the envelope. Users can enter a transaction for any envelope even if no category is configured.
-- **Reconciliation: envelope name display** — the reconciliation view shows the envelope name (🗂) on expenses entered via the direct link, alongside the existing category name for bank-imported transactions.
-- **Filter transactions by envelope** — `GET /api/transactions?envelope_id=X` returns only transactions whose `envelope_id` equals `X`.
+- **Expenses page** — new dedicated view (`/depenses`) to browse and manage manually-entered transactions month by month, with filters (envelope, category group), sort, and grouping options
+- **Expense edit modal** — edit date, amount, description, category or envelope directly from the Expenses page; delete with confirmation
+- **Dashboard mode** 🥧 — doughnut charts showing spending by category for each envelope; click a slice to drill down into the matching transactions
+- **Linked bank transaction display** — reconciled expenses show a link to the corresponding bank import
+- **Direct envelope link on transactions** — transactions now carry an optional `envelope_id` field linking them directly to an envelope, independently of any category; enables expense entry without a configured category
+- **QuickExpense: category-free entry** — Quick Expense sends `envelope_id` directly; no category required
+- **Reconciliation: envelope name display** — reconciliation view shows the envelope name on expenses entered via direct link
+- **Filter transactions by envelope** — `GET /api/transactions?envelope_id=X`
 
 ### Changed
 
-- **Budget activity dual-path** — the budget engine now aggregates activity from two paths: direct `envelope_id` (manual expenses) and category-based `category_id` (bank imports). Both are merged without double-counting.
-- **Reconciliation `link()`** — when linking a bank transaction to an expense, `envelope_id` is propagated from the expense to the bank transaction.
+- **Navigation** — "Transactions" renamed to "Dépenses", route changed to `/depenses`
+- **Budget activity dual-path** — budget engine aggregates activity from both direct `envelope_id` and category-based paths without double-counting
+- **Reconciliation `link()`** — `envelope_id` is propagated from expense to bank transaction on linking
 
 ---
 
