@@ -31,16 +31,27 @@ class Settings(BaseSettings):
 
     # File uploads
     upload_dir: str = str(DATA_DIR / "uploads")
+    max_upload_size_bytes: int = 10 * 1024 * 1024  # 10 MB
 
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    # SQL echo — separate from debug so production logs stay clean
+    db_echo: bool = False
 
-    # CORS — comma-separated list of allowed origins
+    # Rate limiting — set to False to disable (useful for testing)
+    ratelimit_enabled: bool = True
+
+    # CORS — comma-separated lists
     cors_origins: str = (
         "http://localhost:5173,https://localhost:5173,http://localhost:8080"
     )
+    cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    cors_allow_headers: str = "Content-Type,Authorization"
+
+    # Registration — set to False to prevent new sign-ups in production
+    registration_enabled: bool = True
 
     # WebAuthn (Passkeys)
     webauthn_rp_id: str = "localhost"

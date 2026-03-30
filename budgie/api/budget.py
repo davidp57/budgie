@@ -1,9 +1,12 @@
 """Budget allocations router."""
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, status
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.schemas.budget import (
+    MONTH_PATTERN,
     AssignIncomeRequest,
     BudgetAllocationRead,
     BudgetAllocationUpdate,
@@ -20,10 +23,13 @@ from budgie.services.budget import (
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
 
+#: Reusable Path annotation that validates ``YYYY-MM`` format.
+MonthPath = Annotated[str, Path(pattern=MONTH_PATTERN)]
+
 
 @router.post("/{month}/assign-income", status_code=204)
 async def assign_income(
-    month: str,
+    month: MonthPath,
     payload: AssignIncomeRequest,
     db: DBSession,
     current_user: CurrentUser,
@@ -44,7 +50,7 @@ async def assign_income(
 
 @router.get("/{month}/income-proposals", response_model=IncomeProposalsResponse)
 async def list_income_proposals(
-    month: str,
+    month: MonthPath,
     db: DBSession,
     current_user: CurrentUser,
     threshold_centimes: int = 200_000,
@@ -69,7 +75,7 @@ async def list_income_proposals(
 
 @router.get("/{month}", response_model=MonthBudgetResponse)
 async def get_budget(
-    month: str,
+    month: MonthPath,
     db: DBSession,
     current_user: CurrentUser,
 ) -> MonthBudgetResponse:
@@ -91,7 +97,7 @@ async def get_budget(
 
 @router.put("/{month}", response_model=list[BudgetAllocationRead])
 async def set_budget(
-    month: str,
+    month: MonthPath,
     lines: list[BudgetLineInput],
     db: DBSession,
     current_user: CurrentUser,
@@ -111,11 +117,17 @@ async def set_budget(
     """
     results = []
     for line in lines:
-        allocation = await upsert_allocation(
-            db,
-            envelope_id=line.envelope_id,
-            month=month,
-            schema=BudgetAllocationUpdate(budgeted=line.budgeted),
-        )
+        try:
+            allocation = await upsert_allocation(
+                db,
+                envelope_id=line.envelope_id,
+                month=month,
+                schema=BudgetAllocationUpdate(budgeted=line.budgeted),
+                user_id=current_user.id,
+            )
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+            ) from exc
         results.append(BudgetAllocationRead.model_validate(allocation))
     return results

@@ -297,11 +297,11 @@ async def test_planned_unlinked_scoped_to_user(
     # Register and auth as another user
     await client.post(
         "/api/auth/register",
-        json={"username": "bob2", "password": "bobpassword2"},
+        json={"username": "bob2", "password": "BobPassword2"},
     )
     login = await client.post(
         "/api/auth/login",
-        json={"username": "bob2", "password": "bobpassword2"},
+        json={"username": "bob2", "password": "BobPassword2"},
     )
     client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
 

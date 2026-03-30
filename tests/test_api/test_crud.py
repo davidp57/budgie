@@ -77,11 +77,11 @@ async def test_accounts_scoped_to_user(client: AsyncClient, auth_client: AsyncCl
     # Create second user and get their client
     await client.post(
         "/api/auth/register",
-        json={"username": "bob", "password": "bobspassword"},
+        json={"username": "bob", "password": "BobsPassword1"},
     )
     login = await client.post(
         "/api/auth/login",
-        json={"username": "bob", "password": "bobspassword"},
+        json={"username": "bob", "password": "BobsPassword1"},
     )
     bob_token = login.json()["access_token"]
 

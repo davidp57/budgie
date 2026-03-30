@@ -15,11 +15,11 @@ async def _register_alice(client: AsyncClient) -> str:
     """Register alice and return her JWT token."""
     await client.post(
         "/api/auth/register",
-        json={"username": "alice", "password": "alicepassword"},
+        json={"username": "alice", "password": "AlicePassword1"},
     )
     login = await client.post(
         "/api/auth/login",
-        json={"username": "alice", "password": "alicepassword"},
+        json={"username": "alice", "password": "AlicePassword1"},
     )
     token: str = login.json()["access_token"]
     return token
@@ -149,7 +149,7 @@ async def test_delete_credential_other_user(
     """Alice cannot delete Bob's credential."""
     await client.post(
         "/api/auth/register",
-        json={"username": "bob", "password": "bobpassword1"},
+        json={"username": "bob", "password": "BobPassword1"},
     )
 
     bob = await get_user_by_username(db_session, "bob")

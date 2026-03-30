@@ -151,17 +151,33 @@ async def get_transaction(
 
 
 async def create_transaction(
-    db: AsyncSession, schema: TransactionCreate
+    db: AsyncSession, schema: TransactionCreate, user_id: int
 ) -> Transaction:
     """Create a new transaction.
 
     Args:
         db: Async database session.
         schema: Validated transaction creation schema.
+        user_id: Owner user ID (for account ownership check).
 
     Returns:
         Newly created Transaction instance.
+
+    Raises:
+        PermissionError: If ``schema.account_id`` does not belong to ``user_id``.
     """
+    # Verify account ownership before creating the transaction
+    account_result = await db.execute(
+        select(Account).where(
+            Account.id == schema.account_id, Account.user_id == user_id
+        )
+    )
+    if account_result.scalar_one_or_none() is None:
+        raise PermissionError(
+            f"Account {schema.account_id} not found or does not belong"
+            " to the current user."
+        )
+
     deprecated_fields = {"cleared", "is_virtual", "virtual_linked_id"}
 
     data = {k: v for k, v in schema.model_dump().items() if k not in deprecated_fields}
@@ -185,9 +201,18 @@ async def update_transaction(
     Returns:
         Updated Transaction instance.
     """
-    deprecated = {"cleared", "is_virtual", "virtual_linked_id"}
+    _allowed_fields = {
+        "date",
+        "payee_id",
+        "category_id",
+        "envelope_id",
+        "amount",
+        "memo",
+        "status",
+        "income_for_month",
+    }
     for field, value in schema.model_dump(exclude_unset=True).items():
-        if field not in deprecated:
+        if field in _allowed_fields:
             setattr(txn, field, value)
     await db.commit()
     await db.refresh(txn)

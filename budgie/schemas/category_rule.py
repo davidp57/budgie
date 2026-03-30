@@ -1,8 +1,13 @@
 """Pydantic schemas for CategoryRule model."""
 
+import re
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
+
+# Heuristic pattern that detects catastrophically backtracking constructs such as
+# ``(X+)+``, ``(X*)*``, ``(X+)*``.  These are rejected to mitigate ReDoS attacks.
+_REDOS_HEURISTIC = re.compile(r"\([^()]*[+*][^()]*\)[+*?]")
 
 MatchField = Literal["payee", "memo"]
 MatchType = Literal["contains", "exact", "regex"]
@@ -25,7 +30,7 @@ class CategoryRuleCreate(BaseModel):
         max_amount: Optional upper bound on abs(amount) in centimes (inclusive).
     """
 
-    pattern: str = Field(..., min_length=1, max_length=200)
+    pattern: str = Field(..., min_length=1, max_length=100)
     match_field: MatchField
     match_type: MatchType
     category_id: int
@@ -43,6 +48,25 @@ class CategoryRuleCreate(BaseModel):
             and self.min_amount > self.max_amount
         ):
             raise ValueError("min_amount must be <= max_amount")
+        return self
+
+    @model_validator(mode="after")
+    def validate_regex_pattern(self) -> Self:
+        """Validate regex patterns for syntax errors and ReDoS risk.
+
+        Only applies when ``match_type`` is ``"regex"``.
+        """
+        if self.match_type != "regex":
+            return self
+        try:
+            re.compile(self.pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {exc}") from exc
+        if _REDOS_HEURISTIC.search(self.pattern):
+            raise ValueError(
+                "Regex pattern may cause catastrophic backtracking (ReDoS). "
+                "Avoid nested quantifiers such as (X+)+ or (X*)*."
+            )
         return self
 
 

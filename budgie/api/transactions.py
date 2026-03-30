@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from budgie.api.deps import CurrentUser, DBSession
 from budgie.models.transaction import Transaction
+from budgie.schemas.budget import MONTH_PATTERN
 from budgie.schemas.transaction import (
     PlannedMatchRequest,
     TransactionCreate,
@@ -91,7 +92,7 @@ async def list_transactions(
     current_user: CurrentUser,
     account_id: int | None = None,
     transaction_status: str | None = None,
-    month: str | None = None,
+    month: Annotated[str | None, Query(pattern=MONTH_PATTERN)] = None,
     category_ids: Annotated[list[int] | None, Query()] = None,
     envelope_id: int | None = None,
     expenses_only: bool = False,
@@ -166,7 +167,12 @@ async def create_transaction_endpoint(
     Returns:
         Created transaction data.
     """
-    txn = await create_transaction(db, schema)
+    try:
+        txn = await create_transaction(db, schema, current_user.id)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
     return TransactionRead.model_validate(txn)
 
 

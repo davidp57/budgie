@@ -11,11 +11,11 @@ async def _register_and_login(client: AsyncClient, username: str = "alice") -> s
     """Helper: register a user and return a JWT token."""
     await client.post(
         "/api/auth/register",
-        json={"username": username, "password": "securepass123"},
+        json={"username": username, "password": "SecurePass123"},
     )
     resp = await client.post(
         "/api/auth/login",
-        json={"username": username, "password": "securepass123"},
+        json={"username": username, "password": "SecurePass123"},
     )
     return resp.json()["access_token"]
 
@@ -189,7 +189,7 @@ async def test_login_after_setup_has_needs_setup_false_and_is_encrypted_true(
     )
     resp = await client.post(
         "/api/auth/login",
-        json={"username": "alice", "password": "securepass123"},
+        json={"username": "alice", "password": "SecurePass123"},
     )
     data = resp.json()
     assert data["needs_encryption_setup"] is False

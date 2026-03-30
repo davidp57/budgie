@@ -2,11 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.api.deps import get_current_user
+from budgie.config import settings
 from budgie.database import get_db
+from budgie.limiter import limiter
 from budgie.models.user import User
 from budgie.schemas.auth import (
     EncryptionActionResponse,
@@ -40,8 +42,14 @@ async def register(
         Created user data (no password).
 
     Raises:
+        HTTPException: 403 if registration is disabled.
         HTTPException: 409 if username already exists.
     """
+    if not settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled.",
+        )
     existing = await get_user_by_username(db, schema.username)
     if existing is not None:
         raise HTTPException(
@@ -53,13 +61,16 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     credentials: LoginRequest,
     db: DB,
 ) -> TokenResponse:
     """Authenticate a user and return a JWT access token.
 
     Args:
+        request: Incoming HTTP request (required for rate limiting).
         credentials: Login credentials (username + password).
         db: Async database session.
 

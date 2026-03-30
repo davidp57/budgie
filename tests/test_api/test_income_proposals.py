@@ -132,11 +132,11 @@ async def test_income_proposals_scoped_to_user(
     # Register second user Eve and get her token
     await client.post(
         "/api/auth/register",
-        json={"username": "eve", "password": "evepassword"},
+        json={"username": "eve", "password": "EvePassword1"},
     )
     eve_login = await client.post(
         "/api/auth/login",
-        json={"username": "eve", "password": "evepassword"},
+        json={"username": "eve", "password": "EvePassword1"},
     )
     eve_token = eve_login.json()["access_token"]
     eve_headers = {"Authorization": f"Bearer {eve_token}"}

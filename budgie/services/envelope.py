@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from budgie.models.category import Category
+from budgie.models.category import Category, CategoryGroup
 from budgie.models.envelope import Envelope, envelope_categories
 from budgie.schemas.envelope import EnvelopeCreate, EnvelopeUpdate
 
@@ -79,7 +79,7 @@ async def create_envelope(
     )
     db.add(envelope)
     await db.flush()
-    await _set_categories(db, envelope, schema.category_ids)
+    await _set_categories(db, envelope, schema.category_ids, user_id=user_id)
     await db.commit()
     await db.refresh(envelope)
     # Reload with categories
@@ -121,7 +121,9 @@ async def update_envelope(
     if schema.color_index is not None or "color_index" in schema.model_fields_set:
         envelope.color_index = schema.color_index
     if schema.category_ids is not None:
-        await _set_categories(db, envelope, schema.category_ids)
+        await _set_categories(
+            db, envelope, schema.category_ids, user_id=envelope.user_id
+        )
     await db.commit()
     await db.refresh(envelope)
     return await get_envelope(db, envelope.id, envelope.user_id)  # type: ignore[return-value]
@@ -139,17 +141,23 @@ async def delete_envelope(db: AsyncSession, envelope: Envelope) -> None:
 
 
 async def _set_categories(
-    db: AsyncSession, envelope: Envelope, category_ids: list[int]
+    db: AsyncSession,
+    envelope: Envelope,
+    category_ids: list[int],
+    user_id: int,
 ) -> None:
     """Replace all category associations for an envelope.
 
     Removes ``category_ids`` from any other envelope first (each category
     belongs to at most one envelope), then sets them on ``envelope``.
+    Only categories owned by ``user_id`` (via their CategoryGroup) are
+    accepted — foreign category IDs are silently ignored.
 
     Args:
         db: Async database session.
         envelope: Target envelope.
         category_ids: New set of category IDs (may be empty).
+        user_id: Owner user ID (ownership check via CategoryGroup).
     """
     if not category_ids:
         # Delete all existing links for this envelope
@@ -182,9 +190,11 @@ async def _set_categories(
     )
     existing_ids = {row[0] for row in existing_result.all()}
 
-    # Verify categories exist before inserting
+    # Verify categories exist AND belong to the user (via CategoryGroup)
     cats_result = await db.execute(
-        select(Category.id).where(Category.id.in_(category_ids))
+        select(Category.id)
+        .join(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(Category.id.in_(category_ids), CategoryGroup.user_id == user_id)
     )
     valid_ids = {row[0] for row in cats_result.all()}
 

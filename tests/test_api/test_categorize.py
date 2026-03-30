@@ -192,10 +192,10 @@ async def test_categorize_rule_isolation_between_users(
 
     # Register bob and obtain his token (re-using the same client)
     await auth_client.post(
-        "/api/auth/register", json={"username": "bob", "password": "bobpassword"}
+        "/api/auth/register", json={"username": "bob", "password": "BobPassword1"}
     )
     login = await auth_client.post(
-        "/api/auth/login", json={"username": "bob", "password": "bobpassword"}
+        "/api/auth/login", json={"username": "bob", "password": "BobPassword1"}
     )
     bob_token = login.json()["access_token"]
 
