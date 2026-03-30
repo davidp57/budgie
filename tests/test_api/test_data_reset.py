@@ -191,11 +191,11 @@ async def test_reset_only_affects_current_user(
     # Register a second user "bob" and create data
     await client.post(
         "/api/auth/register",
-        json={"username": "bob", "password": "bobpassword"},
+        json={"username": "bob", "password": "BobPassword1"},
     )
     bob_login = await client.post(
         "/api/auth/login",
-        json={"username": "bob", "password": "bobpassword"},
+        json={"username": "bob", "password": "BobPassword1"},
     )
     bob_token = bob_login.json()["access_token"]
 

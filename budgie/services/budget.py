@@ -248,6 +248,7 @@ async def upsert_allocation(
     envelope_id: int,
     month: str,
     schema: BudgetAllocationUpdate,
+    user_id: int,
 ) -> BudgetAllocation:
     """Create or update a budget allocation for an envelope and month.
 
@@ -256,10 +257,23 @@ async def upsert_allocation(
         envelope_id: Envelope to allocate for.
         month: Budget month in YYYY-MM format.
         schema: Allocation update schema.
+        user_id: Owner user ID (for envelope ownership check).
 
     Returns:
         Created or updated BudgetAllocation instance.
+
+    Raises:
+        PermissionError: If ``envelope_id`` does not belong to ``user_id``.
     """
+    # Verify envelope ownership before writing
+    env_result = await db.execute(
+        select(Envelope).where(Envelope.id == envelope_id, Envelope.user_id == user_id)
+    )
+    if env_result.scalar_one_or_none() is None:
+        raise PermissionError(
+            f"Envelope {envelope_id} not found or does not belong to the current user."
+        )
+
     result = await db.execute(
         select(BudgetAllocation).where(
             BudgetAllocation.envelope_id == envelope_id,

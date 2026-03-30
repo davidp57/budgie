@@ -15,9 +15,9 @@ from pydantic import ValidationError
 def test_user_create_valid():
     from budgie.schemas.user import UserCreate
 
-    user = UserCreate(username="alice", password="securepass123")
+    user = UserCreate(username="alice", password="SecurePass123")
     assert user.username == "alice"
-    assert user.password == "securepass123"
+    assert user.password == "SecurePass123"
 
 
 def test_user_create_username_too_short():

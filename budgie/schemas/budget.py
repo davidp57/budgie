@@ -4,6 +4,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from budgie.schemas.envelope import CategoryRef
 
+#: Accepted format for budget month parameters: ``YYYY-MM``.
+MONTH_PATTERN: str = r"^\d{4}-(0[1-9]|1[0-2])$"
+
 
 class BudgetAllocationRead(BaseModel):
     """Schema for reading a budget allocation (response).

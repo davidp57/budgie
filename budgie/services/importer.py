@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.importers.base import ImportedTransaction
+from budgie.models.account import Account
 from budgie.models.transaction import Transaction
 
 
@@ -26,6 +27,7 @@ class ImportResult(BaseModel):
 async def confirm_import(
     db: AsyncSession,
     account_id: int,
+    user_id: int,
     transactions: list[ImportedTransaction],
 ) -> ImportResult:
     """Persist a list of parsed transactions, skipping duplicates.
@@ -43,12 +45,24 @@ async def confirm_import(
     Args:
         db: Active async SQLAlchemy session.
         account_id: Database ID of the target account.
+        user_id: Owner user ID (ownership check).
         transactions: Parsed transactions to import.
 
     Returns:
         An :class:`ImportResult` with ``imported`` and ``duplicates``
         counts.
+
+    Raises:
+        PermissionError: If ``account_id`` does not belong to ``user_id``.
     """
+    # Verify account ownership before inserting any data
+    account_result = await db.execute(
+        select(Account).where(Account.id == account_id, Account.user_id == user_id)
+    )
+    if account_result.scalar_one_or_none() is None:
+        raise PermissionError(
+            f"Account {account_id} not found or does not belong to the current user."
+        )
     imported = 0
     duplicates = 0
 
@@ -71,11 +85,15 @@ async def confirm_import(
         db.add(db_txn)
 
         # If linked to a planned transaction, mark it as realized
+        # Only reconcile virtual transactions owned by the same user (IDOR fix)
         if txn.virtual_linked_id is not None:
             planned_result = await db.execute(
-                select(Transaction).where(
+                select(Transaction)
+                .join(Account, Transaction.account_id == Account.id)
+                .where(
                     Transaction.id == txn.virtual_linked_id,
                     Transaction.status == "planned",
+                    Account.user_id == user_id,
                 )
             )
             planned_txn = planned_result.scalar_one_or_none()

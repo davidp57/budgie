@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 import budgie.models  # noqa: F401 — registers all models with Base.metadata
 import pytest_asyncio
 from budgie.database import Base, get_db
+from budgie.limiter import limiter
 from budgie.main import app
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
@@ -87,14 +88,29 @@ async def auth_client(
     """
     await client.post(
         "/api/auth/register",
-        json={"username": "alice", "password": "alicepassword"},
+        json={"username": "alice", "password": "AlicePassword1"},
     )
     login = await client.post(
         "/api/auth/login",
-        json={"username": "alice", "password": "alicepassword"},
+        json={"username": "alice", "password": "AlicePassword1"},
     )
     token = login.json()["access_token"]
     client.headers["Authorization"] = f"Bearer {token}"
     yield client
     # Clean up auth header
     del client.headers["Authorization"]
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _disable_rate_limiting() -> AsyncGenerator[None, None]:
+    """Disable the SlowAPI rate limiter for every test.
+
+    All test requests originate from 127.0.0.1 and would otherwise
+    trigger the 5/minute login limit across the test suite.
+
+    Yields:
+        None
+    """
+    limiter.enabled = False  # type: ignore[attr-defined]
+    yield
+    limiter.enabled = True  # type: ignore[attr-defined]

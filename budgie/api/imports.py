@@ -8,6 +8,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 
 from budgie.api.deps import CurrentUser, DBSession
+from budgie.config import settings
 from budgie.importers.base import ImportedTransaction
 from budgie.importers.ofx_importer import OfxImporter
 from budgie.importers.qif_importer import QifImporter
@@ -56,8 +57,13 @@ async def parse_import(
             f"Supported: {sorted(_SUPPORTED_FORMATS)}",
         )
 
+    max_mb = settings.max_upload_size_bytes // (1024 * 1024)
     content = await file.read()
-    import io
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"File too large (max {max_mb} MB).",
+        )
 
     stream = io.BytesIO(content)
 
@@ -66,7 +72,7 @@ async def parse_import(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse file: {exc}",
+            detail="Failed to parse file.",
         ) from exc
 
     schemas = [_to_schema(t) for t in transactions]
@@ -110,7 +116,14 @@ async def confirm_import_endpoint(
         for t in body.transactions
     ]
 
-    result: ImportResult = await confirm_import(db, body.account_id, domain_txns)
+    try:
+        result: ImportResult = await confirm_import(
+            db, body.account_id, current_user.id, domain_txns
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
     return ImportResultResponse(imported=result.imported, duplicates=result.duplicates)
 
 
