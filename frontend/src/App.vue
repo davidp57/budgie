@@ -25,7 +25,8 @@ onMounted(async () => {
     <AppNav v-if="showNav" />
 
     <!-- Main content area — scrollable -->
-    <main class="flex-1 min-h-0 overflow-y-auto pb-16 lg:pb-0">
+    <main class="flex-1 min-h-0 overflow-y-auto lg:pb-0"
+      style="padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px))">
       <RouterView />
     </main>
   </div>
