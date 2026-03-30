@@ -30,10 +30,10 @@ onMounted(async () => {
     </main>
   </div>
 
-  <!-- App footer -->
+  <!-- App footer — desktop only (conflicts with mobile dock) -->
   <footer
     v-if="showNav && appVersion"
-    class="fixed bottom-16 lg:bottom-0 right-0 px-2 py-0.5 text-[10px] text-base-content/30 pointer-events-none select-none z-10"
+    class="hidden lg:fixed lg:bottom-0 right-0 px-2 py-0.5 text-[10px] text-base-content/30 pointer-events-none select-none"
   >
     Budgie v{{ appVersion }}
   </footer>
