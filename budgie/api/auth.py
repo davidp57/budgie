@@ -150,7 +150,7 @@ async def unlock(
     session_key = await verify_user_passphrase(current_user, schema.passphrase)
     if session_key is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect passphrase.",
         )
     key_store.set(current_user.id, session_key)

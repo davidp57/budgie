@@ -23,7 +23,7 @@ const links = [
 
 <template>
   <!-- Mobile: bottom dock -->
-  <div class="dock dock-sm lg:hidden">
+  <div class="dock dock-sm lg:hidden z-50">
     <button
       v-for="link in links"
       :key="link.path"

@@ -130,7 +130,19 @@ export function useNearbyPlaces(radius = 500) {
 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
+        navigator.geolocation.getCurrentPosition(resolve, (err) => {
+          if (err.code === 3) {
+            // High-accuracy timed out (common on first iOS GPS fix) — fall back
+            // to network-based positioning which is faster in urban areas.
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: false,
+              timeout: 10_000,
+              maximumAge: 300_000, // accept a 5-min cached position
+            })
+          } else {
+            reject(err)
+          }
+        }, {
           enableHighAccuracy: true,
           timeout: 10_000,
           maximumAge: 60_000, // cache 1 min

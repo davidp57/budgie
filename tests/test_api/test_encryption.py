@@ -135,8 +135,8 @@ async def test_unlock_with_correct_passphrase_returns_ok(client: AsyncClient) ->
 
 
 @pytest.mark.asyncio
-async def test_unlock_with_wrong_passphrase_returns_401(client: AsyncClient) -> None:
-    """Wrong passphrase returns 401."""
+async def test_unlock_with_wrong_passphrase_returns_400(client: AsyncClient) -> None:
+    """Wrong passphrase returns 400 (not 401, to avoid clearing the JWT)."""
     token = await _register_and_login(client)
     await client.post(
         "/api/auth/setup-encryption",
@@ -148,7 +148,7 @@ async def test_unlock_with_wrong_passphrase_returns_401(client: AsyncClient) -> 
         json={"passphrase": "wrong-passphrase"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
