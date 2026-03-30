@@ -6,7 +6,7 @@ and a health check endpoint.
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -97,7 +97,9 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next: object) -> Response:
+async def add_security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Add standard security headers to every HTTP response.
 
     Args:
@@ -107,7 +109,7 @@ async def add_security_headers(request: Request, call_next: object) -> Response:
     Returns:
         HTTP response with security headers attached.
     """
-    response: Response = await call_next(request)  # type: ignore[operator]
+    response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

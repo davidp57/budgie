@@ -30,7 +30,7 @@ class CategoryRuleCreate(BaseModel):
         max_amount: Optional upper bound on abs(amount) in centimes (inclusive).
     """
 
-    pattern: str = Field(..., min_length=1, max_length=200)
+    pattern: str = Field(..., min_length=1, max_length=100)
     match_field: MatchField
     match_type: MatchType
     category_id: int
