@@ -64,10 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app: The FastAPI application instance.
     """
     logger.info("Budgie v%s starting", __version__)
+    # Create data/ before migrations — SQLite cannot create parent directories itself
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     # Apply any pending database migrations before accepting traffic
     await asyncio.to_thread(_run_migrations)
-    # Ensure data directories exist
-    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     logger.info("Budgie v%s ready", __version__)
     yield
 
