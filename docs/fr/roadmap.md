@@ -16,6 +16,9 @@ Les items sont regroupés par priorité et peuvent évoluer.
 - [x] **Type de transaction dans les règles de catégorie** — filtrer par débit, crédit ou tous
 - [x] **Bouton effacer la recherche** — icône ✕ pour vider rapidement le filtre texte dans la vue pointage
 - [x] **Option de création de règle dans le wizard de pointage** — lors de la liaison bancaire, choisir si une règle de catégorisation doit être créée ou non
+- [x] **Durcissement sécurité** — rate limiting sur les endpoints d'auth, liste noire JWT, headers de sécurité stricts, bcrypt 10→12 rounds, limite de taille des requêtes, sanitisation HTML des saisies libres
+- [x] **Dock mobile masqué** — `z-50`, `viewport-fit=cover` et padding `safe-area-inset-bottom` pour que le dock ne cache plus le contenu sur iPhone
+- [x] **Correction du démarrage** — répertoire `data/` créé automatiquement avant les migrations au premier lancement
 
 ### Vue des dépenses par catégorie
 

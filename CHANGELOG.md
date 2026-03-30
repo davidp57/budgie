@@ -11,6 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-03-30
+
+### Fixed
+
+- **App startup failure** — application hung on first launch when the `data/` directory did not exist; directory is now created before Alembic migrations run
+- **Double login loop after wrong PIN** — `/unlock` returned HTTP 401 for an incorrect passphrase, which the axios interceptor misinterpreted as an expired JWT, clearing the token and redirecting to login in a loop; fixed by returning HTTP 400 instead
+- **Mobile dock hidden behind content** — DaisyUI dock (`z-index: 1`) was rendered below envelope cards; fixed with `z-50` on the dock, `viewport-fit=cover` in the viewport meta, and correct `env(safe-area-inset-bottom)` padding on the main content area
+- **Geolocation timeout on iPhone** — GPS cold-start with `enableHighAccuracy: true` frequently timed out; added fallback retry with `enableHighAccuracy: false` (network-based positioning)
+- **Category rule pattern length** — `max_length` corrected from 200 to 100 characters to match the database constraint
+
+### Security
+
+- **Rate limiting** — brute-force protection on auth endpoints (`/login`, `/unlock`, `/register`) via SlowAPI
+- **JWT blocklist** — revoked tokens tracked server-side (HMAC-signed, no DB required); logout effectively invalidates the token
+- **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Content-Security-Policy`, and `Cache-Control: no-store` added to all API responses
+- **Password hashing** — bcrypt rounds raised from 10 to 12
+- **Request size limit** — incoming requests capped at 10 MB
+- **Input sanitisation** — HTML stripped from all free-text inputs (payee name, memo, description)
+
+---
+
 ## [0.6.0] - 2026-03-28
 
 ### Added

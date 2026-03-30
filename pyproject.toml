@@ -1,6 +1,6 @@
 [project]
 name = "budgie"
-version = "0.6.0"
+version = "0.6.1"
 description = "Personal household budget management web application"
 authors = [
     {name = "David"}

@@ -16,6 +16,9 @@ Items are grouped by priority and may change as the project evolves.
 - [x] **Transaction type on category rules** — filter by debit, credit, or any
 - [x] **Clear search button** — ✕ icon to quickly empty the text filter in the reconciliation view
 - [x] **Skip-rule toggle in reconciliation wizard** — when linking a bank transaction, choose whether to create a categorization rule or not
+- [x] **Security hardening** — rate limiting on auth endpoints, JWT blocklist, strict security headers, bcrypt rounds 10→12, request size cap, HTML input sanitisation
+- [x] **Mobile dock overlap** — `z-50`, `viewport-fit=cover`, and `safe-area-inset-bottom` padding ensuring the bottom dock never hides content on iPhone
+- [x] **App startup fix** — `data/` directory auto-created before migrations on first launch
 
 ### Category Spending View
 
