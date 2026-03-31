@@ -9,15 +9,17 @@ Implements the two-step categorization logic:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.models.category_rule import CategoryRule
 from budgie.models.payee import Payee
 from budgie.schemas.categorizer import CategorizeResult
+from budgie.services.crypto import InvalidKeyError, decrypt_field
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ async def categorize_transaction(
     payee_name: str | None,
     memo: str | None,
     amount: int | None = None,
+    session_key: bytes | None = None,
 ) -> CategorizeResult:
     """Categorize a single transaction using payee lookup then rule matching.
 
@@ -39,6 +42,7 @@ async def categorize_transaction(
         amount: Optional transaction amount in centimes. When provided,
             rules with min_amount / max_amount constraints are filtered
             accordingly. When ``None``, amount range constraints are ignored.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         A :class:`~budgie.schemas.categorizer.CategorizeResult` with the
@@ -46,14 +50,23 @@ async def categorize_transaction(
     """
     # ------------------------------------------------------------------
     # Step 1: Exact payee match (case-insensitive)
+    # When payee names are encrypted, we load all payees for the user and
+    # match in Python after decryption.
     # ------------------------------------------------------------------
     if payee_name is not None:
-        stmt = select(Payee).where(
-            Payee.user_id == user_id,
-            func.lower(Payee.name) == payee_name.lower(),
+        all_payees_result = await db.execute(
+            select(Payee).where(Payee.user_id == user_id)
         )
-        payee = (await db.execute(stmt)).scalar_one_or_none()
-        if payee and payee.auto_category_id is not None:
+        payee: Payee | None = None
+        for candidate in all_payees_result.scalars().all():
+            candidate_name = candidate.name
+            if session_key is not None:
+                with contextlib.suppress(InvalidKeyError, Exception):
+                    candidate_name = decrypt_field(candidate.name, session_key)
+            if candidate_name.lower() == payee_name.lower():
+                payee = candidate
+                break
+        if payee is not None and payee.auto_category_id is not None:
             return CategorizeResult(
                 category_id=payee.auto_category_id, confidence="auto"
             )

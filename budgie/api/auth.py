@@ -18,6 +18,7 @@ from budgie.schemas.auth import (
 )
 from budgie.schemas.user import UserCreate, UserRead
 from budgie.services.auth import create_access_token, verify_password
+from budgie.services.data_migration import encrypt_user_data
 from budgie.services.encryption import setup_user_encryption, verify_user_passphrase
 from budgie.services.key_store import key_store
 from budgie.services.user import create_user, get_user_by_username
@@ -120,6 +121,7 @@ async def setup_encryption(
             detail="Encryption already set up for this account.",
         )
     key = await setup_user_encryption(db, current_user, schema.passphrase)
+    await encrypt_user_data(db, current_user.id, key)
     key_store.set(current_user.id, key)
     return EncryptionActionResponse()
 
@@ -127,12 +129,18 @@ async def setup_encryption(
 @router.post("/unlock", response_model=EncryptionActionResponse)
 async def unlock(
     schema: SetupEncryptionRequest,
+    db: DB,
     current_user: CurrentUser,
 ) -> EncryptionActionResponse:
     """Verify the passphrase for an already-encrypted account.
 
+    If ``fields_encrypted`` is False (e.g. the account was marked encrypted by
+    an older server version that never ran the field-level migration), the data
+    is encrypted transparently during this call before the key is stored in RAM.
+
     Args:
         schema: Passphrase to verify.
+        db: Async database session.
         current_user: Authenticated user from JWT.
 
     Returns:
@@ -140,7 +148,7 @@ async def unlock(
 
     Raises:
         HTTPException: 400 if encryption is not set up.
-        HTTPException: 401 if the passphrase is incorrect.
+        HTTPException: 400 if the passphrase is incorrect.
     """
     if not current_user.is_encrypted:
         raise HTTPException(
@@ -153,6 +161,8 @@ async def unlock(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect passphrase.",
         )
+    if not current_user.fields_encrypted:
+        await encrypt_user_data(db, current_user.id, session_key)
     key_store.set(current_user.id, session_key)
     return EncryptionActionResponse()
 

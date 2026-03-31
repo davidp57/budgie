@@ -961,7 +961,8 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | `encryption_salt` | `bytes` | Argon2 salt (16 bytes) |
 | `challenge_blob` | `str` | base64(nonce + ciphertext + tag) — used for key verification |
 | `argon2_params` | `str` | JSON: `{time_cost, memory_cost, parallelism}` |
-| `is_encrypted` | `bool` | Whether data has been migrated to encrypted format |
+| `is_encrypted` | `bool` | Whether encryption has been *configured* for the account (passphrase set) |
+| `fields_encrypted` | `bool` | Whether field-level data (memos, payee names) has actually been encrypted in the DB |
 
 #### New table `webauthn_credentials`
 
@@ -1017,20 +1018,20 @@ Once the passphrase is validated, the server:
 1. Reads all user data (plaintext, already in RAM).
 2. Encrypts every field with the new key.
 3. Writes everything in a **single SQLite transaction** — rollback on any error.
-4. Sets `is_encrypted = True`.
+4. Sets `fields_encrypted = True` (and `is_encrypted = True` if not already set).
 
 #### Transition code
-During the progressive rollout, the service layer must handle both states:
+During the progressive rollout, the service layer handles both states by catching decryption failures:
 
 ```python
-# In service functions, after loading a record:
-if user.is_encrypted:
-    name = crypto.decrypt(account.name, session_key)
-else:
-    name = account.name  # plaintext fallback
+# crypto.decrypt_str falls back to raw value when decryption fails,
+# transparently handling rows that were not yet migrated.
+name = crypto.decrypt_str(account.name, session_key)
 ```
 
-This `if user.is_encrypted` guard can be removed once all users have migrated.
+The `fields_encrypted` flag allows `/unlock` to detect accounts where `is_encrypted=True`
+was set by an older server that never ran the actual field encryption, and transparently
+trigger the migration at the next unlock.
 
 #### Passkeys are optional
 Passkeys are never required. A migrated user can always authenticate with password + passphrase. Passkeys and PIN are convenience layers only.

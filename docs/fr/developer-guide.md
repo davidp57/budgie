@@ -961,7 +961,8 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | `encryption_salt` | `bytes` | Sel Argon2 (16 octets) |
 | `challenge_blob` | `str` | base64(nonce + texte chiffré + tag) — pour la vérification de la clé |
 | `argon2_params` | `str` | JSON : `{time_cost, memory_cost, parallelism}` |
-| `is_encrypted` | `bool` | Indique si les données ont été migrées au format chiffré |
+| `is_encrypted` | `bool` | Indique si le chiffrement a été *configuré* pour le compte (passphrase définie) |
+| `fields_encrypted` | `bool` | Indique si les données en base (mémos, noms de bénéficiaires) sont réellement chiffrées |
 
 #### Nouvelle table `webauthn_credentials`
 
@@ -1017,20 +1018,20 @@ Une fois la passphrase validée, le serveur :
 1. Lit toutes les données de l'utilisateur (en clair, déjà en RAM).
 2. Chiffre chaque champ avec la nouvelle clé.
 3. Enregistre tout dans une **transaction SQLite unique** — rollback en cas d'erreur.
-4. Met `is_encrypted = True`.
+4. Met `fields_encrypted = True` (et `is_encrypted = True` si ce n'était pas encore le cas).
 
 #### Code de transition
-Pendant le déploiement progressif, la couche service gère les deux états :
+Pendant le déploiement progressif, la couche service gère les deux états via le fallback de déchiffrement :
 
 ```python
-# Dans les fonctions de service, après chargement d'un objet :
-if user.is_encrypted:
-    name = crypto.decrypt(account.name, session_key)
-else:
-    name = account.name  # fallback texte clair
+# crypto.decrypt_str retourne la valeur brute si le déchiffrement échoue,
+# gérant ainsi de façon transparente les lignes pas encore migrées.
+name = crypto.decrypt_str(account.name, session_key)
 ```
 
-Ce garde `if user.is_encrypted` peut être supprimé une fois tous les utilisateurs migrés.
+Le flag `fields_encrypted` permet à `/unlock` de détecter les comptes pour lesquels `is_encrypted=True`
+a été écrit par une ancienne version du serveur qui n'avait jamais chiffré les données en base, et
+de déclencher la migration de façon transparente au prochain déverrouillage.
 
 #### Passkeys optionnelles
 Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'authentifier avec mot de passe + passphrase. Passkeys et PIN sont uniquement des couches de confort.

@@ -52,6 +52,9 @@ class User(Base):
     is_encrypted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    fields_encrypted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     encryption_salt: Mapped[bytes | None] = mapped_column(
         LargeBinary(16), nullable=True, default=None
     )

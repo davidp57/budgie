@@ -7,7 +7,7 @@ import io
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 
-from budgie.api.deps import CurrentUser, DBSession
+from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.config import settings
 from budgie.importers.base import ImportedTransaction
 from budgie.importers.ofx_importer import OfxImporter
@@ -88,6 +88,7 @@ async def confirm_import_endpoint(
     body: ConfirmImportRequest,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> ImportResultResponse:
     """Persist previously-parsed transactions into the database.
 
@@ -98,6 +99,7 @@ async def confirm_import_endpoint(
         body: Account ID and list of transactions to import.
         db: Async database session.
         current_user: JWT-authenticated user (ownership check).
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         Counts of imported and duplicate transactions.
@@ -118,7 +120,7 @@ async def confirm_import_endpoint(
 
     try:
         result: ImportResult = await confirm_import(
-            db, body.account_id, current_user.id, domain_txns
+            db, body.account_id, current_user.id, domain_txns, session_key=session_key
         )
     except PermissionError as exc:
         raise HTTPException(

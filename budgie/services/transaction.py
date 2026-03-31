@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from budgie.models.account import Account
 from budgie.models.transaction import Transaction
 from budgie.schemas.transaction import TransactionCreate, TransactionUpdate
+from budgie.services.crypto import decrypt_str, encrypt_str
 
 
 async def get_transactions(
@@ -19,6 +20,7 @@ async def get_transactions(
     expenses_only: bool = False,
     limit: int | None = None,
     offset: int | None = None,
+    session_key: bytes | None = None,
 ) -> list[Transaction]:
     """Return transactions for a user, optionally filtered and paginated.
 
@@ -37,6 +39,7 @@ async def get_transactions(
             (transactions where import_hash IS NULL).
         limit: Maximum number of rows to return. None means no limit.
         offset: Number of rows to skip before returning. None means 0.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         List of Transaction instances ordered by date descending.
@@ -68,7 +71,10 @@ async def get_transactions(
         query = query.limit(limit)
 
     result = await db.execute(query)
-    return list(result.scalars().all())
+    txns = list(result.scalars().all())
+    for txn in txns:
+        txn.memo = decrypt_str(txn.memo, session_key)
+    return txns
 
 
 async def count_unassigned_expenses(
@@ -104,6 +110,7 @@ async def count_unassigned_expenses(
 async def get_planned_unlinked(
     db: AsyncSession,
     user_id: int,
+    session_key: bytes | None = None,
 ) -> list[Transaction]:
     """Return all unlinked (pending) planned transactions for a user.
 
@@ -113,6 +120,7 @@ async def get_planned_unlinked(
     Args:
         db: Async database session.
         user_id: Owner user ID.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         List of pending planned Transaction instances ordered by date.
@@ -127,7 +135,10 @@ async def get_planned_unlinked(
         .order_by(Transaction.date.asc())
     )
     result = await db.execute(query)
-    return list(result.scalars().all())
+    txns = list(result.scalars().all())
+    for txn in txns:
+        txn.memo = decrypt_str(txn.memo, session_key)
+    return txns
 
 
 async def link_planned(
@@ -163,7 +174,10 @@ async def link_planned(
 
 
 async def get_transaction(
-    db: AsyncSession, transaction_id: int, user_id: int
+    db: AsyncSession,
+    transaction_id: int,
+    user_id: int,
+    session_key: bytes | None = None,
 ) -> Transaction | None:
     """Fetch a single transaction by ID, scoped to the user.
 
@@ -171,6 +185,7 @@ async def get_transaction(
         db: Async database session.
         transaction_id: Transaction primary key.
         user_id: Owner user ID.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         Transaction if found and owned by user, None otherwise.
@@ -180,11 +195,17 @@ async def get_transaction(
         .join(Account, Transaction.account_id == Account.id)
         .where(Transaction.id == transaction_id, Account.user_id == user_id)
     )
-    return result.scalar_one_or_none()
+    txn = result.scalar_one_or_none()
+    if txn is not None:
+        txn.memo = decrypt_str(txn.memo, session_key)
+    return txn
 
 
 async def create_transaction(
-    db: AsyncSession, schema: TransactionCreate, user_id: int
+    db: AsyncSession,
+    schema: TransactionCreate,
+    user_id: int,
+    session_key: bytes | None = None,
 ) -> Transaction:
     """Create a new transaction.
 
@@ -192,6 +213,7 @@ async def create_transaction(
         db: Async database session.
         schema: Validated transaction creation schema.
         user_id: Owner user ID (for account ownership check).
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         Newly created Transaction instance.
@@ -214,15 +236,20 @@ async def create_transaction(
     deprecated_fields = {"cleared", "is_virtual", "virtual_linked_id"}
 
     data = {k: v for k, v in schema.model_dump().items() if k not in deprecated_fields}
+    data["memo"] = encrypt_str(data.get("memo"), session_key)
     txn = Transaction(**data)
     db.add(txn)
     await db.commit()
     await db.refresh(txn)
+    txn.memo = decrypt_str(txn.memo, session_key)
     return txn
 
 
 async def update_transaction(
-    db: AsyncSession, txn: Transaction, schema: TransactionUpdate
+    db: AsyncSession,
+    txn: Transaction,
+    schema: TransactionUpdate,
+    session_key: bytes | None = None,
 ) -> Transaction:
     """Partially update a transaction.
 
@@ -230,6 +257,7 @@ async def update_transaction(
         db: Async database session.
         txn: Existing Transaction instance.
         schema: Partial update schema.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         Updated Transaction instance.
@@ -246,9 +274,12 @@ async def update_transaction(
     }
     for field, value in schema.model_dump(exclude_unset=True).items():
         if field in _allowed_fields:
+            if field == "memo":
+                value = encrypt_str(value, session_key)
             setattr(txn, field, value)
     await db.commit()
     await db.refresh(txn)
+    txn.memo = decrypt_str(txn.memo, session_key)
     return txn
 
 
