@@ -508,6 +508,217 @@ async def test_rule_positive_amount_range_matches_avoir(
     assert result_outside == CategorizeResult(category_id=None, confidence="none")
 
 
+# ---------------------------------------------------------------------------
+# transaction_type filter tests
+# ---------------------------------------------------------------------------
+
+
+async def test_rule_transaction_type_debit_matches_negative_amount(
+    db_session: AsyncSession,
+) -> None:
+    """A 'debit' rule fires when amount < 0."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Groceries")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="supermarket",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        transaction_type="debit",
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "supermarket", amount=-500
+    )
+    assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+async def test_rule_transaction_type_debit_skips_positive_amount(
+    db_session: AsyncSession,
+) -> None:
+    """A 'debit' rule is skipped when amount >= 0."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Groceries")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="supermarket",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        transaction_type="debit",
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "supermarket", amount=500
+    )
+    assert result == CategorizeResult(category_id=None, confidence="none")
+
+
+async def test_rule_transaction_type_credit_matches_positive_amount(
+    db_session: AsyncSession,
+) -> None:
+    """A 'credit' rule fires when amount > 0."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Salary")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="virement",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        transaction_type="credit",
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "virement salaire", amount=200000
+    )
+    assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+async def test_rule_transaction_type_credit_skips_negative_amount(
+    db_session: AsyncSession,
+) -> None:
+    """A 'credit' rule is skipped when amount <= 0."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Salary")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="virement",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        transaction_type="credit",
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "virement salaire", amount=-200000
+    )
+    assert result == CategorizeResult(category_id=None, confidence="none")
+
+
+async def test_rule_transaction_type_any_matches_both_signs(
+    db_session: AsyncSession,
+) -> None:
+    """An 'any' rule fires for both positive and negative amounts."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Transfer")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="transfer",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        transaction_type="any",
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result_neg = await categorize_transaction(
+        db_session, user.id, None, "transfer", amount=-1000
+    )
+    assert result_neg == CategorizeResult(category_id=cat.id, confidence="rule")
+
+    result_pos = await categorize_transaction(
+        db_session, user.id, None, "transfer", amount=1000
+    )
+    assert result_pos == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+# ---------------------------------------------------------------------------
+# Amount boundary condition tests
+# ---------------------------------------------------------------------------
+
+
+async def test_rule_amount_boundary_at_min(
+    db_session: AsyncSession,
+) -> None:
+    """A rule matches when amount equals min_amount exactly (boundary inclusive)."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Coffee")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="cafe",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        min_amount=100,
+        max_amount=500,
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "cafe de flore", amount=100
+    )
+    assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+async def test_rule_amount_boundary_at_max(
+    db_session: AsyncSession,
+) -> None:
+    """A rule matches when amount equals max_amount exactly (boundary inclusive)."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Coffee")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="cafe",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        min_amount=100,
+        max_amount=500,
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    result = await categorize_transaction(
+        db_session, user.id, None, "cafe de flore", amount=500
+    )
+    assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+async def test_rule_negative_amount_uses_absolute_value(
+    db_session: AsyncSession,
+) -> None:
+    """Amount range is compared against the absolute value of the transaction amount."""
+    user = await _make_user(db_session)
+    cat = await _make_category(db_session, user.id, "Groceries")
+    rule = CategoryRule(
+        user_id=user.id,
+        pattern="lidl",
+        match_field="memo",
+        match_type="contains",
+        category_id=cat.id,
+        priority=0,
+        min_amount=0,
+        max_amount=5000,
+    )
+    db_session.add(rule)
+    await db_session.flush()
+
+    # -3000 ct → absolute value 3000, inside [0, 5000]
+    result = await categorize_transaction(
+        db_session, user.id, None, "lidl", amount=-3000
+    )
+    assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
 async def test_rule_positive_range_matches_debit_amount(
     db_session: AsyncSession,
 ) -> None:

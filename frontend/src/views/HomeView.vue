@@ -10,6 +10,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBudgetStore } from '@/stores/budget'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
+import { useAppVersion } from '@/composables/useAppVersion'
 import { listAccounts } from '@/api/accounts'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
@@ -19,6 +20,7 @@ import { formatAmount } from '@/api/types'
 const router = useRouter()
 const budgetStore = useBudgetStore()
 const unassigned = useUnassignedCount()
+const appVersion = useAppVersion()
 
 const drawerForExpense = ref<EnvelopeLine | null>(null)
 const showQuickExpense = ref(false)
@@ -98,8 +100,11 @@ onMounted(async () => {
       <div class="flex items-center gap-2 lg:hidden">
         <span class="text-2xl">🐦</span>
         <h1 class="text-xl font-bold">Budgie</h1>
+        <span v-if="appVersion" class="text-[10px] text-base-content/30 self-end mb-0.5">v{{ appVersion }}</span>
       </div>
-      <h1 class="hidden lg:block text-xl font-bold">Dépenses</h1>
+      <div class="hidden lg:flex items-center gap-2">
+        <h1 class="text-xl font-bold">Dépenses</h1>
+      </div>
       <!-- Month navigator -->
       <div class="flex items-center gap-1">
         <button class="btn btn-ghost btn-xs btn-circle" @click="prevMonth">‹</button>

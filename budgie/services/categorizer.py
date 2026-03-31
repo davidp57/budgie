@@ -69,9 +69,7 @@ async def categorize_transaction(
     rules = (await db.execute(rules_stmt)).scalars().all()
 
     log.debug(
-        "categorize: payee_name=%r memo=%r amount=%r  (%d rules to check)",
-        payee_name,
-        memo,
+        "categorize: amount=%r  (%d rules to check)",
         amount,
         len(rules),
     )
@@ -87,11 +85,9 @@ async def categorize_transaction(
             continue
         if not _matches(rule.pattern, rule.match_type, value):
             log.debug(
-                "  rule %d [%r] → SKIP (text no match: %r not in %r)",
+                "  rule %d [%r] → SKIP (text no match)",
                 rule.id,
                 rule.pattern,
-                rule.pattern,
-                value,
             )
             continue
         # Sign filter: skip if the transaction sign doesn't match the rule type.

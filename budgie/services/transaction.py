@@ -54,7 +54,10 @@ async def get_transactions(
     if month is not None:
         query = query.where(func.strftime("%Y-%m", Transaction.date) == month)
     if category_ids is not None:
-        query = query.where(Transaction.category_id.in_(category_ids))
+        if not category_ids:
+            query = query.where(Transaction.category_id.is_(None))
+        else:
+            query = query.where(Transaction.category_id.in_(category_ids))
     if envelope_id is not None:
         query = query.where(Transaction.envelope_id == envelope_id)
     if expenses_only:

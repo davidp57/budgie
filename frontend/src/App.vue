@@ -1,22 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import ToastContainer from '@/components/ToastContainer.vue'
 import AppNav from '@/components/AppNav.vue'
-import client from '@/api/client'
 
 const route = useRoute()
 const showNav = computed(() => route.name !== 'login')
-const appVersion = ref('')
-
-onMounted(async () => {
-  try {
-    const { data } = await client.get<{ version: string }>('/api/health')
-    appVersion.value = data.version
-  } catch {
-    // health endpoint not available — silently ignore
-  }
-})
 </script>
 
 <template>
@@ -31,14 +20,6 @@ onMounted(async () => {
     </main>
   </div>
 
-  <!-- App footer — desktop only (conflicts with mobile dock) -->
-  <footer
-    v-if="showNav && appVersion"
-    class="hidden lg:fixed lg:bottom-0 right-0 px-2 py-0.5 text-[10px] text-base-content/30 pointer-events-none select-none"
-  >
-    Budgie v{{ appVersion }}
-  </footer>
-
-  <!-- Global toast notifications -->
+  <!-- Toast notifications -->
   <ToastContainer />
 </template>

@@ -3,11 +3,13 @@ import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
+import { useAppVersion } from '@/composables/useAppVersion'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const unassigned = useUnassignedCount()
+const appVersion = useAppVersion()
 
 onMounted(() => {
   unassigned.refresh()
@@ -65,6 +67,7 @@ const links = [
     <div class="flex items-center gap-2 px-5 py-4">
       <span class="text-2xl">🐦</span>
       <span class="font-bold text-lg">Budgie</span>
+      <span v-if="appVersion" class="text-[10px] text-base-content/30 self-end mb-0.5">v{{ appVersion }}</span>
     </div>
 
     <nav class="flex flex-col gap-1 px-3 flex-1">

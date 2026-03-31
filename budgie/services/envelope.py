@@ -108,7 +108,7 @@ async def update_envelope(
         envelope.envelope_type = schema.envelope_type
     if schema.period is not None:
         envelope.period = schema.period
-    if schema.target_amount is not None:
+    if schema.target_amount is not None or "target_amount" in schema.model_fields_set:
         envelope.target_amount = schema.target_amount
     if schema.stop_on_target is not None:
         envelope.stop_on_target = schema.stop_on_target

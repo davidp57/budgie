@@ -57,6 +57,11 @@ const router = createRouter({
 router.beforeEach((to) => {
   const token = localStorage.getItem('access_token')
 
+  // Authenticated user visiting /login → redirect to home
+  if (token && to.name === 'login') {
+    return { name: 'home' }
+  }
+
   // Unauthenticated → login
   if (!to.meta.public && !token) {
     return { name: 'login' }

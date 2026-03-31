@@ -81,7 +81,6 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D103", "ANN"]  # No docstrings or annotations required in tests
 "alembic/**/*.py" = ["D", "ANN", "E501", "W"]  # Auto-generated migration files
-"check_db.py" = ["D", "ANN", "I", "RUF"]  # Temporary diagnostic script
 "test_startup.py" = ["D", "ANN", "I", "RUF"]  # Temporary startup test
 
 [tool.mypy]

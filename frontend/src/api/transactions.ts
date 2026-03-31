@@ -1,9 +1,9 @@
 import client from './client'
-import type { Transaction, TransactionCreate, TransactionUpdate } from './types'
+import type { Transaction, TransactionCreate, TransactionUpdate, TransactionStatus } from './types'
 
 export async function listTransactions(options?: {
   accountId?: number
-  status?: string
+  status?: TransactionStatus
   month?: string
   categoryIds?: number[]
   envelopeId?: number

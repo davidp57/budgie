@@ -42,6 +42,10 @@ from budgie.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
+# Suppress SQLAlchemy's internal engine logger — SQL statements should never
+# appear in production logs regardless of the db_echo setting.
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 
 def _run_migrations() -> None:
     """Run Alembic ``upgrade head`` synchronously.

@@ -32,6 +32,10 @@ client.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('needs_encryption_setup')
+      localStorage.removeItem('is_encrypted')
+      sessionStorage.removeItem('encryption_unlocked')
       if (router.currentRoute.value.name !== 'login') {
         router.push({ name: 'login' })
       }

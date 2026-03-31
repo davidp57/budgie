@@ -43,7 +43,7 @@ function startEdit(env: Envelope): void {
   editName.value = env.name
   editRollover.value = env.rollover
   editCategoryIds.value = env.categories.map((c) => c.id)
-  editTargetAmount.value = env.target_amount ? env.target_amount / 100 : null
+  editTargetAmount.value = env.target_amount != null ? env.target_amount / 100 : null
 }
 
 function cancelEdit(): void {
@@ -129,7 +129,7 @@ function toggleId(ids: number[], id: number): void {
         <div class="flex items-center gap-2 px-3 py-2 flex-wrap">
           <span class="font-medium">{{ env.name }}</span>
           <span v-if="env.rollover" class="badge badge-xs badge-info" title="Rollover: balance carries forward">↻</span>
-          <span v-if="env.target_amount" class="badge badge-xs badge-accent" title="Target amount">🎯 {{ env.target_amount / 100 }} €</span>
+          <span v-if="env.target_amount != null" class="badge badge-xs badge-accent" title="Target amount">🎯 {{ env.target_amount / 100 }} €</span>
           <span
             v-for="cat in env.categories"
             :key="cat.id"

@@ -118,7 +118,7 @@ async def list_transactions(
     Returns:
         List of transaction data.
     """
-    cat_filter: list[int] | None = category_ids or None
+    cat_filter: list[int] | None = category_ids
     txns = await get_transactions(
         db,
         current_user.id,

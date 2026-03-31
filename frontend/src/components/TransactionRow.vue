@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { deleteTransaction, updateTransaction } from '@/api/transactions'
 import {
   formatAmount,
@@ -61,6 +61,8 @@ function envelopeName(id: number | null): string | null {
   if (id === null || !props.envelopes) return null
   return props.envelopes.find((e) => e.id === id)?.name ?? null
 }
+
+const txnEnvelopeName = computed(() => envelopeName(props.txn.envelope_id))
 
 async function realizeTransaction(): Promise<void> {
   realizing.value = true
@@ -133,9 +135,9 @@ async function deleteVirtualTransaction(): Promise<void> {
             {{ categoryName(txn.category_id) }}
           </button>
           <span
-            v-if="envelopeName(txn.envelope_id)"
+            v-if="txnEnvelopeName"
             class="text-[11px] text-base-content/40 pl-1 leading-none"
-          >🗂 {{ envelopeName(txn.envelope_id) }}</span>
+          >🗂 {{ txnEnvelopeName }}</span>
         </div>
       </template>
     </td>

@@ -7,7 +7,7 @@
  * Emits 'create' with the typed name when the user selects "Create …".
  * The parent should POST the new category and call back via v-model.
  */
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import type { CategoryGroupWithCategories, Category } from '@/api/types'
 import CreateCategoryModal from './CreateCategoryModal.vue'
 
@@ -105,6 +105,23 @@ function onBlur(): void {
     query.value = cat ? cat.name : ''
   }, 150)
 }
+
+// Close and reposition when the viewport scrolls or resizes
+function _handleScrollResize(): void {
+  if (open.value) {
+    updateDropdownPosition()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', _handleScrollResize, true)
+  window.addEventListener('resize', _handleScrollResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', _handleScrollResize, true)
+  window.removeEventListener('resize', _handleScrollResize)
+})
 
 function select(cat: Category): void {
   emit('update:modelValue', cat.id)
