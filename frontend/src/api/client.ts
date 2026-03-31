@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios'
+import router from '@/router'
 import { useToastStore } from '@/stores/toast'
 
 const client = axios.create({
@@ -25,13 +26,19 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// On 401: clear token + redirect. On other errors: show toast.
+// On 401: clear token + redirect to login. On other errors: show toast.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
-      window.location.href = '/login'
+      localStorage.removeItem('username')
+      localStorage.removeItem('needs_encryption_setup')
+      localStorage.removeItem('is_encrypted')
+      sessionStorage.removeItem('encryption_unlocked')
+      if (router.currentRoute.value.name !== 'login') {
+        router.push({ name: 'login' })
+      }
     } else if (error.response) {
       // Only show a toast for non-401 server errors; callers can still
       // catch the error for their own flow (e.g. form validation).

@@ -12,9 +12,24 @@ import {
   deleteCategoryGroup,
   listGroupsWithCategories,
 } from '@/api/categories'
+import { resetUserData } from '@/api/dataReset'
 import { getPreferences, updatePreferences } from '@/api/users'
-import EnvelopeManager from '@/components/EnvelopeManager.vue'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
+import { createPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
+import { usePinStorage } from '@/composables/usePinStorage'
+import { useTheme } from '@/composables/useTheme'
+
+const auth = useAuthStore()
+const router = useRouter()
+const pinStorage = usePinStorage()
+const { theme, toggle: toggleTheme } = useTheme()
+
+function logout(): void {
+  auth.logout()
+  router.push({ name: 'login' })
+}
 
 // ── Accounts ───────────────────────────────────────────────────
 
@@ -55,10 +70,54 @@ async function setBudgetMode(mode: 'n1' | 'n'): Promise<void> {
   }
 }
 
+// ── Passkey management ────────────────────────────────────────────────────────
+const webAuthnSupported = isWebAuthnSupported()
+const pinAvailable = typeof window !== 'undefined' && !!window.crypto?.subtle
+const passkeyError = ref('')
+const passkeyLoading = ref(false)
+const newPasskeyName = ref('')
+const pinHasStored = ref(false)
+
+async function registerPasskey(): Promise<void> {
+  passkeyError.value = ''
+  passkeyLoading.value = true
+  try {
+    const options = await auth.webauthnRegisterBegin()
+    const credential = await createPasskey(options)
+    await auth.webauthnRegisterComplete(credential, newPasskeyName.value || undefined)
+    newPasskeyName.value = ''
+  } catch (err: unknown) {
+    passkeyError.value =
+      err instanceof Error ? err.message : 'Failed to register passkey.'
+  } finally {
+    passkeyLoading.value = false
+  }
+}
+
+async function removePasskey(id: number): Promise<void> {
+  passkeyError.value = ''
+  try {
+    await auth.deleteWebAuthnCredential(id)
+  } catch {
+    passkeyError.value = 'Failed to delete passkey.'
+  }
+}
+
+async function clearPin(): Promise<void> {
+  await pinStorage.clearStoredPassphrase()
+  pinHasStored.value = false
+}
+
 onMounted(async () => {
-  const prefs = await getPreferences()
-  budgetMode.value = prefs.budget_mode
-  await loadAll()
+  try {
+    const prefs = await getPreferences()
+    budgetMode.value = prefs.budget_mode
+    await loadAll()
+    await auth.loadWebAuthnCredentials()
+    pinHasStored.value = await pinStorage.hasStoredPassphrase()
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
+  }
 })
 
 async function addAccount(): Promise<void> {
@@ -115,11 +174,49 @@ async function removeCategory(id: number): Promise<void> {
   await deleteCategory(id)
   await loadAll()
 }
+
+// ── Data reset ────────────────────────────────────────────────────────────
+const resetModalOpen = ref(false)
+const resetLoading = ref(false)
+const resetResult = ref<{ transactions_deleted: number; rules_deleted: number } | null>(null)
+const resetError = ref('')
+
+async function confirmReset(): Promise<void> {
+  resetError.value = ''
+  resetResult.value = null
+  resetLoading.value = true
+  try {
+    resetResult.value = await resetUserData()
+    resetModalOpen.value = false
+  } catch {
+    resetError.value = 'Reset failed. Please try again.'
+  } finally {
+    resetLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-8 max-w-2xl">
     <h1 class="text-2xl font-bold">Settings</h1>
+
+    <!-- Theme section -->
+    <section class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Apparence</h2>
+        <div class="flex items-center gap-4">
+          <span class="text-sm">☀️ Clair</span>
+          <input
+            type="checkbox"
+            class="toggle toggle-primary"
+            :checked="theme === 'dark'"
+            aria-label="Activer le thème sombre"
+            @change="toggleTheme"
+          />
+          <span class="text-sm">🌙 Sombre</span>
+        </div>
+      </div>
+    </section>
 
     <!-- Accounts section -->
     <section class="card bg-base-100 shadow">
@@ -226,19 +323,6 @@ async function removeCategory(id: number): Promise<void> {
       </div>
     </section>
 
-    <!-- Envelopes section -->
-    <section class="card bg-base-100 shadow">
-      <div class="card-body">
-        <h2 class="card-title">Envelopes</h2>
-        <p class="text-sm text-base-content/60 mb-3">
-          Group categories into budget envelopes. Each envelope tracks one spending area with its
-          own budgeted and available balance. Enable <strong>Rollover</strong> to carry unspent
-          balance forward to the next month.
-        </p>
-        <EnvelopeManager :groups="groups" />
-      </div>
-    </section>
-
     <!-- Budgeting preferences section -->
     <section class="card bg-base-100 shadow">
       <div class="card-body">
@@ -296,6 +380,138 @@ async function removeCategory(id: number): Promise<void> {
         </div>
 
         <p v-if="prefError" class="text-error text-sm mt-2">{{ prefError }}</p>
+      </div>
+    </section>
+
+    <!-- Passkeys & PIN ──────────────────────────────────────────── -->
+    <section v-if="webAuthnSupported" class="card bg-base-100 shadow">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">🔑 Passkeys & PIN</h2>
+
+        <!-- Registered passkeys list -->
+        <div v-if="auth.webauthnCredentials.length > 0" class="flex flex-col gap-2">
+          <div
+            v-for="cred in auth.webauthnCredentials"
+            :key="cred.id"
+            class="flex items-center justify-between bg-base-200 rounded-box px-4 py-2"
+          >
+            <div>
+              <p class="font-medium">{{ cred.name ?? 'Passkey' }}</p>
+              <p class="text-xs text-base-content/50">Added {{ new Date(cred.created_at).toLocaleDateString() }}</p>
+            </div>
+            <button class="btn btn-ghost btn-sm text-error" @click="removePasskey(cred.id)">
+              🗑
+            </button>
+          </div>
+        </div>
+        <p v-else class="text-base-content/50 text-sm">No passkeys registered on this account.</p>
+
+        <!-- Register new passkey -->
+        <div class="flex gap-2">
+          <input
+            v-model="newPasskeyName"
+            type="text"
+            placeholder="Passkey name (e.g. iPhone 15)"
+            class="input input-bordered input-sm flex-1"
+            maxlength="50"
+          />
+          <button
+            class="btn btn-outline btn-sm gap-1"
+            :disabled="passkeyLoading"
+            @click="registerPasskey"
+          >
+            <span v-if="passkeyLoading" class="loading loading-spinner loading-xs"></span>
+            + Register Passkey
+          </button>
+        </div>
+
+        <p v-if="passkeyError" class="text-error text-sm">{{ passkeyError }}</p>
+
+        <!-- PIN management -->
+        <div class="divider text-xs">PIN</div>
+        <template v-if="pinAvailable">
+          <div v-if="pinHasStored" class="flex items-center justify-between">
+            <p class="text-sm">Your passphrase is saved on this device with a PIN.</p>
+            <button class="btn btn-ghost btn-sm text-error" @click="clearPin">Remove</button>
+          </div>
+          <p v-else class="text-base-content/50 text-sm">
+            No PIN set up. Unlock your encryption with your passphrase to be offered a PIN.
+          </p>
+        </template>
+        <p v-else class="text-base-content/50 text-sm">
+          ⚠️ PIN requires HTTPS. Connect securely to use this feature.
+        </p>
+      </div>
+    </section>
+
+    <!-- Danger zone -->
+    <section class="card bg-base-100 shadow border border-error/30">
+      <div class="card-body">
+        <h2 class="card-title text-error">Zone dangereuse</h2>
+        <p class="text-sm text-base-content/60">
+          Ces actions sont irréversibles. Les comptes, enveloppes et
+          allocations budgétaires sont conservés.
+        </p>
+
+        <div v-if="resetResult" class="alert alert-success text-sm py-2">
+          {{ resetResult.transactions_deleted }} transaction(s) et
+          {{ resetResult.rules_deleted }} règle(s) supprimées.
+        </div>
+
+        <div v-if="resetError" class="alert alert-error text-sm py-2">{{ resetError }}</div>
+
+        <button
+          class="btn btn-error btn-outline btn-sm w-fit gap-2"
+          @click="resetModalOpen = true"
+        >
+          🗑 RAZ données (dépenses + règles)
+        </button>
+      </div>
+    </section>
+
+    <!-- Reset confirmation modal -->
+    <dialog :open="resetModalOpen" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg text-error">Confirmer la remise à zéro</h3>
+        <p class="py-4 text-sm">
+          Toutes vos <strong>dépenses</strong> (transactions budgétaires
+          manuelles, liées ou non à une transaction bancaire) et toutes vos
+          <strong>règles de catégorisation</strong> seront définitivement
+          supprimées.<br />
+          Les transactions importées de la banque, les comptes, les enveloppes
+          et les allocations sont conservés.<br /><br />
+          Cette action est <strong>irréversible</strong>.
+        </p>
+        <div class="modal-action gap-2">
+          <button
+            class="btn btn-ghost btn-sm"
+            :disabled="resetLoading"
+            @click="resetModalOpen = false"
+          >
+            Annuler
+          </button>
+          <button
+            class="btn btn-error btn-sm gap-1"
+            :disabled="resetLoading"
+            @click="confirmReset"
+          >
+            <span v-if="resetLoading" class="loading loading-spinner loading-xs"></span>
+            Oui, tout supprimer
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="resetModalOpen = false"></div>
+    </dialog>
+
+    <!-- Logout (visible on mobile where sidebar is hidden) -->
+    <section class="card bg-base-100 shadow lg:hidden">
+      <div class="card-body">
+        <button class="btn btn-outline btn-error w-full gap-2" @click="logout">
+          <svg xmlns="http://www.w3.org/2000/svg" class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Déconnexion
+        </button>
       </div>
     </section>
   </div>

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 ClearedStatus = Literal["uncleared", "cleared", "reconciled"]
+TransactionStatus = Literal["planned", "real", "reconciled"]
 
 
 class TransactionCreate(BaseModel):
@@ -30,11 +31,13 @@ class TransactionCreate(BaseModel):
     date: datetime.date
     payee_id: int | None = None
     category_id: int | None = None
+    envelope_id: int | None = None
     amount: int
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus = "uncleared"
     is_virtual: bool = False
     virtual_linked_id: int | None = None
+    status: TransactionStatus = "real"
     import_hash: str | None = None
 
 
@@ -54,11 +57,31 @@ class TransactionUpdate(BaseModel):
     date: datetime.date | None = None
     payee_id: int | None = None
     category_id: int | None = None
+    envelope_id: int | None = None
     amount: int | None = None
     memo: str | None = Field(None, max_length=500)
     cleared: ClearedStatus | None = None
     is_virtual: bool | None = None
+    status: TransactionStatus | None = None
     income_for_month: str | None = None
+
+
+class TransactionLinkedInfo(BaseModel):
+    """Compact info about a linked bank transaction.
+
+    Attributes:
+        id: Transaction ID of the linked bank import.
+        memo: Memo/description from the bank.
+        amount: Amount in integer centimes.
+        date: Date of the bank transaction.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    memo: str | None
+    amount: int
+    date: datetime.date
 
 
 class TransactionRead(BaseModel):
@@ -72,11 +95,14 @@ class TransactionRead(BaseModel):
         category_id: Category ID.
         amount: Amount in integer centimes.
         memo: Memo text.
-        cleared: Cleared status.
-        is_virtual: Whether virtual.
-        virtual_linked_id: Linked transaction ID.
+        status: Transaction status (planned/real/reconciled).
+        cleared: Deprecated — kept for backward compatibility.
+        is_virtual: Deprecated — kept for backward compatibility.
+        virtual_linked_id: Deprecated — kept for backward compatibility.
         income_for_month: Budget month this income is assigned to (YYYY-MM), if any.
         import_hash: Import deduplication hash.
+        reconciled_with_id: ID of the linked bank transaction (when pointed).
+        linked_transaction: Compact bank transaction info when pointed.
         created_at: Creation timestamp.
     """
 
@@ -87,13 +113,17 @@ class TransactionRead(BaseModel):
     date: datetime.date
     payee_id: int | None
     category_id: int | None
+    envelope_id: int | None
     amount: int
     memo: str | None
-    cleared: str
-    is_virtual: bool
-    virtual_linked_id: int | None
+    status: str = "real"
+    cleared: str = "uncleared"
+    is_virtual: bool = False
+    virtual_linked_id: int | None = None
     income_for_month: str | None = None
-    import_hash: str | None
+    import_hash: str | None = None
+    reconciled_with_id: int | None = None
+    linked_transaction: TransactionLinkedInfo | None = None
     created_at: datetime.datetime
 
 
@@ -131,13 +161,13 @@ class SplitTransactionRead(BaseModel):
     memo: str | None
 
 
-class VirtualMatchRequest(BaseModel):
-    """Schema for linking a real transaction to a virtual one.
+class PlannedMatchRequest(BaseModel):
+    """Schema for linking a real transaction to a planned one.
 
     Attributes:
         real_transaction_id: ID of the real (imported) transaction.
-        virtual_transaction_id: ID of the virtual transaction to link.
+        planned_transaction_id: ID of the planned transaction to link.
     """
 
     real_transaction_id: int
-    virtual_transaction_id: int
+    planned_transaction_id: int

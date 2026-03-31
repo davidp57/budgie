@@ -7,7 +7,7 @@
  * Emits 'create' with the typed name when the user selects "Create …".
  * The parent should POST the new category and call back via v-model.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import type { CategoryGroupWithCategories, Category } from '@/api/types'
 import CreateCategoryModal from './CreateCategoryModal.vue'
 
@@ -31,6 +31,30 @@ const query = ref('')
 const open = ref(false)
 const showModal = ref(false)
 const pendingName = ref('')
+
+// ── dropdown positioning (fixed, escapes overflow containers) ─────
+const inputWrapperRef = ref<HTMLElement | null>(null)
+const dropdownStyle = ref<Record<string, string>>({})
+
+function updateDropdownPosition(): void {
+  if (!inputWrapperRef.value) return
+  const rect = inputWrapperRef.value.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - rect.bottom - 4
+  const spaceAbove = rect.top - 4
+  const base = {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    zIndex: '9999',
+  }
+  if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
+    // Enough space below — normal position
+    dropdownStyle.value = { ...base, top: `${rect.bottom + 4}px`, maxHeight: `${Math.min(288, spaceBelow - 4)}px` }
+  } else {
+    // Not enough space below — flip above
+    dropdownStyle.value = { ...base, bottom: `${window.innerHeight - rect.top + 4}px`, maxHeight: `${Math.min(288, spaceAbove - 4)}px` }
+  }
+}
 
 // Set the display text from the current modelValue
 watch(
@@ -64,10 +88,12 @@ const canCreate = computed<boolean>(() => {
 function onInput(ev: Event): void {
   query.value = (ev.target as HTMLInputElement).value
   open.value = true
+  nextTick(updateDropdownPosition)
 }
 
 function onFocus(): void {
   open.value = true
+  nextTick(updateDropdownPosition)
 }
 
 function onBlur(): void {
@@ -79,6 +105,23 @@ function onBlur(): void {
     query.value = cat ? cat.name : ''
   }, 150)
 }
+
+// Close and reposition when the viewport scrolls or resizes
+function _handleScrollResize(): void {
+  if (open.value) {
+    updateDropdownPosition()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', _handleScrollResize, true)
+  window.addEventListener('resize', _handleScrollResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', _handleScrollResize, true)
+  window.removeEventListener('resize', _handleScrollResize)
+})
 
 function select(cat: Category): void {
   emit('update:modelValue', cat.id)
@@ -107,7 +150,7 @@ function onCategoryCreated(cat: Category): void {
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative" ref="inputWrapperRef">
     <div class="flex gap-1 items-center">
       <input
         type="text"
@@ -128,34 +171,37 @@ function onCategoryCreated(cat: Category): void {
       >✕</button>
     </div>
 
-    <!-- Dropdown -->
-    <ul
-      v-if="open"
-      class="absolute z-50 mt-1 w-full bg-base-100 border border-base-300 rounded-box shadow-lg max-h-48 overflow-y-auto text-sm"
-    >
-      <li
-        v-for="cat in filtered"
-        :key="cat.id"
-        class="px-3 py-1.5 cursor-pointer hover:bg-base-200"
-        :class="{ 'bg-primary/10 font-medium': cat.id === modelValue }"
-        @mousedown.prevent="select(cat)"
+    <!-- Dropdown rendered at body level to escape overflow containers -->
+    <Teleport to="body">
+      <ul
+        v-if="open"
+        :style="dropdownStyle"
+        class="bg-base-100 border border-base-300 rounded-box shadow-lg overflow-y-auto text-sm"
       >
-        {{ cat.name }}
-      </li>
+        <li
+          v-for="cat in filtered"
+          :key="cat.id"
+          class="px-3 py-1.5 cursor-pointer hover:bg-base-200"
+          :class="{ 'bg-primary/10 font-medium': cat.id === modelValue }"
+          @mousedown.prevent="select(cat)"
+        >
+          {{ cat.name }}
+        </li>
 
-      <!-- "Create …" option -->
-      <li
-        v-if="canCreate"
-        class="px-3 py-1.5 cursor-pointer hover:bg-base-200 text-primary italic border-t border-base-300"
-        @mousedown.prevent="openCreate"
-      >
-        Create "{{ query.trim() }}"…
-      </li>
+        <!-- "Create …" option -->
+        <li
+          v-if="canCreate"
+          class="px-3 py-1.5 cursor-pointer hover:bg-base-200 text-primary italic border-t border-base-300"
+          @mousedown.prevent="openCreate"
+        >
+          Create "{{ query.trim() }}"…
+        </li>
 
-      <li v-if="filtered.length === 0 && !canCreate" class="px-3 py-1.5 text-base-content/40 italic">
-        No categories
-      </li>
-    </ul>
+        <li v-if="filtered.length === 0 && !canCreate" class="px-3 py-1.5 text-base-content/40 italic">
+          No categories
+        </li>
+      </ul>
+    </Teleport>
   </div>
 
   <!-- Inline category creation modal -->

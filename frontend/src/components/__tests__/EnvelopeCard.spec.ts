@@ -6,11 +6,16 @@ import type { EnvelopeLine } from '@/api/types'
 const baseEnvelope: EnvelopeLine = {
   envelope_id: 1,
   envelope_name: 'Food',
+  envelope_type: 'regular',
+  emoji: '🍞',
+  color_index: null,
   rollover: false,
+  target_amount: null,
   categories: [{ id: 1, name: 'Groceries', group_name: 'Food' }],
   budgeted: 20000, // 200.00 €
   activity: -5000, // -50.00 €
   available: 15000, // 150.00 €
+  expense_count: 0,
 }
 
 describe('EnvelopeCard', () => {

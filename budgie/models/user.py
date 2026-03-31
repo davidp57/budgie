@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Boolean, DateTime, LargeBinary, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from budgie.database import Base
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from budgie.models.category import CategoryGroup
     from budgie.models.category_rule import CategoryRule
     from budgie.models.payee import Payee
+    from budgie.models.webauthn import WebAuthnCredential
 
 
 class User(Base):
@@ -28,6 +29,10 @@ class User(Base):
             current month) or ``n`` (prévisionnel: virtual transactions created
             for income expected in the current month).
         created_at: Timestamp of account creation.
+        is_encrypted: Whether the user's sensitive data is AES-encrypted.
+        encryption_salt: 16-byte Argon2id salt used to derive the encryption key.
+        challenge_blob: AES-GCM encrypted blob used to verify the passphrase.
+        argon2_params: JSON-serialized Argon2id parameters used for key derivation.
     """
 
     __tablename__ = "users"
@@ -43,6 +48,20 @@ class User(Base):
         server_default=func.now(),
     )
 
+    # Encryption fields (Phase 9)
+    is_encrypted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    encryption_salt: Mapped[bytes | None] = mapped_column(
+        LargeBinary(16), nullable=True, default=None
+    )
+    challenge_blob: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default=None
+    )
+    argon2_params: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default=None
+    )
+
     # Relationships
     accounts: Mapped[list[Account]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -54,5 +73,8 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     category_rules: Mapped[list[CategoryRule]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    webauthn_credentials: Mapped[list[WebAuthnCredential]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

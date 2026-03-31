@@ -8,9 +8,6 @@ import pathlib
 import openpyxl
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
-
 # ── ImportedTransaction schema ──────────────────────────────────
 
 
@@ -393,6 +390,7 @@ NEWFILEUID:NONE
 # ── Import service tests ─────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 async def test_import_service_detects_duplicates(db_session):
     from budgie.importers.base import ImportedTransaction
     from budgie.models.account import Account
@@ -419,16 +417,17 @@ async def test_import_service_detects_duplicates(db_session):
     ]
 
     # First import — should succeed
-    result1 = await confirm_import(db_session, account.id, txns)
+    result1 = await confirm_import(db_session, account.id, user.id, txns)
     assert result1.imported == 1
     assert result1.duplicates == 0
 
     # Second import — same hash → duplicate
-    result2 = await confirm_import(db_session, account.id, txns)
+    result2 = await confirm_import(db_session, account.id, user.id, txns)
     assert result2.imported == 0
     assert result2.duplicates == 1
 
 
+@pytest.mark.asyncio
 async def test_import_service_partial_duplicates(db_session):
     from budgie.importers.base import ImportedTransaction
     from budgie.models.account import Account
@@ -458,8 +457,10 @@ async def test_import_service_partial_duplicates(db_session):
         reference="TXN002",
     )
 
-    await confirm_import(db_session, account.id, [txn_existing])
-    result = await confirm_import(db_session, account.id, [txn_existing, txn_new])
+    await confirm_import(db_session, account.id, user.id, [txn_existing])
+    result = await confirm_import(
+        db_session, account.id, user.id, [txn_existing, txn_new]
+    )
     assert result.imported == 1
     assert result.duplicates == 1
 

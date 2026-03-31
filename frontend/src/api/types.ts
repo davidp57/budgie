@@ -8,11 +8,23 @@
 export interface LoginResponse {
   access_token: string
   token_type: string
+  needs_encryption_setup: boolean
+  is_encrypted: boolean
+}
+
+export interface WebAuthnCredential {
+  id: number
+  name: string | null
+  created_at: string
+}
+
+export interface WebAuthnOptions {
+  options: Record<string, unknown>
 }
 
 // ── Accounts ─────────────────────────────────────────────────────
 
-export type AccountType = 'checking' | 'savings' | 'credit' | 'cash'
+export type AccountType = 'checking' | 'savings' | 'credit' | 'cash' | 'wallet'
 
 export interface Account {
   id: number
@@ -63,7 +75,14 @@ export interface Payee {
 
 // ── Transactions ─────────────────────────────────────────────────
 
-export type ClearedStatus = 'uncleared' | 'cleared' | 'reconciled'
+export type TransactionStatus = 'planned' | 'real' | 'reconciled'
+
+export interface TransactionLinked {
+  id: number
+  memo: string | null
+  amount: number // centimes
+  date: string // YYYY-MM-DD
+}
 
 export interface Transaction {
   id: number
@@ -71,13 +90,14 @@ export interface Transaction {
   date: string // YYYY-MM-DD
   payee_id: number | null
   category_id: number | null
+  envelope_id: number | null
   amount: number // centimes
   memo: string | null
-  cleared: ClearedStatus
-  is_virtual: boolean
-  virtual_linked_id: number | null
-  income_for_month: string | null // YYYY-MM — N+1 mode: counts income toward this month
+  status: TransactionStatus
+  income_for_month: string | null // YYYY-MM
   import_hash: string | null
+  reconciled_with_id: number | null
+  linked_transaction: TransactionLinked | null
   created_at: string
 }
 
@@ -86,19 +106,20 @@ export interface TransactionCreate {
   date: string
   payee_id?: number | null
   category_id?: number | null
+  envelope_id?: number | null
   amount: number
   memo?: string | null
-  cleared?: ClearedStatus
-  is_virtual?: boolean
-  virtual_linked_id?: number | null
+  status?: TransactionStatus
 }
 
 export interface TransactionUpdate {
+  date?: string | null
   category_id?: number | null
+  envelope_id?: number | null
+  amount?: number | null
   memo?: string | null
-  cleared?: ClearedStatus
+  status?: TransactionStatus
   payee_id?: number | null
-  is_virtual?: boolean
 }
 
 // ── Budget ───────────────────────────────────────────────────────
@@ -109,14 +130,21 @@ export interface CategoryRef {
   group_name: string
 }
 
+export type EnvelopeType = 'regular' | 'cumulative' | 'reserve'
+
 export interface EnvelopeLine {
   envelope_id: number
   envelope_name: string
+  envelope_type: EnvelopeType
+  emoji: string
+  color_index: number | null
   rollover: boolean
+  target_amount: number | null
   categories: CategoryRef[]
   budgeted: number // centimes
   activity: number // centimes
   available: number // centimes
+  expense_count: number
 }
 
 export interface MonthBudget {
@@ -158,26 +186,46 @@ export interface UserPreferences {
 
 // ── Envelopes ────────────────────────────────────────────────────
 
+export type EnvelopePeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
 export interface Envelope {
   id: number
   name: string
+  emoji: string
+  color_index: number | null
   rollover: boolean
   sort_order: number
+  envelope_type: EnvelopeType
+  period: EnvelopePeriod
+  target_amount: number | null
+  stop_on_target: boolean
   categories: CategoryRef[]
 }
 
 export interface EnvelopeCreate {
   name: string
+  emoji?: string
+  color_index?: number | null
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]
+  envelope_type?: EnvelopeType
+  period?: EnvelopePeriod
+  target_amount?: number | null
+  stop_on_target?: boolean
 }
 
 export interface EnvelopeUpdate {
   name?: string
+  emoji?: string
+  color_index?: number | null
   rollover?: boolean
   sort_order?: number
   category_ids?: number[]
+  envelope_type?: EnvelopeType
+  period?: EnvelopePeriod
+  target_amount?: number | null
+  stop_on_target?: boolean
 }
 
 // ── Import ───────────────────────────────────────────────────────
@@ -189,7 +237,6 @@ export interface ImportedTransaction {
   payee_name: string | null
   reference: string | null
   import_hash: string
-  virtual_linked_id?: number | null   // set by user during preview matching
 }
 
 export interface ParsePreviewResponse {
@@ -206,9 +253,104 @@ export interface ImportResult {
 
 export interface CategoryRule {
   id: number
+  user_id: number
   pattern: string
+  match_field: 'payee' | 'memo'
+  match_type: 'contains' | 'exact' | 'regex'
   category_id: number
   priority: number
+  transaction_type: 'any' | 'debit' | 'credit'
+  min_amount: number | null
+  max_amount: number | null
+}
+
+export interface CategoryRuleCreate {
+  pattern: string
+  match_field: 'payee' | 'memo'
+  match_type: 'contains' | 'exact' | 'regex'
+  category_id: number
+  priority?: number
+  transaction_type?: 'any' | 'debit' | 'credit'
+  min_amount?: number | null
+  max_amount?: number | null
+}
+
+// ── Reconciliation ───────────────────────────────────────────────
+
+export interface BankTx {
+  id: number
+  date: string // YYYY-MM-DD
+  label: string
+  amount: number // centimes
+  import_hash: string
+  rule_pattern: string | null
+}
+
+export interface ReconciliationExpense {
+  id: number
+  date: string // YYYY-MM-DD
+  label: string
+  amount: number // centimes
+  category_id: number | null
+  category_name: string | null
+  envelope_id: number | null
+  envelope_name: string | null
+  memo: string | null
+  status: TransactionStatus
+}
+
+export interface ReconciliationLink {
+  bank_tx_id: number
+  expense_id: number
+  created_rule?: CategoryRule | null
+}
+
+export interface ReconciliationSuggestion {
+  bank_tx: BankTx
+  expense: ReconciliationExpense
+  score: number
+}
+
+export interface RuleMatch {
+  bank_tx: BankTx
+  category_id: number
+  category_name: string | null
+}
+
+export interface ReconciliationView {
+  account_id: number
+  month: string // YYYY-MM
+  bank_txs: BankTx[]
+  expenses: ReconciliationExpense[]
+  links: ReconciliationLink[]
+  suggestions: ReconciliationSuggestion[]
+  rule_matches: RuleMatch[]
+}
+
+export type RuleAmountMode = 'none' | 'exact' | 'percent'
+export type RuleTransactionType = 'any' | 'debit' | 'credit'
+
+export interface LinkRequest {
+  bank_tx_id: number
+  expense_id: number
+  adjust_amount?: boolean
+  memo?: string | null
+  rule_transaction_type?: RuleTransactionType
+  rule_amount_mode?: RuleAmountMode
+  rule_amount_tolerance_pct?: number
+  skip_rule?: boolean
+}
+
+export interface ClotureRequest {
+  account_id: number
+  month: string // YYYY-MM
+}
+
+export interface ClotureResponse {
+  linked_count: number
+  total_bank_txs: number
+  total_expenses: number
+  reconciled_count: number
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

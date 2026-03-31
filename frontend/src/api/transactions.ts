@@ -1,33 +1,41 @@
 import client from './client'
-import type { Transaction, TransactionCreate, TransactionUpdate } from './types'
+import type { Transaction, TransactionCreate, TransactionUpdate, TransactionStatus } from './types'
 
 export async function listTransactions(options?: {
   accountId?: number
-  isVirtual?: boolean
+  status?: TransactionStatus
   month?: string
   categoryIds?: number[]
+  envelopeId?: number
+  expensesOnly?: boolean
+  limit?: number
+  offset?: number
 }): Promise<Transaction[]> {
   const params: Record<string, unknown> = {}
   if (options?.accountId !== undefined) params.account_id = options.accountId
-  if (options?.isVirtual !== undefined) params.is_virtual = options.isVirtual
+  if (options?.status !== undefined) params.transaction_status = options.status
   if (options?.month !== undefined) params.month = options.month
   if (options?.categoryIds?.length) params.category_ids = options.categoryIds
+  if (options?.envelopeId !== undefined) params.envelope_id = options.envelopeId
+  if (options?.expensesOnly !== undefined) params.expenses_only = options.expensesOnly
+  if (options?.limit !== undefined) params.limit = options.limit
+  if (options?.offset !== undefined) params.offset = options.offset
   const { data } = await client.get<Transaction[]>('/api/transactions', { params })
   return data
 }
 
-export async function listVirtualUnlinked(): Promise<Transaction[]> {
-  const { data } = await client.get<Transaction[]>('/api/transactions/virtual/unlinked')
+export async function listPlannedUnlinked(): Promise<Transaction[]> {
+  const { data } = await client.get<Transaction[]>('/api/transactions/planned/unlinked')
   return data
 }
 
-export async function linkVirtual(
+export async function linkPlanned(
   realTransactionId: number,
-  virtualTransactionId: number,
+  plannedTransactionId: number,
 ): Promise<Transaction> {
-  const { data } = await client.post<Transaction>('/api/transactions/virtual/match', {
+  const { data } = await client.post<Transaction>('/api/transactions/planned/match', {
     real_transaction_id: realTransactionId,
-    virtual_transaction_id: virtualTransactionId,
+    planned_transaction_id: plannedTransactionId,
   })
   return data
 }
@@ -47,4 +55,9 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: number): Promise<void> {
   await client.delete(`/api/transactions/${id}`)
+}
+
+export async function getUnassignedCount(): Promise<{ count: number }> {
+  const { data } = await client.get<{ count: number }>('/api/transactions/unassigned-count')
+  return data
 }

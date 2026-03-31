@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { listAccounts } from '@/api/accounts'
 import { listGroupsWithCategories } from '@/api/categories'
-import { createTransaction, listTransactions } from '@/api/transactions'
+import { listEnvelopes } from '@/api/envelopes'
+import { createTransaction, deleteTransaction, listTransactions } from '@/api/transactions'
 import {
+  formatAmount,
   type Account,
   type CategoryGroupWithCategories,
+  type Envelope,
   type Transaction,
   type TransactionCreate,
 } from '@/api/types'
@@ -13,15 +16,29 @@ import CategoryPicker from '@/components/CategoryPicker.vue'
 import SkeletonRow from '@/components/SkeletonRow.vue'
 import TransactionRow from '@/components/TransactionRow.vue'
 
-type TypeFilter = 'all' | 'real' | 'virtual'
+type TypeFilter = 'all' | 'real' | 'planned'
+
+const PAGE_SIZE = 50
 
 const accounts = ref<Account[]>([])
 const groups = ref<CategoryGroupWithCategories[]>([])
+const envelopes = ref<Envelope[]>([])
 const transactions = ref<Transaction[]>([])
 const selectedAccountId = ref<number | null>(null)
 const typeFilter = ref<TypeFilter>('all')
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMore = ref(false)
 const error = ref('')
+
+// ── Responsive layout ─────────────────────────────────────────────
+const mql = window.matchMedia('(max-width: 767px)')
+const isMobile = ref(mql.matches)
+function onMediaChange(e: MediaQueryListEvent): void {
+  isMobile.value = e.matches
+}
+onMounted(() => mql.addEventListener('change', onMediaChange))
+onUnmounted(() => mql.removeEventListener('change', onMediaChange))
 
 // New virtual transaction modal
 const showVirtualModal = ref(false)
@@ -40,24 +57,54 @@ const virtualForm = ref<{
   memo: '',
 })
 
+const txnCount = computed(() => transactions.value.length)
+
 async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const isVirtual =
-      typeFilter.value === 'all' ? undefined : typeFilter.value === 'virtual'
-    const [acc, grps, txns] = await Promise.all([
+    const status =
+      typeFilter.value === 'all' ? undefined : typeFilter.value
+    const [acc, grps, envs, txns] = await Promise.all([
       listAccounts(),
       listGroupsWithCategories(),
-      listTransactions({ accountId: selectedAccountId.value ?? undefined, isVirtual }),
+      listEnvelopes(),
+      listTransactions({
+        accountId: selectedAccountId.value ?? undefined,
+        status,
+        limit: PAGE_SIZE,
+        offset: 0,
+      }),
     ])
     accounts.value = acc
     groups.value = grps
+    envelopes.value = envs
     transactions.value = txns
+    hasMore.value = txns.length === PAGE_SIZE
   } catch {
     error.value = 'Failed to load transactions.'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    const status =
+      typeFilter.value === 'all' ? undefined : typeFilter.value
+    const txns = await listTransactions({
+      accountId: selectedAccountId.value ?? undefined,
+      status,
+      limit: PAGE_SIZE,
+      offset: txnCount.value,
+    })
+    transactions.value.push(...txns)
+    hasMore.value = txns.length === PAGE_SIZE
+  } catch {
+    error.value = 'Failed to load more transactions.'
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -115,8 +162,7 @@ async function saveVirtualTransaction(): Promise<void> {
     amount: amountCentimes,
     category_id: virtualForm.value.category_id ?? null,
     memo: virtualForm.value.memo.trim() || null,
-    is_virtual: true,
-    cleared: 'uncleared',
+    status: 'planned',
   }
 
   saving.value = true
@@ -130,10 +176,81 @@ async function saveVirtualTransaction(): Promise<void> {
     saving.value = false
   }
 }
+
+// ── Mobile swipe-to-delete ────────────────────────────────────────
+
+function categoryName(id: number | null): string {
+  if (id === null) return '—'
+  for (const g of groups.value) {
+    const cat = g.categories.find((c) => c.id === id)
+    if (cat) return cat.name
+  }
+  return String(id)
+}
+
+const SWIPE_THRESHOLD = 100
+const swipeState = ref<{
+  txnId: number | null
+  startX: number
+  offsetX: number
+}>({ txnId: null, startX: 0, offsetX: 0 })
+
+function onTouchStart(txnId: number, e: TouchEvent): void {
+  const touch = e.touches[0]
+  if (!touch) return
+  swipeState.value = { txnId, startX: touch.clientX, offsetX: 0 }
+}
+
+function onTouchMove(e: TouchEvent): void {
+  if (swipeState.value.txnId === null) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const dx = touch.clientX - swipeState.value.startX
+  // Only allow left swipe (negative), cap at -160px
+  swipeState.value.offsetX = Math.max(-160, Math.min(0, dx))
+}
+
+function onTouchEnd(): void {
+  if (swipeState.value.txnId === null) return
+  if (swipeState.value.offsetX < -SWIPE_THRESHOLD) {
+    const id = swipeState.value.txnId
+    swipeState.value = { txnId: null, startX: 0, offsetX: 0 }
+    swipeDelete(id)
+  } else {
+    swipeState.value = { txnId: null, startX: 0, offsetX: 0 }
+  }
+}
+
+const slidingOutId = ref<number | null>(null)
+
+async function swipeDelete(id: number): Promise<void> {
+  // Animate slide-out, then optimistic remove
+  slidingOutId.value = id
+  await new Promise((r) => setTimeout(r, 250))
+  transactions.value = transactions.value.filter((t) => t.id !== id)
+  slidingOutId.value = null
+  // Fire-and-forget API call
+  deleteTransaction(id).catch(() => {
+    error.value = 'Échec de la suppression.'
+    load()
+  })
+}
+
+function swipeOffset(txnId: number): string {
+  return swipeState.value.txnId === txnId
+    ? `translateX(${swipeState.value.offsetX}px)`
+    : ''
+}
+
+function formatDate(dateStr: string): string {
+  const [, m = '01', d = '01'] = dateStr.split('-')
+  const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
+  return `${parseInt(d, 10)} ${months[parseInt(m, 10) - 1]}`
+}
 </script>
 
 <template>
-  <div>
+  <div class="px-4 py-5 lg:px-8 lg:py-6 max-w-7xl mx-auto">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Transactions</h1>
       <button class="btn btn-secondary btn-sm gap-1" @click="openVirtualModal">
@@ -164,7 +281,7 @@ async function saveVirtualTransaction(): Promise<void> {
     <!-- Type filter -->
     <div class="flex gap-2 mb-4">
       <button
-        v-for="(label, key) in ({ all: 'All', real: 'Real', virtual: 'Forecast ⏳' } as Record<TypeFilter, string>)"
+        v-for="(label, key) in ({ all: 'All', real: 'Real', planned: 'Prévues 🔮' } as Record<TypeFilter, string>)"
         :key="key"
         class="btn btn-sm"
         :class="typeFilter === key ? 'btn-primary' : 'btn-ghost'"
@@ -176,7 +293,78 @@ async function saveVirtualTransaction(): Promise<void> {
 
     <div v-if="error" class="alert alert-error mb-4">{{ error }}</div>
 
-    <div class="card bg-base-100 shadow overflow-x-auto">
+    <!-- ── Mobile list with swipe-to-delete ── -->
+    <div v-if="isMobile" class="flex flex-col gap-0.5">
+      <template v-if="loading">
+        <div v-for="i in 6" :key="i" class="skeleton h-16 rounded-lg" />
+      </template>
+
+      <template v-else-if="transactions.length === 0">
+        <p class="text-center text-base-content/50 py-12">Aucune transaction.</p>
+      </template>
+
+      <template v-else>
+        <div
+          v-for="txn in transactions"
+          :key="txn.id"
+          class="relative overflow-hidden rounded-lg"
+        >
+          <!-- Red delete zone behind -->
+          <div class="absolute inset-0 bg-error flex items-center justify-end pr-5">
+            <span class="text-error-content font-bold text-sm">Supprimer</span>
+          </div>
+
+          <!-- Swipeable content -->
+          <div
+            class="relative bg-base-100 px-4 py-3 flex items-center gap-3 select-none"
+            :class="{
+              'transition-transform duration-200': swipeState.txnId !== txn.id,
+              'transition-all duration-250 -translate-x-full opacity-0': slidingOutId === txn.id,
+            }"
+            :style="slidingOutId === txn.id ? {} : { transform: swipeOffset(txn.id) }"
+            @touchstart="onTouchStart(txn.id, $event)"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+          >
+            <!-- Status icon + date -->
+            <div class="flex flex-col items-center min-w-[48px]">
+              <span v-if="txn.status === 'planned'" class="text-xs">⏳</span>
+              <span class="text-xs text-base-content/60 tabular-nums">{{ formatDate(txn.date) }}</span>
+            </div>
+
+            <!-- Memo + category -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm truncate" :class="txn.status === 'planned' ? 'opacity-60' : ''">
+                {{ txn.memo ?? '—' }}
+              </p>
+              <p class="text-xs text-base-content/50 truncate">{{ categoryName(txn.category_id) }}</p>
+            </div>
+
+            <!-- Amount -->
+            <span
+              class="text-sm font-semibold tabular-nums whitespace-nowrap"
+              :class="txn.amount < 0 ? 'text-error' : 'text-success'"
+            >
+              {{ formatAmount(txn.amount) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Load more button -->
+        <button
+          v-if="hasMore"
+          class="btn btn-ghost btn-sm mt-2 w-full"
+          :disabled="loadingMore"
+          @click="loadMore"
+        >
+          <span v-if="loadingMore" class="loading loading-spinner loading-xs"></span>
+          <span v-else>Charger plus…</span>
+        </button>
+      </template>
+    </div>
+
+    <!-- ── Desktop table ── -->
+    <div v-else class="card bg-base-100 shadow overflow-x-auto">
       <table class="table">
         <thead>
           <tr>
@@ -200,6 +388,7 @@ async function saveVirtualTransaction(): Promise<void> {
               :key="txn.id"
               :txn="txn"
               :groups="groups"
+              :envelopes="envelopes"
               @category-saved="onCategorySaved"
               @category-created="reloadGroups"
               @error="error = $event"
@@ -209,6 +398,18 @@ async function saveVirtualTransaction(): Promise<void> {
           </template>
         </tbody>
       </table>
+
+      <!-- Load more button -->
+      <div v-if="hasMore && !loading" class="p-3 text-center">
+        <button
+          class="btn btn-ghost btn-sm"
+          :disabled="loadingMore"
+          @click="loadMore"
+        >
+          <span v-if="loadingMore" class="loading loading-spinner loading-xs"></span>
+          <span v-else>Load more…</span>
+        </button>
+      </div>
     </div>
 
     <!-- Virtual transaction creation modal -->

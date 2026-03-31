@@ -1,27 +1,51 @@
 # Budgie 🐦
 
-> **EN** — Personal household budget web app · **FR** — Application web de gestion de budget personnel
+> **EN** — Self-hosted personal budget web app · **FR** — Application web de gestion de budget personnel auto-hébergée
 
-Import bank transactions, budget by envelopes, auto-categorize, plan future purchases.  
-Import de transactions bancaires, budget par enveloppes, catégorisation automatique, prévision d'achats.
+[![CI](https://github.com/davidp57/budgie/actions/workflows/ci.yml/badge.svg)](https://github.com/davidp57/budgie/actions/workflows/ci.yml)
+[![Docker](https://github.com/davidp57/budgie/actions/workflows/docker.yml/badge.svg)](https://github.com/davidp57/budgie/actions/workflows/docker.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-veaf__zip-yellow?logo=buymeacoffee)](https://buymeacoffee.com/veaf_zip)
 
 ---
+
+## Features / Fonctionnalités
+
+| | EN | FR |
+|---|---|---|
+| 📥 | Bank import (CSV, Excel, QIF, OFX) | Import bancaire (CSV, Excel, QIF, OFX) |
+| 🏷️ | Auto-categorization (payee history + rules) | Catégorisation automatique (historique + règles) |
+| 💰 | Envelope budgeting with optional rollover | Budget par enveloppes avec report optionnel |
+| 🔮 | Virtual transactions (planned purchases) | Transactions virtuelles (achats planifiés) |
+| ⚡ | Quick expense entry with presets | Saisie rapide avec préréglages |
+| 🌓 | Dark / light theme | Thème sombre / clair |
+| 📱 | Mobile-first PWA | PWA mobile-first |
+| 🐳 | Docker self-hosted (Synology NAS) | Docker auto-hébergé (NAS Synology) |
+
+---
+
+## Tech Stack
 
 | Layer / Couche | Technology / Technologie |
 |---|---|
 | Backend | Python 3.12+, FastAPI, SQLAlchemy 2.0 (async), Alembic, SQLite |
 | Frontend | Vue.js 3, TypeScript, Vite, Tailwind CSS + DaisyUI 5 |
-| Auth | JWT + bcrypt |
+| Auth / Authentification | JWT + bcrypt + WebAuthn passkeys |
 | Deployment / Déploiement | Docker Compose (Synology NAS) |
 | Testing / Tests | pytest + pytest-asyncio · Vitest |
+| CI/CD | GitHub Actions (lint, tests, Docker build) |
 
 ---
 
 ## Quick start / Démarrage rapide
 
+### From source / Depuis les sources
+
 ```bash
 # Backend
 poetry install
+cp .env.example .env          # then set SECRET_KEY / puis définir SECRET_KEY
+mkdir -p data/uploads
 poetry run uvicorn budgie.main:app --reload   # http://localhost:8000
 
 # Frontend (separate terminal / terminal séparé)
@@ -30,34 +54,52 @@ npm install
 npm run dev                                   # http://localhost:5173
 ```
 
-```bash
-# All tests / Tous les tests
-poetry run pytest
-cd frontend && npm run test:unit -- --run
-
-# Lint + type check / Lint + vérification de types
-poetry run ruff check budgie/ tests/
-poetry run mypy budgie/
-cd frontend && npx tsc --noEmit
-```
-
-## Docker
+### Docker
 
 ```bash
-docker compose up --build     # build + run
-docker compose up -d          # detached / en arrière-plan
+cp .env.example .env          # set SECRET_KEY / définir SECRET_KEY
+docker compose up -d --build  # http://localhost:8080
 ```
 
-Production port: **8080** → `http://localhost:8080`
+### Quality checks / Contrôles qualité
+
+```bash
+# Backend
+poetry run pytest                        # ~200 tests
+poetry run ruff check budgie/ tests/     # lint
+poetry run mypy budgie/                  # type check
+
+# Frontend
+cd frontend
+npx vitest run                           # ~40 tests
+npx vue-tsc --noEmit                     # type check
+npx eslint src/                          # lint
+```
 
 ---
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [docs/USER.md](docs/USER.md) | End-user guide (English) |
-| [docs/UTILISATEUR.md](docs/UTILISATEUR.md) | Guide utilisateur (Français) |
-| [docs/TECHNICAL.md](docs/TECHNICAL.md) | Technical / developer reference (English) |
-| [docs/TECHNIQUE.md](docs/TECHNIQUE.md) | Référence technique développeur (Français) |
-| [docs/PLAN.md](docs/PLAN.md) | Project plan & roadmap / Plan du projet & feuille de route |
+| | 🇬🇧 English | 🇫🇷 Français |
+|---|---|---|
+| Installation Tutorial / Tutoriel installation | [docs/en/tutorials/installation.md](docs/en/tutorials/installation.md) | [docs/fr/tutorials/installation.md](docs/fr/tutorials/installation.md) |
+| Usage Tutorial / Tutoriel d'utilisation | [docs/en/tutorials/usage.md](docs/en/tutorials/usage.md) | [docs/fr/tutorials/usage.md](docs/fr/tutorials/usage.md) |
+| User Guide / Guide utilisateur | [docs/en/user-guide.md](docs/en/user-guide.md) | [docs/fr/user-guide.md](docs/fr/user-guide.md) |
+| Developer Guide / Guide développeur | [docs/en/developer-guide.md](docs/en/developer-guide.md) | [docs/fr/developer-guide.md](docs/fr/developer-guide.md) |
+| Project Plan / Plan du projet | [docs/en/plan.md](docs/en/plan.md) | [docs/fr/plan.md](docs/fr/plan.md) |
+| Roadmap / Feuille de route | [docs/en/roadmap.md](docs/en/roadmap.md) | [docs/fr/roadmap.md](docs/fr/roadmap.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) | — |
+
+---
+
+## Support / Soutien
+
+☕ If Budgie is useful to you, consider [buying me a coffee](https://buymeacoffee.com/veaf_zip)!
+
+☕ Si Budgie t'est utile, pense à [m'offrir un café](https://buymeacoffee.com/veaf_zip) !
+
+---
+
+## License / Licence
+
+[GNU Affero General Public License v3.0](LICENSE)

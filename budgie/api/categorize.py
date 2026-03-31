@@ -49,6 +49,7 @@ async def categorize_batch(
             current_user.id,
             txn.payee_name,
             txn.memo,
+            txn.amount,
         )
         results.append(result)
     return BatchCategorizeResponse(results=results)

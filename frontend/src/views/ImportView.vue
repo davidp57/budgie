@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import axios from 'axios'
 import { listAccounts } from '@/api/accounts'
 import { confirmImport, parseFile } from '@/api/imports'
-import { listVirtualUnlinked } from '@/api/transactions'
+import { listPlannedUnlinked } from '@/api/transactions'
 import {
   formatAmount,
   type Account,
@@ -32,9 +32,13 @@ const virtualUnlinked = ref<Transaction[]>([])
 const linkDecisions = ref<Record<number, number>>({})
 
 onMounted(async () => {
-  accounts.value = await listAccounts()
-  if (accounts.value.length > 0) {
-    selectedAccountId.value = accounts.value[0]?.id ?? null
+  try {
+    accounts.value = await listAccounts()
+    if (accounts.value.length > 0) {
+      selectedAccountId.value = accounts.value[0]?.id ?? null
+    }
+  } catch {
+    // 401 errors are handled by the client interceptor (redirect to login)
   }
 })
 
@@ -84,7 +88,7 @@ async function onFileSelected(file: File): Promise<void> {
   try {
     const [resp, virtuals] = await Promise.all([
       parseFile(file, selectedFormat.value),
-      listVirtualUnlinked(),
+      listPlannedUnlinked(),
     ])
     preview.value = resp.transactions
     virtualUnlinked.value = virtuals

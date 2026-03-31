@@ -77,11 +77,11 @@ async def test_accounts_scoped_to_user(client: AsyncClient, auth_client: AsyncCl
     # Create second user and get their client
     await client.post(
         "/api/auth/register",
-        json={"username": "bob", "password": "bobspassword"},
+        json={"username": "bob", "password": "BobsPassword1"},
     )
     login = await client.post(
         "/api/auth/login",
-        json={"username": "bob", "password": "bobspassword"},
+        json={"username": "bob", "password": "BobsPassword1"},
     )
     bob_token = login.json()["access_token"]
 
@@ -269,10 +269,10 @@ async def test_update_transaction(auth_client: AsyncClient):
     txn_id = txn.json()["id"]
     response = await auth_client.put(
         f"/api/transactions/{txn_id}",
-        json={"cleared": "cleared", "memo": "Updated"},
+        json={"status": "reconciled", "memo": "Updated"},
     )
     assert response.status_code == 200
-    assert response.json()["cleared"] == "cleared"
+    assert response.json()["status"] == "reconciled"
     assert response.json()["memo"] == "Updated"
 
 
@@ -411,3 +411,397 @@ async def test_create_envelope_with_categories(auth_client: AsyncClient) -> None
     assert len(data["categories"]) == 1
     assert data["categories"][0]["name"] == "Groceries"
     assert data["categories"][0]["group_name"] == "Household"
+
+
+async def test_envelope_color_index_default_none(auth_client: AsyncClient) -> None:
+    """A new envelope has color_index=None by default (auto-color from palette)."""
+    response = await auth_client.post("/api/envelopes", json={"name": "Travel"})
+    assert response.status_code == 201
+    assert response.json()["color_index"] is None
+
+
+async def test_envelope_color_index_create(auth_client: AsyncClient) -> None:
+    """Creating an envelope with color_index stores and returns the chosen index."""
+    response = await auth_client.post(
+        "/api/envelopes", json={"name": "Food", "color_index": 3}
+    )
+    assert response.status_code == 201
+    assert response.json()["color_index"] == 3
+
+
+async def test_envelope_color_index_update(auth_client: AsyncClient) -> None:
+    """Updating color_index persists the change and is returned in the response."""
+    create = await auth_client.post("/api/envelopes", json={"name": "Bills"})
+    env_id = create.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/envelopes/{env_id}", json={"color_index": 5}
+    )
+    assert response.status_code == 200
+    assert response.json()["color_index"] == 5
+
+
+async def test_envelope_color_index_reset_to_none(auth_client: AsyncClient) -> None:
+    """Setting color_index to null resets to auto-color (None)."""
+    create = await auth_client.post(
+        "/api/envelopes", json={"name": "Savings", "color_index": 2}
+    )
+    env_id = create.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/envelopes/{env_id}", json={"color_index": None}
+    )
+    assert response.status_code == 200
+    assert response.json()["color_index"] is None
+
+
+async def test_envelope_color_index_in_month_budget(auth_client: AsyncClient) -> None:
+    """color_index is included in EnvelopeLine from GET /api/budget/{month}."""
+    envelope = await auth_client.post(
+        "/api/envelopes", json={"name": "Leisure", "color_index": 7}
+    )
+    env_id = envelope.json()["id"]
+    await auth_client.post(
+        "/api/budget/2026-01",
+        json=[{"envelope_id": env_id, "budgeted": 5000}],
+    )
+    response = await auth_client.get("/api/budget/2026-01")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((line for line in lines if line["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["color_index"] == 7
+
+
+# ── CategoryRule amount range ─────────────────────────────────────
+
+
+async def test_category_rule_min_max_default_none(auth_client: AsyncClient) -> None:
+    """Creating a rule without min/max returns null for both fields."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "NETFLIX",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["min_amount"] is None
+    assert data["max_amount"] is None
+
+
+async def test_category_rule_amount_range_create(auth_client: AsyncClient) -> None:
+    """Creating a rule with min/max persists both values."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G2", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C2", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "SHOP",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+            "min_amount": 500,
+            "max_amount": 5000,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["min_amount"] == 500
+    assert data["max_amount"] == 5000
+
+
+async def test_category_rule_amount_range_update(auth_client: AsyncClient) -> None:
+    """Updating a rule with min/max persists the new values."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G3", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C3", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+    rule = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "TRAIN",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+        },
+    )
+    rule_id = rule.json()["id"]
+
+    response = await auth_client.put(
+        f"/api/category-rules/{rule_id}",
+        json={"min_amount": 1000, "max_amount": 10000},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["min_amount"] == 1000
+    assert data["max_amount"] == 10000
+
+
+async def test_category_rule_amount_range_validation_min_gt_max(
+    auth_client: AsyncClient,
+) -> None:
+    """Creating a rule with min_amount > max_amount returns 422."""
+    cat = await auth_client.post(
+        "/api/category-groups", json={"name": "G4", "sort_order": 0}
+    )
+    cat_id = (
+        await auth_client.post(
+            "/api/categories", json={"name": "C4", "group_id": cat.json()["id"]}
+        )
+    ).json()["id"]
+
+    response = await auth_client.post(
+        "/api/category-rules",
+        json={
+            "pattern": "X",
+            "match_field": "payee",
+            "match_type": "contains",
+            "category_id": cat_id,
+            "min_amount": 5000,
+            "max_amount": 500,
+        },
+    )
+    assert response.status_code == 422
+
+
+# ── Tests: envelope_id on transactions ───────────────────────────
+
+
+async def test_transaction_create_with_envelope_id(auth_client: AsyncClient) -> None:
+    """Creating a transaction with envelope_id persists and returns it."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Cash", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Petty Cash"})
+    envelope_id = envelope.json()["id"]
+
+    response = await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-10",
+            "amount": -2500,
+            "cleared": "uncleared",
+            "envelope_id": envelope_id,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["envelope_id"] == envelope_id
+
+
+async def test_list_transactions_filter_by_envelope_id(
+    auth_client: AsyncClient,
+) -> None:
+    """GET /api/transactions?envelope_id filters to matching transactions only."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+
+    env1 = await auth_client.post("/api/envelopes", json={"name": "Food"})
+    env2 = await auth_client.post("/api/envelopes", json={"name": "Transport"})
+    env1_id = env1.json()["id"]
+    env2_id = env2.json()["id"]
+
+    for envelope_id, amount in [(env1_id, -1000), (env1_id, -2000), (env2_id, -500)]:
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": "2026-03-01",
+                "amount": amount,
+                "cleared": "uncleared",
+                "envelope_id": envelope_id,
+            },
+        )
+
+    response = await auth_client.get(f"/api/transactions?envelope_id={env1_id}")
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 2
+    assert all(tx["envelope_id"] == env1_id for tx in results)
+
+
+# ── Issue #15: expense_count + unassigned-count ──────────────────
+
+
+async def test_budget_envelope_expense_count(auth_client: AsyncClient) -> None:
+    """Budget view returns expense_count per envelope (all transactions)."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Groceries"})
+    env_id = envelope.json()["id"]
+    await auth_client.put(
+        "/api/budget/2026-03",
+        json=[{"envelope_id": env_id, "budgeted": 30000}],
+    )
+
+    # Create 2 manual expenses in 2026-03
+    for amount in [-1000, -2000]:
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": "2026-03-10",
+                "amount": amount,
+                "envelope_id": env_id,
+            },
+        )
+    # Create 1 transaction in a different month — should NOT be counted
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-02-10",
+            "amount": -500,
+            "envelope_id": env_id,
+        },
+    )
+
+    response = await auth_client.get("/api/budget/2026-03")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((e for e in lines if e["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["expense_count"] == 2
+
+
+async def test_budget_envelope_expense_count_zero_by_default(
+    auth_client: AsyncClient,
+) -> None:
+    """expense_count is 0 when there are no transactions."""
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Rent"})
+    env_id = envelope.json()["id"]
+    await auth_client.put(
+        "/api/budget/2026-03",
+        json=[{"envelope_id": env_id, "budgeted": 80000}],
+    )
+    response = await auth_client.get("/api/budget/2026-03")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((e for e in lines if e["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["expense_count"] == 0
+
+
+async def test_unassigned_count_endpoint_zero(auth_client: AsyncClient) -> None:
+    """GET /api/transactions/unassigned-count returns 0 when no unassigned expenses."""
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 0}
+
+
+async def test_unassigned_count_endpoint(auth_client: AsyncClient) -> None:
+    """GET /api/transactions/unassigned-count counts all txns with no envelope."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Food"})
+    env_id = envelope.json()["id"]
+    group = await auth_client.post("/api/category-groups", json={"name": "Misc"})
+    category = await auth_client.post(
+        "/api/categories", json={"name": "Coiffeur", "group_id": group.json()["id"]}
+    )
+    cat_id = category.json()["id"]
+
+    # Unassigned expense (no envelope, no category — counts)
+    await auth_client.post(
+        "/api/transactions",
+        json={"account_id": account_id, "date": "2026-03-01", "amount": -500},
+    )
+    # Unassigned with category but no envelope (should also count)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-02",
+            "amount": -300,
+            "category_id": cat_id,
+        },
+    )
+    # Assigned to envelope (should NOT count)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-03",
+            "amount": -200,
+            "envelope_id": env_id,
+        },
+    )
+
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 2}
+
+
+async def test_unassigned_count_scoped_to_user(
+    auth_client: AsyncClient,
+    client: AsyncClient,
+) -> None:
+    """unassigned-count only returns expenses belonging to the authenticated user."""
+    # Create a second user and their expense
+    await client.post(
+        "/api/auth/register",
+        json={"username": "bob", "password": "BobPassword1"},
+    )
+    login_bob = await client.post(
+        "/api/auth/login",
+        json={"username": "bob", "password": "BobPassword1"},
+    )
+    bob_token = login_bob.json()["access_token"]
+    bob_headers = {"Authorization": f"Bearer {bob_token}"}
+
+    bob_account = await client.post(
+        "/api/accounts",
+        json={"name": "Bob Wallet", "account_type": "checking", "on_budget": True},
+        headers=bob_headers,
+    )
+    await client.post(
+        "/api/transactions",
+        json={
+            "account_id": bob_account.json()["id"],
+            "date": "2026-03-01",
+            "amount": -1000,
+        },
+        headers=bob_headers,
+    )
+
+    # Alice should still see 0 unassigned
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 0}

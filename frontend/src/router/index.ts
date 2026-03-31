@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,19 +10,36 @@ const router = createRouter({
       meta: { public: true },
     },
     {
-      path: '/',
-      name: 'dashboard',
-      component: () => import('@/views/DashboardView.vue'),
+      path: '/setup-encryption',
+      name: 'setup-encryption',
+      component: () => import('@/views/SetupEncryptionView.vue'),
+      meta: { requiresAuth: true },
     },
     {
-      path: '/transactions',
-      name: 'transactions',
-      component: () => import('@/views/TransactionsView.vue'),
+      path: '/unlock',
+      name: 'unlock',
+      component: () => import('@/views/UnlockEncryptionView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/',
+      name: 'home',
+      component: () => import('@/views/HomeView.vue'),
     },
     {
       path: '/budget',
       name: 'budget',
       component: () => import('@/views/BudgetView.vue'),
+    },
+    {
+      path: '/depenses',
+      name: 'depenses',
+      component: () => import('@/views/DepensesView.vue'),
+    },
+    {
+      path: '/reconciliation',
+      name: 'reconciliation',
+      component: () => import('@/views/ReconciliationView.vue'),
     },
     {
       path: '/import',
@@ -38,15 +54,38 @@ const router = createRouter({
   ],
 })
 
-// Auth guard — redirect to /login for all non-public routes
 router.beforeEach((to) => {
-  const auth = useAuthStore()
-  if (!to.meta.public && !auth.isAuthenticated) {
+  const token = localStorage.getItem('access_token')
+
+  // Authenticated user visiting /login → redirect to home
+  if (token && to.name === 'login') {
+    return { name: 'home' }
+  }
+
+  // Unauthenticated → login
+  if (!to.meta.public && !token) {
     return { name: 'login' }
   }
-  // Already authenticated → redirect away from login
-  if (to.name === 'login' && auth.isAuthenticated) {
-    return { name: 'dashboard' }
+
+  if (token) {
+    const needsSetup = localStorage.getItem('needs_encryption_setup') === 'true'
+    const isEncrypted = localStorage.getItem('is_encrypted') === 'true'
+    const isEncryptionRoute =
+      to.name === 'setup-encryption' || to.name === 'unlock' || to.name === 'login'
+
+    // First-time encryption setup required
+    if (needsSetup && !isEncryptionRoute) {
+      return { name: 'setup-encryption' }
+    }
+
+    // Returning user with encryption, not yet unlocked this session
+    if (isEncrypted && !needsSetup && !isEncryptionRoute) {
+      // Check in-memory store via sessionStorage flag set by auth store
+      const unlocked = sessionStorage.getItem('encryption_unlocked') === 'true'
+      if (!unlocked) {
+        return { name: 'unlock' }
+      }
+    }
   }
 })
 

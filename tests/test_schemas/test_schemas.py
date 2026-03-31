@@ -15,9 +15,9 @@ from pydantic import ValidationError
 def test_user_create_valid():
     from budgie.schemas.user import UserCreate
 
-    user = UserCreate(username="alice", password="securepass123")
+    user = UserCreate(username="alice", password="SecurePass123")
     assert user.username == "alice"
-    assert user.password == "securepass123"
+    assert user.password == "SecurePass123"
 
 
 def test_user_create_username_too_short():
@@ -175,7 +175,6 @@ def test_transaction_create_valid():
         cleared="cleared",
     )
     assert txn.amount == -5050
-    assert txn.is_virtual is False
 
 
 def test_transaction_create_invalid_cleared():
@@ -199,6 +198,7 @@ def test_transaction_read():
         date=datetime.date(2026, 1, 15),
         payee_id=None,
         category_id=None,
+        envelope_id=None,
         amount=-5050,
         memo=None,
         cleared="uncleared",
@@ -206,6 +206,7 @@ def test_transaction_read():
         virtual_linked_id=None,
         import_hash=None,
         created_at=datetime.datetime(2026, 1, 15),
+        status="real",
     )
     assert txn.id == 1
 
@@ -312,3 +313,201 @@ def test_category_rule_read():
         priority=10,
     )
     assert rule.id == 1
+
+
+# ── Envelope v2 schemas (type, period, target) ───────────────────
+
+
+def test_envelope_create_with_type():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    env = EnvelopeCreate(name="Jeux", envelope_type="cumulative")
+    assert env.envelope_type == "cumulative"
+
+
+def test_envelope_create_default_type():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    env = EnvelopeCreate(name="Courses")
+    assert env.envelope_type == "regular"
+
+
+def test_envelope_create_reserve_type():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    env = EnvelopeCreate(name="Putes", envelope_type="reserve")
+    assert env.envelope_type == "reserve"
+
+
+def test_envelope_create_invalid_type():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    with pytest.raises(ValidationError):
+        EnvelopeCreate(name="Bad", envelope_type="invalid")
+
+
+def test_envelope_create_with_target():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    env = EnvelopeCreate(
+        name="Vacances",
+        envelope_type="cumulative",
+        target_amount=300000,
+        stop_on_target=True,
+    )
+    assert env.target_amount == 300000
+    assert env.stop_on_target is True
+
+
+def test_envelope_create_period():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    env = EnvelopeCreate(name="Loyer", period="monthly")
+    assert env.period == "monthly"
+
+
+def test_envelope_create_invalid_period():
+    from budgie.schemas.envelope import EnvelopeCreate
+
+    with pytest.raises(ValidationError):
+        EnvelopeCreate(name="Bad", period="biweekly")
+
+
+def test_envelope_read_v2_fields():
+    from budgie.schemas.envelope import EnvelopeRead
+
+    env = EnvelopeRead(
+        id=1,
+        name="Vacances",
+        rollover=True,
+        sort_order=0,
+        categories=[],
+        envelope_type="cumulative",
+        period="monthly",
+        target_amount=300000,
+        stop_on_target=True,
+    )
+    assert env.envelope_type == "cumulative"
+    assert env.target_amount == 300000
+
+
+def test_envelope_update_type():
+    from budgie.schemas.envelope import EnvelopeUpdate
+
+    update = EnvelopeUpdate(envelope_type="reserve")
+    assert update.envelope_type == "reserve"
+
+
+# ── Transaction v2 schemas (status replaces cleared/is_virtual) ──
+
+
+def test_transaction_create_v2_status():
+    from budgie.schemas.transaction import TransactionCreate
+
+    txn = TransactionCreate(
+        account_id=1,
+        date=datetime.date(2026, 3, 15),
+        amount=-5050,
+        status="planned",
+    )
+    assert txn.status == "planned"
+
+
+def test_transaction_create_v2_default_status():
+    from budgie.schemas.transaction import TransactionCreate
+
+    txn = TransactionCreate(
+        account_id=1,
+        date=datetime.date(2026, 3, 15),
+        amount=-5050,
+    )
+    assert txn.status == "real"
+
+
+def test_transaction_create_v2_invalid_status():
+    from budgie.schemas.transaction import TransactionCreate
+
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            account_id=1,
+            date=datetime.date(2026, 3, 15),
+            amount=-5050,
+            status="invalid",
+        )
+
+
+def test_transaction_read_v2():
+    from budgie.schemas.transaction import TransactionRead
+
+    txn = TransactionRead(
+        id=1,
+        account_id=1,
+        date=datetime.date(2026, 3, 15),
+        payee_id=None,
+        category_id=None,
+        envelope_id=None,
+        amount=-5050,
+        memo=None,
+        status="real",
+        import_hash=None,
+        created_at=datetime.datetime(2026, 3, 15),
+    )
+    assert txn.status == "real"
+
+
+# ── Account v2 schemas (wallet type) ─────────────────────────────
+
+
+def test_account_create_wallet():
+    from budgie.schemas.account import AccountCreate
+
+    account = AccountCreate(name="Portefeuille", account_type="wallet")
+    assert account.account_type == "wallet"
+
+
+# ── CategoryRule amount range schemas ────────────────────────────
+
+
+def test_category_rule_amount_range_create():
+    """min_amount and max_amount are accepted and stored on CategoryRuleCreate."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    rule = CategoryRuleCreate(
+        pattern="shop",
+        match_field="payee",
+        match_type="contains",
+        category_id=1,
+        min_amount=500,
+        max_amount=5000,
+    )
+    assert rule.min_amount == 500
+    assert rule.max_amount == 5000
+
+
+def test_category_rule_amount_range_defaults_none():
+    """min_amount and max_amount default to None."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    rule = CategoryRuleCreate(
+        pattern="shop",
+        match_field="payee",
+        match_type="contains",
+        category_id=1,
+    )
+    assert rule.min_amount is None
+    assert rule.max_amount is None
+
+
+def test_category_rule_amount_range_min_gt_max_invalid():
+    """min_amount > max_amount must raise ValidationError."""
+    from budgie.schemas.category_rule import CategoryRuleCreate
+
+    with pytest.raises(ValidationError):
+        CategoryRuleCreate(
+            pattern="shop",
+            match_field="payee",
+            match_type="contains",
+            category_id=1,
+            min_amount=-500,
+            max_amount=-5000,
+        )

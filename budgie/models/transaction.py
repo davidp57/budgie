@@ -6,7 +6,6 @@ import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -21,6 +20,7 @@ from budgie.database import Base
 if TYPE_CHECKING:
     from budgie.models.account import Account
     from budgie.models.category import Category
+    from budgie.models.envelope import Envelope
     from budgie.models.payee import Payee
 
 
@@ -34,12 +34,12 @@ class Transaction(Base):
         account_id: The account this transaction belongs to.
         date: Date of the transaction.
         payee_id: Optional payee reference.
-        category_id: Optional category for budgeting.
+        category_id: Optional category for budgeting (used for bank imports).
+        envelope_id: Optional direct envelope link for manually-created
+            expenses. Takes priority over ``category_id`` in budget calculations.
         amount: Amount in integer centimes (negative = expense).
         memo: Optional memo/description.
-        cleared: Status — uncleared, cleared, or reconciled.
-        is_virtual: Whether this is a planned future transaction.
-        virtual_linked_id: Links a virtual transaction to its real counterpart.
+        status: Transaction status — planned (future), real, or reconciled.
         income_for_month: When set (YYYY-MM), this real transaction income is
             counted toward that month ``to_be_budgeted`` (N+1 mode).
         import_hash: Unique hash for deduplication during import.
@@ -59,13 +59,7 @@ class Transaction(Base):
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     memo: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
-    cleared: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="uncleared"
-    )
-    is_virtual: Mapped[bool] = mapped_column(Boolean, default=False)
-    virtual_linked_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("transactions.id"), nullable=True, default=None
-    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="real")
     income_for_month: Mapped[str | None] = mapped_column(
         String(7), nullable=True, default=None
     )
@@ -76,14 +70,24 @@ class Transaction(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+    reconciled_with_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("transactions.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+    )
+    envelope_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("envelopes.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+    )
 
     # Relationships
     account: Mapped[Account] = relationship(back_populates="transactions")
     payee: Mapped[Payee | None] = relationship()
     category: Mapped[Category | None] = relationship()
-    virtual_linked: Mapped[Transaction | None] = relationship(
-        remote_side="Transaction.id"
-    )
+    envelope: Mapped[Envelope | None] = relationship()
     splits: Mapped[list[SplitTransaction]] = relationship(
         back_populates="parent", cascade="all, delete-orphan"
     )

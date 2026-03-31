@@ -30,7 +30,7 @@ Core features: bank transaction import (CSV, Excel, QIF, OFX), assisted/automati
   3. Refactor while keeping tests green.
 - Every new feature, bugfix, or behavior change MUST start with a test.
 - Test files mirror source structure: `budgie/services/budget_engine.py` → `tests/test_services/test_budget_engine.py`.
-- Use fixtures and factories for test data — avoid hardcoding.
+- Use fixtures and factories for test data (see `tests/conftest.py`) — avoid hardcoding.
 - Aim for high coverage on business logic (services, importers, categorization). API routes tested via `httpx.AsyncClient`.
 
 ### Code Quality
@@ -45,9 +45,7 @@ Core features: bank transaction import (CSV, Excel, QIF, OFX), assisted/automati
 ### Documentation
 
 - **Documentation MUST be kept up to date** with every code change.
-- **Bilingual**: All documentation files must be written in **both English and French**.
-  - Use the pattern: English section first, then French section with `---` separator, OR side-by-side in the same section.
-  - README.md, API docs, architecture docs, user guides — all bilingual.
+- **Bilingual**: All documentation files must be written in **both English and French**, in separate files under `docs/en/` and `docs/fr/`.
 - Code-level documentation (docstrings, inline comments) is in **English only**.
 - Update relevant docs in the SAME commit/PR as the code change.
 
@@ -66,6 +64,7 @@ Core features: bank transaction import (CSV, Excel, QIF, OFX), assisted/automati
   - API calls centralized in `src/api/` module using axios.
   - Components should be small, single-responsibility.
   - Use DaisyUI component classes — avoid custom CSS when a DaisyUI component exists.
+  - **After every change to a `.vue` file, run `npx vue-tsc --noEmit -p tsconfig.app.json` (frontend equivalent of `mypy`) before considering the task done.** This catches template errors, broken bindings, and type mismatches that Vite only reports at runtime. Always use `-p tsconfig.app.json` to ensure all strict options (e.g. `noUncheckedIndexedAccess`) are applied — matching exactly what the CI runs.
 
 - **Database**:
   - Monetary values are **integer centimes** (never floats).
@@ -111,10 +110,58 @@ budgie/
 │   ├── test_services/
 │   └── test_importers/
 ├── docs/                          # Documentation (EN + FR)
+│   ├── en/
+│   │   ├── user-guide.md
+│   │   └── developer-guide.md
+│   └── fr/
+│       ├── user-guide.md
+│       └── developer-guide.md
 └── data/                          # Runtime data (gitignored)
 ```
 
+### Commit workflow
+
+When the user asks to commit, follow these steps **in order** before creating the commit:
+
+1. **Tests** — verify existing tests still pass; add or update tests for all new/changed behavior.
+2. **Quality checks** — run all checks and fix all issues before proceeding:
+   - Backend: `poetry run ruff check .`, `poetry run mypy budgie/`, `poetry run pytest`
+   - Frontend: `cd frontend && npx vue-tsc --noEmit -p tsconfig.app.json`, `npx eslint src/`, `npx vitest run`
+3. **Documentation** — verify and update all relevant docs:
+   - `docs/en/` and `docs/fr/` user/developer guides — update if the change affects user-facing behavior or architecture.
+   - Docstrings — update if public API signatures or behavior changed.
+4. **Commit** — stage all modified files (code + tests + docs) and commit in one clean commit with a descriptive message.
+
+### PR preparation workflow
+
+When the user asks to prepare a PR, follow these steps in order:
+
+1. **Tests** — verify existing tests still pass; add or complete tests for all new/changed behavior.
+2. **Documentation** — verify and update all relevant docs (user guides EN + FR, README, docstrings).
+3. **Quality checks** — run all backend and frontend checks; fix all issues before proceeding.
+4. **Temporary PR description** — create a temporary markdown file (e.g. `.github/pull_request_description.md`) to help the user fill in the PR on GitHub. This file must **not** be committed.
+   - The PR description **must be written in English**.
+   - Keep it **concise**: one short summary paragraph + a bullet list of key changes. No lengthy prose.
+5. **Commit** — commit all the above changes (tests, docs) in one clean commit. Do **not** commit the PR description file.
+
+### Release workflow
+
+When the user asks to do a release, follow these steps in order:
+
+1. **Propose a version number** — suggest a semver version based on the changes since the last release (patch / minor / major), and ask the user to confirm before proceeding.
+2. **Write release notes** — draft concise, user-focused release notes **in both English and French**.
+   - Structure: short intro sentence + bullet list of notable changes. No technical jargon.
+   - Present them to the user for confirmation before continuing.
+3. **Bump version** — update `version` in `pyproject.toml` to the confirmed value.
+4. **Update README** — update any version-specific info if needed.
+5. **Quality checks** — run all backend and frontend checks; fix all issues before proceeding.
+6. **Commit** — one clean commit: `release: vX.Y.Z`.
+7. **Tag** — create an annotated git tag `vX.Y.Z`.
+8. **Push** — ask the user before pushing the commit and tag to GitHub.
+
 ### Commands
+
+> **Version policy**: Never change the version number in `pyproject.toml` or anywhere else unless the user has confirmed it.
 
 ```bash
 # Backend
@@ -131,8 +178,9 @@ cd frontend
 npm install                             # Install dependencies
 npm run dev                             # Vite dev server
 npm run build                           # Production build
-npm run test                            # Vitest
-npm run lint                            # ESLint
+npx vitest run                          # Tests
+npx eslint src/                         # ESLint
+npx vue-tsc --noEmit -p tsconfig.app.json  # TypeScript check (matches CI exactly)
 
 # Docker
 docker compose up --build               # Build & run
@@ -147,6 +195,7 @@ docker compose up -d                    # Run detached
 | Python classes    | PascalCase        | `BudgetAllocation`               |
 | Python functions  | snake_case        | `get_month_budget()`             |
 | Python constants  | UPPER_SNAKE_CASE  | `MAX_IMPORT_SIZE`                |
+| Private helpers   | `_` prefix        | `_parse_amount()`               |
 | Vue components    | PascalCase        | `EnvelopeCard.vue`               |
 | Vue composables   | camelCase, `use`  | `useBudget.ts`                   |
 | TypeScript files  | camelCase         | `apiClient.ts`                   |

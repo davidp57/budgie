@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { deleteTransaction, updateTransaction } from '@/api/transactions'
 import {
   formatAmount,
   type Category,
   type CategoryGroupWithCategories,
+  type Envelope,
   type Transaction,
 } from '@/api/types'
 import CategoryPicker from './CategoryPicker.vue'
@@ -12,6 +13,7 @@ import CategoryPicker from './CategoryPicker.vue'
 const props = defineProps<{
   txn: Transaction
   groups: CategoryGroupWithCategories[]
+  envelopes?: Envelope[]
 }>()
 
 const emit = defineEmits<{
@@ -55,10 +57,17 @@ function categoryName(id: number | null): string {
   return String(id)
 }
 
+function envelopeName(id: number | null): string | null {
+  if (id === null || !props.envelopes) return null
+  return props.envelopes.find((e) => e.id === id)?.name ?? null
+}
+
+const txnEnvelopeName = computed(() => envelopeName(props.txn.envelope_id))
+
 async function realizeTransaction(): Promise<void> {
   realizing.value = true
   try {
-    await updateTransaction(props.txn.id, { is_virtual: false })
+    await updateTransaction(props.txn.id, { status: 'real' })
     emit('realized', props.txn.id)
   } catch {
     emit('error', 'Failed to realize transaction.')
@@ -81,9 +90,9 @@ async function deleteVirtualTransaction(): Promise<void> {
 </script>
 
 <template>
-  <tr class="group" :class="txn.is_virtual ? 'opacity-60 border-dashed' : ''">
+  <tr class="group" :class="txn.status === 'planned' ? 'opacity-60 border-dashed' : ''">
     <td class="tabular-nums">
-      <span v-if="txn.is_virtual" class="mr-1" title="Forecast">⏳</span>{{ txn.date }}
+      <span v-if="txn.status === 'planned'" class="mr-1" title="Forecast">⏳</span>{{ txn.date }}
     </td>
     <td :class="txn.amount < 0 ? 'text-error' : 'text-success'" class="tabular-nums">
       {{ formatAmount(txn.amount) }}
@@ -121,44 +130,53 @@ async function deleteVirtualTransaction(): Promise<void> {
         </div>
       </template>
       <template v-else>
-        <button class="btn btn-ghost btn-xs" @click="startEdit">
-          {{ categoryName(txn.category_id) }}
-        </button>
+        <div class="flex flex-col items-start gap-0.5">
+          <button class="btn btn-ghost btn-xs" @click="startEdit">
+            {{ categoryName(txn.category_id) }}
+          </button>
+          <span
+            v-if="txnEnvelopeName"
+            class="text-[11px] text-base-content/40 pl-1 leading-none"
+          >🗂 {{ txnEnvelopeName }}</span>
+        </div>
       </template>
     </td>
 
     <td>
-      <span
-        class="badge badge-sm"
-        :class="{
-          'badge-ghost': txn.cleared === 'uncleared',
-          'badge-info': txn.cleared === 'cleared',
-          'badge-success': txn.cleared === 'reconciled',
-        }"
-      >
-        {{ txn.cleared }}
-      </span>
-      <span v-if="txn.is_virtual" class="badge badge-sm badge-warning ml-1">forecast</span>
-      <span v-if="txn.is_virtual" class="inline-flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          class="btn btn-xs btn-success"
-          :disabled="realizing || deleting"
-          :title="'Mark as real transaction'"
-          @click.stop="realizeTransaction"
+      <div class="flex items-center gap-2">
+        <span
+          class="badge badge-sm"
+          :class="{
+            'badge-ghost': txn.status === 'real',
+            'badge-warning': txn.status === 'planned',
+            'badge-success': txn.status === 'reconciled',
+          }"
         >
-          <span v-if="realizing" class="loading loading-spinner loading-xs"></span>
-          <span v-else>✓ Realize</span>
-        </button>
-        <button
-          class="btn btn-xs btn-error btn-outline"
-          :disabled="realizing || deleting"
-          :title="'Delete forecast'"
-          @click.stop="deleteVirtualTransaction"
-        >
-          <span v-if="deleting" class="loading loading-spinner loading-xs"></span>
-          <span v-else>✕</span>
-        </button>
-      </span>
+          {{ txn.status }}
+        </span>
+        <span class="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <template v-if="txn.status === 'planned'">
+            <button
+              class="btn btn-xs btn-success"
+              :disabled="realizing || deleting"
+              title="Mark as real transaction"
+              @click.stop="realizeTransaction"
+            >
+              <span v-if="realizing" class="loading loading-spinner loading-xs"></span>
+              <span v-else>✓ Realize</span>
+            </button>
+          </template>
+          <button
+            class="btn btn-xs btn-error btn-outline"
+            :disabled="realizing || deleting"
+            title="Delete transaction"
+            @click.stop="deleteVirtualTransaction"
+          >
+            <span v-if="deleting" class="loading loading-spinner loading-xs"></span>
+            <span v-else>🗑️</span>
+          </button>
+        </span>
+      </div>
     </td>
   </tr>
 </template>

@@ -1,8 +1,13 @@
 """Pydantic schemas for User model."""
 
 import datetime
+import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Password must contain at least one lowercase letter, one uppercase letter,
+# and one digit.  Minimum length is enforced by Field(min_length=8).
+_PASSWORD_RE = re.compile(r"(?=.*[a-z])(?=.*[A-Z])(?=.*\d)")
 
 
 class UserCreate(BaseModel):
@@ -10,11 +15,33 @@ class UserCreate(BaseModel):
 
     Attributes:
         username: Unique username, 3-50 characters.
-        password: Plain text password, minimum 8 characters.
+        password: Plain text password — minimum 8 characters, must contain at
+            least one lowercase letter, one uppercase letter, and one digit.
     """
 
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        """Enforce password complexity requirements.
+
+        Args:
+            v: Plain text password.
+
+        Returns:
+            The validated password.
+
+        Raises:
+            ValueError: If the password does not meet complexity requirements.
+        """
+        if not _PASSWORD_RE.search(v):
+            raise ValueError(
+                "Password must contain at least one lowercase letter, "
+                "one uppercase letter, and one digit."
+            )
+        return v
 
 
 class UserRead(BaseModel):

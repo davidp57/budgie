@@ -4,6 +4,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from budgie.schemas.envelope import CategoryRef
 
+#: Accepted format for budget month parameters: ``YYYY-MM``.
+MONTH_PATTERN: str = r"^\d{4}-(0[1-9]|1[0-2])$"
+
 
 class BudgetAllocationRead(BaseModel):
     """Schema for reading a budget allocation (response).
@@ -67,21 +70,29 @@ class EnvelopeLineRead(BaseModel):
     Attributes:
         envelope_id: Envelope primary key.
         envelope_name: Display name of the envelope.
+        envelope_type: Type of envelope (regular/cumulative/reserve).
         rollover: Whether unspent balance carries over to the next month.
         categories: Categories linked to this envelope.
         budgeted: Amount budgeted for this specific month (centimes).
-        activity: Sum of transactions (including virtual) for this month (centimes).
+        activity: Sum of transactions for this month (centimes).
         available: Available amount (centimes). With rollover=True, cumulative
             across all months ≤ current. With rollover=False, current month only.
+        expense_count: Number of manually-created expense transactions assigned
+            to this envelope for the month.
     """
 
     envelope_id: int
     envelope_name: str
+    envelope_type: str = "regular"
+    emoji: str = "📦"
+    color_index: int | None = None
     rollover: bool
+    target_amount: int | None = None
     categories: list[CategoryRef]
     budgeted: int
     activity: int
     available: int
+    expense_count: int = 0
 
 
 class MonthBudgetResponse(BaseModel):

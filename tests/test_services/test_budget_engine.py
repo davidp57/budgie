@@ -69,7 +69,7 @@ async def _make_transaction(
     date: datetime.date,
     amount: int,
     category_id: int | None = None,
-    is_virtual: bool = False,
+    status: str = "real",
 ) -> Transaction:
     """Create and persist a test transaction."""
     txn = Transaction(
@@ -77,7 +77,7 @@ async def _make_transaction(
         date=date,
         amount=amount,
         category_id=category_id,
-        is_virtual=is_virtual,
+        status=status,
     )
     db.add(txn)
     await db.flush()
@@ -205,7 +205,7 @@ async def test_activity_includes_virtual_transactions(db_session: AsyncSession) 
         datetime.date(2026, 1, 1),
         -80000,
         cat.id,
-        is_virtual=True,
+        status="planned",
     )
 
     view = await get_month_budget_view(db_session, "2026-01", user.id)
@@ -567,3 +567,128 @@ async def test_view_returns_correct_month_string(
     user = await _make_user(db_session)
     view = await get_month_budget_view(db_session, month, user.id)
     assert view.month == month
+
+
+# ── Tests: envelope_id direct path ───────────────────────────────
+
+
+async def test_activity_via_direct_envelope_id(db_session: AsyncSession) -> None:
+    """Transactions with envelope_id are counted in activity even without a category."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Cash Drawer")
+    account = await _make_account(db_session, user.id)
+
+    # Direct expense linked to envelope (no category_id)
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-3000,
+        status="real",
+        envelope_id=env.id,
+    )
+    db_session.add(txn)
+    await db_session.flush()
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert len(view.envelopes) == 1
+    assert view.envelopes[0].activity == -3000
+
+
+async def test_activity_hybrid_category_and_direct(db_session: AsyncSession) -> None:
+    """Activity sums both direct envelope_id and category-based transactions."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    cat, _ = await _make_category(db_session, user.id, "Groceries")
+    env = await _make_envelope(db_session, user.id, "Food")
+    await _link_category(db_session, env.id, cat.id)
+    account = await _make_account(db_session, user.id)
+
+    # Category-based transaction (fallback path)
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 3, 1), -2000, category_id=cat.id
+    )
+    # Direct envelope transaction (no category, no envelope_id — NOT counted)
+    await _make_transaction(db_session, account.id, datetime.date(2026, 3, 5), -1000)
+    # Direct envelope transaction WITH envelope_id
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 6),
+        amount=-1500,
+        status="real",
+        envelope_id=env.id,
+    )
+    db_session.add(txn)
+    await db_session.flush()
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    # -2000 (via category) + -1500 (direct envelope) = -3500
+    assert view.envelopes[0].activity == -3500
+
+
+async def test_direct_envelope_tx_not_double_counted(db_session: AsyncSession) -> None:
+    """A transaction with envelope_id is NOT counted via category too."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    cat, _ = await _make_category(db_session, user.id, "Food")
+    env = await _make_envelope(db_session, user.id, "Groceries")
+    await _link_category(db_session, env.id, cat.id)
+    account = await _make_account(db_session, user.id)
+
+    # Transaction with BOTH category_id AND envelope_id
+    # → should count only once (direct path)
+    txn = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 3, 1),
+        amount=-5000,
+        status="real",
+        category_id=cat.id,
+        envelope_id=env.id,
+    )
+    db_session.add(txn)
+    await db_session.flush()
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].activity == -5000  # not -10000
+
+
+async def test_rollover_cumulative_with_direct_envelope_id(
+    db_session: AsyncSession,
+) -> None:
+    """Rollover `available` accounts for direct envelope_id transactions."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Savings", rollover=True)
+    account = await _make_account(db_session, user.id)
+
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=10000)
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=5000)
+
+    txn1 = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 1, 15),
+        amount=-3000,
+        status="real",
+        envelope_id=env.id,
+    )
+    txn2 = Transaction(
+        account_id=account.id,
+        date=datetime.date(2026, 2, 10),
+        amount=-2000,
+        status="real",
+        envelope_id=env.id,
+    )
+    db_session.add_all([txn1, txn2])
+    await db_session.flush()
+
+    view = await get_month_budget_view(db_session, "2026-02", user.id)
+
+    # cumulative budgeted = 15000, cumulative activity = -5000
+    assert view.envelopes[0].available == 10000

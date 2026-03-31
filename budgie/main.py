@@ -5,17 +5,21 @@ and a health check endpoint.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from budgie import __version__
 from budgie.api import (
     accounts,
     auth,
@@ -24,13 +28,23 @@ from budgie.api import (
     categorize,
     category_groups,
     category_rules,
+    data_reset,
     envelopes,
     imports,
     payees,
+    reconciliation,
     transactions,
     users,
+    webauthn,
 )
 from budgie.config import BASE_DIR, settings
+from budgie.limiter import limiter
+
+logger = logging.getLogger(__name__)
+
+# Suppress SQLAlchemy's internal engine logger — SQL statements should never
+# appear in production logs regardless of the db_echo setting.
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
 def _run_migrations() -> None:
@@ -53,30 +67,57 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Args:
         app: The FastAPI application instance.
     """
+    logger.info("Budgie v%s starting", __version__)
+    # Create data/ before migrations — SQLite cannot create parent directories itself
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     # Apply any pending database migrations before accepting traffic
     await asyncio.to_thread(_run_migrations)
-    # Ensure data directories exist
-    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    logger.info("Budgie v%s ready", __version__)
     yield
 
 
 app = FastAPI(
     title="Budgie",
     description="Personal household budget management API",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:8080",  # Docker production
-    ],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=[
+        m.strip() for m in settings.cors_allow_methods.split(",") if m.strip()
+    ],
+    allow_headers=[
+        h.strip() for h in settings.cors_allow_headers.split(",") if h.strip()
+    ],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Add standard security headers to every HTTP response.
+
+    Args:
+        request: Incoming HTTP request.
+        call_next: Next middleware / route handler.
+
+    Returns:
+        HTTP response with security headers attached.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 @app.get("/api/health")
@@ -84,9 +125,9 @@ async def health_check() -> dict[str, str]:
     """Health check endpoint for Docker and monitoring.
 
     Returns:
-        A dict with status "ok".
+        A dict with status, app name and version.
     """
-    return {"status": "ok"}
+    return {"status": "ok", "app": "Budgie", "version": __version__}
 
 
 # Register all API routers
@@ -102,6 +143,9 @@ app.include_router(budget.router)
 app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
+app.include_router(reconciliation.router)
+app.include_router(data_reset.router)
+app.include_router(webauthn.router)
 
 # ── Production static file serving ──────────────────────────────────────────
 # When the Vue dist folder exists (Docker production build), serve the SPA.

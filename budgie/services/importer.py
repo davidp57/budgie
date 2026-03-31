@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.importers.base import ImportedTransaction
+from budgie.models.account import Account
 from budgie.models.transaction import Transaction
 
 
@@ -26,6 +27,7 @@ class ImportResult(BaseModel):
 async def confirm_import(
     db: AsyncSession,
     account_id: int,
+    user_id: int,
     transactions: list[ImportedTransaction],
 ) -> ImportResult:
     """Persist a list of parsed transactions, skipping duplicates.
@@ -37,18 +39,30 @@ async def confirm_import(
     receives accurate counts.
 
     When a transaction carries a ``virtual_linked_id``, the corresponding
-    virtual transaction is marked as ``cleared='reconciled'`` and the
+    planned transaction is marked as ``status='reconciled'`` and the
     new real transaction records the link.
 
     Args:
         db: Active async SQLAlchemy session.
         account_id: Database ID of the target account.
+        user_id: Owner user ID (ownership check).
         transactions: Parsed transactions to import.
 
     Returns:
         An :class:`ImportResult` with ``imported`` and ``duplicates``
         counts.
+
+    Raises:
+        PermissionError: If ``account_id`` does not belong to ``user_id``.
     """
+    # Verify account ownership before inserting any data
+    account_result = await db.execute(
+        select(Account).where(Account.id == account_id, Account.user_id == user_id)
+    )
+    if account_result.scalar_one_or_none() is None:
+        raise PermissionError(
+            f"Account {account_id} not found or does not belong to the current user."
+        )
     imported = 0
     duplicates = 0
 
@@ -66,22 +80,25 @@ async def confirm_import(
             amount=txn.amount,
             memo=txn.description,
             import_hash=txn.import_hash,
-            cleared="uncleared",
-            virtual_linked_id=txn.virtual_linked_id,
+            status="real",
         )
         db.add(db_txn)
 
-        # If linked to a virtual transaction, mark it as realized
+        # If linked to a planned transaction, mark it as realized
+        # Only reconcile virtual transactions owned by the same user (IDOR fix)
         if txn.virtual_linked_id is not None:
-            virtual_result = await db.execute(
-                select(Transaction).where(
+            planned_result = await db.execute(
+                select(Transaction)
+                .join(Account, Transaction.account_id == Account.id)
+                .where(
                     Transaction.id == txn.virtual_linked_id,
-                    Transaction.is_virtual == True,  # noqa: E712
+                    Transaction.status == "planned",
+                    Account.user_id == user_id,
                 )
             )
-            virtual_txn = virtual_result.scalar_one_or_none()
-            if virtual_txn is not None:
-                virtual_txn.cleared = "reconciled"
+            planned_txn = planned_result.scalar_one_or_none()
+            if planned_txn is not None:
+                planned_txn.status = "reconciled"
 
         imported += 1
 
