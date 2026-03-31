@@ -5,6 +5,7 @@
 [![CI](https://github.com/davidp57/budgie/actions/workflows/ci.yml/badge.svg)](https://github.com/davidp57/budgie/actions/workflows/ci.yml)
 [![Docker](https://github.com/davidp57/budgie/actions/workflows/docker.yml/badge.svg)](https://github.com/davidp57/budgie/actions/workflows/docker.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-veaf__zip-yellow?logo=buymeacoffee)](https://buymeacoffee.com/veaf_zip)
 
 ---
 
@@ -81,11 +82,21 @@ npx eslint src/                          # lint
 
 | | 🇬🇧 English | 🇫🇷 Français |
 |---|---|---|
+| Installation Tutorial / Tutoriel installation | [docs/en/tutorials/installation.md](docs/en/tutorials/installation.md) | [docs/fr/tutorials/installation.md](docs/fr/tutorials/installation.md) |
+| Usage Tutorial / Tutoriel d'utilisation | [docs/en/tutorials/usage.md](docs/en/tutorials/usage.md) | [docs/fr/tutorials/usage.md](docs/fr/tutorials/usage.md) |
 | User Guide / Guide utilisateur | [docs/en/user-guide.md](docs/en/user-guide.md) | [docs/fr/user-guide.md](docs/fr/user-guide.md) |
 | Developer Guide / Guide développeur | [docs/en/developer-guide.md](docs/en/developer-guide.md) | [docs/fr/developer-guide.md](docs/fr/developer-guide.md) |
 | Project Plan / Plan du projet | [docs/en/plan.md](docs/en/plan.md) | [docs/fr/plan.md](docs/fr/plan.md) |
 | Roadmap / Feuille de route | [docs/en/roadmap.md](docs/en/roadmap.md) | [docs/fr/roadmap.md](docs/fr/roadmap.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) | — |
+
+---
+
+## Support / Soutien
+
+☕ If Budgie is useful to you, consider [buying me a coffee](https://buymeacoffee.com/veaf_zip)!
+
+☕ Si Budgie t'est utile, pense à [m'offrir un café](https://buymeacoffee.com/veaf_zip) !
 
 ---
 

@@ -694,3 +694,7 @@ Vous pouvez enregistrer des Passkeys sur plusieurs appareils (téléphone, table
 | J'oublie ma passphrase ET je perds le PDF | **Données définitivement perdues.** C'est le compromis sécurité : pas de porte dérobée admin. |
 | Mon NAS est volé | Le voleur a des blobs chiffrés — inutilisables sans votre passphrase. |
 | Je veux partager avec ma famille | Chaque utilisateur a sa propre passphrase et clé. Les données sont isolées par utilisateur. |
+
+---
+
+☕ Si Budgie t'est utile, pense à [m'offrir un café](https://buymeacoffee.com/veaf_zip) — c'est vraiment apprécié !

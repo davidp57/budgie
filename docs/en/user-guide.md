@@ -696,3 +696,7 @@ At account creation, Budgie generates a **recovery PDF** containing:
 | I forget my passphrase AND lose the PDF | **Data is permanently lost.** This is the security trade-off: no admin back door. |
 | My NAS is stolen | Thief has encrypted blobs — useless without your passphrase. |
 | I want to share with family | Each user has their own passphrase and encryption key. Data is isolated per user. |
+
+---
+
+☕ If Budgie is useful to you, consider [buying me a coffee](https://buymeacoffee.com/veaf_zip) — it helps a lot!
