@@ -77,6 +77,8 @@ class EnvelopeLineRead(BaseModel):
         activity: Sum of transactions for this month (centimes).
         available: Available amount (centimes). With rollover=True, cumulative
             across all months ≤ current. With rollover=False, current month only.
+        expense_count: Number of manually-created expense transactions assigned
+            to this envelope for the month.
     """
 
     envelope_id: int
@@ -90,6 +92,7 @@ class EnvelopeLineRead(BaseModel):
     budgeted: int
     activity: int
     available: int
+    expense_count: int = 0
 
 
 class MonthBudgetResponse(BaseModel):

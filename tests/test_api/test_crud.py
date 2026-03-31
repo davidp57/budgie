@@ -649,3 +649,159 @@ async def test_list_transactions_filter_by_envelope_id(
     results = response.json()
     assert len(results) == 2
     assert all(tx["envelope_id"] == env1_id for tx in results)
+
+
+# ── Issue #15: expense_count + unassigned-count ──────────────────
+
+
+async def test_budget_envelope_expense_count(auth_client: AsyncClient) -> None:
+    """Budget view returns expense_count per envelope (all transactions)."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Groceries"})
+    env_id = envelope.json()["id"]
+    await auth_client.put(
+        "/api/budget/2026-03",
+        json=[{"envelope_id": env_id, "budgeted": 30000}],
+    )
+
+    # Create 2 manual expenses in 2026-03
+    for amount in [-1000, -2000]:
+        await auth_client.post(
+            "/api/transactions",
+            json={
+                "account_id": account_id,
+                "date": "2026-03-10",
+                "amount": amount,
+                "envelope_id": env_id,
+            },
+        )
+    # Create 1 transaction in a different month — should NOT be counted
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-02-10",
+            "amount": -500,
+            "envelope_id": env_id,
+        },
+    )
+
+    response = await auth_client.get("/api/budget/2026-03")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((e for e in lines if e["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["expense_count"] == 2
+
+
+async def test_budget_envelope_expense_count_zero_by_default(
+    auth_client: AsyncClient,
+) -> None:
+    """expense_count is 0 when there are no transactions."""
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Rent"})
+    env_id = envelope.json()["id"]
+    await auth_client.put(
+        "/api/budget/2026-03",
+        json=[{"envelope_id": env_id, "budgeted": 80000}],
+    )
+    response = await auth_client.get("/api/budget/2026-03")
+    assert response.status_code == 200
+    lines = response.json()["envelopes"]
+    match = next((e for e in lines if e["envelope_id"] == env_id), None)
+    assert match is not None
+    assert match["expense_count"] == 0
+
+
+async def test_unassigned_count_endpoint_zero(auth_client: AsyncClient) -> None:
+    """GET /api/transactions/unassigned-count returns 0 when no unassigned expenses."""
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 0}
+
+
+async def test_unassigned_count_endpoint(auth_client: AsyncClient) -> None:
+    """GET /api/transactions/unassigned-count counts all txns with no envelope."""
+    account = await auth_client.post(
+        "/api/accounts",
+        json={"name": "Wallet", "account_type": "checking", "on_budget": True},
+    )
+    account_id = account.json()["id"]
+    envelope = await auth_client.post("/api/envelopes", json={"name": "Food"})
+    env_id = envelope.json()["id"]
+    group = await auth_client.post("/api/category-groups", json={"name": "Misc"})
+    category = await auth_client.post(
+        "/api/categories", json={"name": "Coiffeur", "group_id": group.json()["id"]}
+    )
+    cat_id = category.json()["id"]
+
+    # Unassigned expense (no envelope, no category — counts)
+    await auth_client.post(
+        "/api/transactions",
+        json={"account_id": account_id, "date": "2026-03-01", "amount": -500},
+    )
+    # Unassigned with category but no envelope (should also count)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-02",
+            "amount": -300,
+            "category_id": cat_id,
+        },
+    )
+    # Assigned to envelope (should NOT count)
+    await auth_client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-03-03",
+            "amount": -200,
+            "envelope_id": env_id,
+        },
+    )
+
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 2}
+
+
+async def test_unassigned_count_scoped_to_user(
+    auth_client: AsyncClient,
+    client: AsyncClient,
+) -> None:
+    """unassigned-count only returns expenses belonging to the authenticated user."""
+    # Create a second user and their expense
+    await client.post(
+        "/api/auth/register",
+        json={"username": "bob", "password": "BobPassword1"},
+    )
+    login_bob = await client.post(
+        "/api/auth/login",
+        json={"username": "bob", "password": "BobPassword1"},
+    )
+    bob_token = login_bob.json()["access_token"]
+    bob_headers = {"Authorization": f"Bearer {bob_token}"}
+
+    bob_account = await client.post(
+        "/api/accounts",
+        json={"name": "Bob Wallet", "account_type": "checking", "on_budget": True},
+        headers=bob_headers,
+    )
+    await client.post(
+        "/api/transactions",
+        json={
+            "account_id": bob_account.json()["id"],
+            "date": "2026-03-01",
+            "amount": -1000,
+        },
+        headers=bob_headers,
+    )
+
+    # Alice should still see 0 unassigned
+    response = await auth_client.get("/api/transactions/unassigned-count")
+    assert response.status_code == 200
+    assert response.json() == {"count": 0}

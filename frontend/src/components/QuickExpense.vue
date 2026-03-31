@@ -23,7 +23,7 @@ import { usePresetsStore, type QuickPreset } from '@/stores/presets'
 import { useNearbyPlaces } from '@/composables/useNearbyPlaces'
 
 const props = defineProps<{
-  drawer: EnvelopeLine
+  drawer: EnvelopeLine | null
   accountId: number
 }>()
 
@@ -78,7 +78,7 @@ function clearCategory(): void {
 const selectedCategoryName = computed(() => {
   if (!selectedCategoryId.value) return null
   // Search in envelope categories first, then all groups
-  const fromEnvelope = props.drawer.categories.find(
+  const fromEnvelope = props.drawer?.categories.find(
     (c) => c.id === selectedCategoryId.value,
   )
   if (fromEnvelope) return fromEnvelope.name
@@ -187,16 +187,20 @@ async function submit(): Promise<void> {
       account_id: props.accountId,
       date: showDate.value ? customDate.value : new Date().toISOString().slice(0, 10),
       amount: -amountCentimes.value, // Expense = negative
-      envelope_id: props.drawer.envelope_id,
+      envelope_id: props.drawer?.envelope_id ?? null,
       category_id: selectedCategoryId.value ?? undefined,
       memo: showDescription.value && description.value ? description.value : undefined,
       status: isPlanned.value ? 'planned' : 'real',
     })
 
-    const remaining = props.drawer.available - amountCentimes.value
-    toast.success(
-      `✅ ${formatAmount(amountCentimes.value)} → ${props.drawer.envelope_name} · reste ${formatAmount(remaining)}`,
-    )
+    if (props.drawer) {
+      const remaining = props.drawer.available - amountCentimes.value
+      toast.success(
+        `✅ ${formatAmount(amountCentimes.value)} → ${props.drawer.envelope_name} · reste ${formatAmount(remaining)}`,
+      )
+    } else {
+      toast.success(`✅ ${formatAmount(amountCentimes.value)} → 📦 Hors budget`)
+    }
     emit('close')
   } catch {
     toast.error('Erreur lors de la saisie')
@@ -291,11 +295,12 @@ const numpadKeys = [
       <!-- Header -->
       <div class="flex items-center justify-between px-5 pb-3">
         <div class="flex items-center gap-2 min-w-0">
-          <span class="text-2xl">{{ props.drawer.emoji || '📦' }}</span>
+          <span class="text-2xl">{{ props.drawer?.emoji || '📦' }}</span>
           <div class="min-w-0">
-            <p class="font-semibold truncate">{{ drawer.envelope_name }}</p>
+            <p class="font-semibold truncate">{{ drawer?.envelope_name ?? 'Hors budget' }}</p>
             <p class="text-xs text-base-content/50">
-              Reste {{ formatAmount(drawer.available) }}
+              <template v-if="drawer">Reste {{ formatAmount(drawer.available) }}</template>
+              <template v-else>Sans tiroir assigné</template>
             </p>
           </div>
         </div>
@@ -378,11 +383,11 @@ const numpadKeys = [
         </div>
 
         <!-- Category chips (optional) -->
-        <div v-if="drawer.categories.length || selectedCategoryId" class="flex gap-2 pb-2 flex-wrap items-center">
+        <div v-if="(drawer?.categories.length ?? 0) > 0 || selectedCategoryId" class="flex gap-2 pb-2 flex-wrap items-center">
           <span class="text-xs text-base-content/40">Catégorie :</span>
           <!-- Chips for this envelope's categories -->
           <button
-            v-for="cat in drawer.categories"
+            v-for="cat in drawer?.categories ?? []"
             :key="cat.id"
             class="btn btn-xs"
             :class="selectedCategoryId === cat.id ? 'btn-secondary' : 'btn-ghost'"
@@ -390,7 +395,7 @@ const numpadKeys = [
           >{{ cat.name }}</button>
           <!-- Selected category from "Autre…" (not in envelope's list) -->
           <button
-            v-if="selectedCategoryId && !drawer.categories.find(c => c.id === selectedCategoryId)"
+            v-if="selectedCategoryId && !drawer?.categories.find(c => c.id === selectedCategoryId)"
             class="btn btn-xs btn-secondary"
             @click="clearCategory"
           >{{ selectedCategoryName }} ✕</button>

@@ -68,6 +68,36 @@ async def get_transactions(
     return list(result.scalars().all())
 
 
+async def count_unassigned_expenses(
+    db: AsyncSession,
+    user_id: int,
+) -> int:
+    """Count manually-created expense transactions with no envelope assigned.
+
+    These are "Hors budget" expenses: manually created (import_hash IS NULL),
+    not created during pointage (reconciled_with_id IS NULL),
+    and not linked to any envelope (category may or may not be set).
+
+    Args:
+        db: Async database session.
+        user_id: Owner user ID.
+
+    Returns:
+        Count of unassigned expense transactions.
+    """
+    result = await db.execute(
+        select(func.count(Transaction.id))
+        .join(Account, Transaction.account_id == Account.id)
+        .where(
+            Account.user_id == user_id,
+            Transaction.envelope_id.is_(None),
+            Transaction.import_hash.is_(None),
+            Transaction.reconciled_with_id.is_(None),
+        )
+    )
+    return result.scalar_one()
+
+
 async def get_planned_unlinked(
     db: AsyncSession,
     user_id: int,

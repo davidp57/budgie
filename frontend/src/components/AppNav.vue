@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useUnassignedCount } from '@/composables/useUnassignedCount'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const unassigned = useUnassignedCount()
+
+onMounted(() => {
+  unassigned.refresh()
+})
 
 function logout(): void {
   auth.logout()
@@ -28,6 +35,7 @@ const links = [
       v-for="link in links"
       :key="link.path"
       :class="{ 'dock-active': route.path === link.path }"
+      class="relative"
       @click="router.push(link.path)"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="size-[1.2em]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -43,6 +51,11 @@ const links = [
           :d="d"
         />
       </svg>
+      <!-- Unassigned count badge on "Dépenses" tab -->
+      <span
+        v-if="link.path === '/depenses' && unassigned.count.value > 0"
+        class="nav-badge"
+      >{{ unassigned.count.value }}</span>
       <span class="dock-label">{{ link.label }}</span>
     </button>
   </div>
@@ -58,7 +71,7 @@ const links = [
       <button
         v-for="link in links"
         :key="link.path"
-        class="btn btn-ghost justify-start gap-3 font-normal"
+        class="btn btn-ghost justify-start gap-3 font-normal relative"
         :class="{ 'btn-active': route.path === link.path }"
         @click="router.push(link.path)"
       >
@@ -76,6 +89,11 @@ const links = [
           />
         </svg>
         {{ link.label }}
+        <!-- Unassigned count badge on "Dépenses" -->
+        <span
+          v-if="link.path === '/depenses' && unassigned.count.value > 0"
+          class="ml-auto bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+        >{{ unassigned.count.value }}</span>
       </button>
     </nav>
 
@@ -90,3 +108,21 @@ const links = [
     </div>
   </aside>
 </template>
+
+<style scoped>
+/* Badge mobile dock — positioned to the right of the icon, not overlapping it */
+.nav-badge {
+  position: absolute;
+  top: -2px;
+  left: calc(50% + 8px);
+  background: #f59e0b;
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 2px solid white;
+  line-height: 1.3;
+  pointer-events: none;
+}
+</style>

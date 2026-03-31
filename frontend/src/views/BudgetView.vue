@@ -518,6 +518,7 @@ onMounted(async () => {
             :show-subtitle="false"
             :show-goal-bar="false"
             :full-fill="true"
+            :show-badge="false"
             @tap="openEdit(line)"
           >
             <!-- Emoji slot: click to cycle -->

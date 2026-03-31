@@ -144,6 +144,7 @@ export interface EnvelopeLine {
   budgeted: number // centimes
   activity: number // centimes
   available: number // centimes
+  expense_count: number
 }
 
 export interface MonthBudget {

@@ -13,7 +13,9 @@
  */
 
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { listGroupsWithCategories } from '@/api/categories'
+import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { listEnvelopes } from '@/api/envelopes'
 import {
   deleteTransaction,
@@ -33,6 +35,7 @@ import DonutChart from '@/components/DonutChart.vue'
 
 // ── Data ──────────────────────────────────────────────────────────
 
+const route = useRoute()
 const allExpenses = ref<Transaction[]>([])
 const groups = ref<CategoryGroupWithCategories[]>([])
 const envelopes = ref<Envelope[]>([])
@@ -47,11 +50,20 @@ const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padS
 const filterMonth = ref(currentMonth)
 const filterEnvelopeId = ref<number | null>(null)
 const filterGroupId = ref<number | null>(null)
+// When true, show only manually-created expenses with no envelope ("hors budget").
+// Same definition as the unassigned badge: envelope_id null + not a bank import + not a pointage expense.
+const filterUnassigned = ref(false)
+const unassigned = useUnassignedCount()
 
 // List of expenses filtered by the current UI filters.
 // The dashboard always uses the full allExpenses set.
 const expenses = computed<Transaction[]>(() => {
   let result = allExpenses.value
+  if (filterUnassigned.value) {
+    return result.filter(
+      (t) => t.envelope_id === null && t.import_hash === null && t.reconciled_with_id === null,
+    )
+  }
   if (filterEnvelopeId.value !== null) {
     const targetEnv = envelopes.value.find((e) => e.id === filterEnvelopeId.value)
     result = result.filter((t) => {
@@ -125,7 +137,20 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  // Initialize filters from URL query params
+  if (route.query.envelope_id) {
+    filterEnvelopeId.value = Number(route.query.envelope_id)
+  }
+  if (route.query.month) {
+    filterMonth.value = String(route.query.month)
+  }
+  if (route.query.unassigned === 'true') {
+    filterUnassigned.value = true
+    filterMonth.value = '' // show all months for unassigned view
+  }
+  await load()
+})
 
 // ── Lookup helpers ────────────────────────────────────────────────
 
@@ -278,6 +303,7 @@ async function saveEdit(): Promise<void> {
     const idx = allExpenses.value.findIndex((t) => t.id === editTxn.value!.id)
     if (idx !== -1) allExpenses.value[idx] = updated
     closeEdit()
+    unassigned.refresh()
   } catch {
     editError.value = 'Erreur lors de la sauvegarde.'
   } finally {
@@ -293,6 +319,7 @@ async function confirmDelete(): Promise<void> {
     await deleteTransaction(id)
     allExpenses.value = allExpenses.value.filter((t) => t.id !== id)
     closeEdit()
+    unassigned.refresh()
   } catch {
     editError.value = 'Erreur lors de la suppression.'
   } finally {
