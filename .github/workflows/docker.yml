@@ -3,6 +3,7 @@ name: Docker
 "on":
   push:
     branches: [main, develop]
+    tags: ["v*"]
   workflow_dispatch:
 
 env:
@@ -19,6 +20,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve branch context
+        id: context
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            BRANCH=$(git branch -r --contains "$GITHUB_SHA" \
+              | grep -E 'origin/(main|develop)' \
+              | head -1 \
+              | sed 's|[[:space:]]*origin/||')
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "branch=${BRANCH:-main}" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "branch=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -33,10 +51,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=develop-latest,enable=${{ steps.context.outputs.is_tag == 'false' && steps.context.outputs.branch == 'develop' }}
+            type=raw,value=latest,enable=${{ steps.context.outputs.is_tag == 'false' && steps.context.outputs.branch == 'main' }}
+            type=semver,pattern=develop-{{version}},enable=${{ steps.context.outputs.is_tag == 'true' && steps.context.outputs.branch == 'develop' }}
+            type=semver,pattern={{version}},enable=${{ steps.context.outputs.is_tag == 'true' && steps.context.outputs.branch == 'main' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
