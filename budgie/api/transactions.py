@@ -182,7 +182,12 @@ async def get_unassigned_count(
     db: DBSession,
     current_user: CurrentUser,
 ) -> dict[str, int]:
-    """Count manually-created expenses with no envelope and no category.
+    """Count manually-created expenses with no envelope assigned.
+
+    Counts transactions that are manually created (import_hash IS NULL),
+    not created during reconciliation (reconciled_with_id IS NULL), and
+    not linked to any envelope (envelope_id IS NULL). A category may or
+    may not be set.
 
     Used by the frontend to display the "Hors budget" badge.
 
