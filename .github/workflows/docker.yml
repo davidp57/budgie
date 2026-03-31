@@ -50,10 +50,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=develop-latest,enable=${{ steps.context.outputs.is_tag == 'false' && steps.context.outputs.branch == 'develop' }}
-            type=raw,value=latest,enable=${{ steps.context.outputs.is_tag == 'false' && steps.context.outputs.branch == 'main' }}
-            type=semver,pattern=develop-{{version}},enable=${{ steps.context.outputs.is_tag == 'true' && steps.context.outputs.branch == 'develop' }}
-            type=semver,pattern={{version}},enable=${{ steps.context.outputs.is_tag == 'true' && steps.context.outputs.branch == 'main' }}
+            type=raw,value=develop-latest,enable=${{ steps.context.outputs.branch == 'develop' }}
+            type=raw,value=latest,enable=${{ steps.context.outputs.branch == 'main' }}
+            type=semver,pattern=develop-{{version}},enable=${{ steps.context.outputs.branch == 'develop' }}
+            type=semver,pattern={{version}},enable=${{ steps.context.outputs.branch == 'main' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
