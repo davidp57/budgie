@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -58,7 +59,7 @@ class Transaction(Base):
         Integer, ForeignKey("categories.id"), nullable=True, default=None
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
-    memo: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="real")
     income_for_month: Mapped[str | None] = mapped_column(
         String(7), nullable=True, default=None

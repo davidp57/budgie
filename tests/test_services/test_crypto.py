@@ -1,7 +1,7 @@
 """Tests for the cryptography service.
 
 Covers AES-256-GCM encrypt/decrypt, Argon2id key derivation,
-challenge blob creation and verification.
+challenge blob creation and verification, and nullable-field helpers.
 
 TDD — tests written before implementation.
 """
@@ -13,8 +13,10 @@ from budgie.services.crypto import (
     InvalidKeyError,
     create_challenge_blob,
     decrypt_field,
+    decrypt_str,
     derive_key,
     encrypt_field,
+    encrypt_str,
     verify_challenge_blob,
 )
 
@@ -177,3 +179,65 @@ def test_decrypt_field_with_invalid_base64_raises() -> None:
     key = derive_key(PASSPHRASE, SALT)
     with pytest.raises(InvalidKeyError):
         decrypt_field("not-valid-base64!!!", key)
+
+
+# ── encrypt_str / decrypt_str nullable helpers ────────────────────────────────
+
+
+def test_encrypt_str_with_none_value_returns_none() -> None:
+    """encrypt_str must return None when value is None."""
+    key = derive_key(PASSPHRASE, SALT)
+    assert encrypt_str(None, key) is None
+
+
+def test_encrypt_str_with_none_key_returns_plaintext() -> None:
+    """encrypt_str must return the plaintext unchanged when key is None."""
+    assert encrypt_str("hello", None) == "hello"
+
+
+def test_encrypt_str_round_trip() -> None:
+    """encrypt_str + decrypt_str must recover the original plaintext."""
+    key = derive_key(PASSPHRASE, SALT)
+    plaintext = "Boulangerie Dupont"
+    ciphertext = encrypt_str(plaintext, key)
+    assert ciphertext is not None
+    assert ciphertext != plaintext  # must be encrypted
+    recovered = decrypt_str(ciphertext, key)
+    assert recovered == plaintext
+
+
+def test_decrypt_str_with_none_value_returns_none() -> None:
+    """decrypt_str must return None when value is None."""
+    key = derive_key(PASSPHRASE, SALT)
+    assert decrypt_str(None, key) is None
+
+
+def test_decrypt_str_with_none_key_returns_raw() -> None:
+    """decrypt_str must return the raw value unchanged when key is None."""
+    assert decrypt_str("some-blob", None) == "some-blob"
+
+
+def test_decrypt_str_with_wrong_key_returns_raw_value() -> None:
+    """decrypt_str must return the raw stored value when decryption fails.
+
+    This handles non-migrated plaintext rows read with an active session key.
+    """
+    key = derive_key(PASSPHRASE, SALT)
+    wrong_key = derive_key("wrong passphrase", SALT)
+    ciphertext = encrypt_str("sensitive memo", key)
+    # Decrypting with wrong key returns the raw (ciphertext) value, not an exception.
+    result = decrypt_str(ciphertext, wrong_key)
+    assert result == ciphertext  # graceful fallback
+
+
+def test_decrypt_str_with_plaintext_value_and_active_key_returns_raw() -> None:
+    """decrypt_str on a plaintext (non-migrated) row must return that value unchanged.
+
+    A plaintext memo is not valid base64 AES-GCM; decryption will fail and
+    decrypt_str must fall back to returning the value as-is.
+    """
+    key = derive_key(PASSPHRASE, SALT)
+    plaintext = "Courses Carrefour"  # not encrypted
+    result = decrypt_str(plaintext, key)
+    # Falls back to returning the raw value
+    assert result == plaintext

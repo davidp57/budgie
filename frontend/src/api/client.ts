@@ -26,7 +26,7 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// On 401: clear token + redirect to login. On other errors: show toast.
+// On 401: clear token + redirect to login. On 423: redirect to unlock. On other errors: show toast.
 client.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -38,6 +38,15 @@ client.interceptors.response.use(
       sessionStorage.removeItem('encryption_unlocked')
       if (router.currentRoute.value.name !== 'login') {
         router.push({ name: 'login' })
+      }
+    } else if (error.response?.status === 423) {
+      // Session key lost (e.g. server restart) — re-unlock required.
+      sessionStorage.removeItem('encryption_unlocked')
+      if (
+        router.currentRoute.value.name !== 'unlock' &&
+        router.currentRoute.value.name !== 'login'
+      ) {
+        router.push({ name: 'unlock' })
       }
     } else if (error.response) {
       // Only show a toast for non-401 server errors; callers can still

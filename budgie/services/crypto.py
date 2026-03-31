@@ -164,3 +164,48 @@ def verify_challenge_blob(blob: str, key: bytes) -> bool:
         return True
     except InvalidKeyError:
         return False
+
+
+# ── Nullable helpers ──────────────────────────────────────────────────────────
+
+
+def encrypt_str(value: str | None, key: bytes | None) -> str | None:
+    """Encrypt a string field if both value and key are non-None.
+
+    A no-op (returns value as-is) when either argument is None, which covers:
+    - Null database fields (``value is None``).
+    - Unencrypted user accounts (``key is None``).
+
+    Args:
+        value: Plaintext string to encrypt, or None.
+        key: 32-byte AES-256 key, or None to skip encryption.
+
+    Returns:
+        Encrypted base64 string, or the original value if a no-op.
+    """
+    if value is None or key is None:
+        return value
+    return encrypt_field(value, key)
+
+
+def decrypt_str(value: str | None, key: bytes | None) -> str | None:
+    """Decrypt a string field if both value and key are non-None.
+
+    A no-op when either argument is None.  Returns the raw stored value
+    unchanged if decryption fails (e.g. when a plaintext row has not been
+    migrated yet — the field is not a valid base64 AES-GCM blob).
+
+    Args:
+        value: Encrypted base64 string from the database, or None.
+        key: 32-byte AES-256 key, or None to skip decryption.
+
+    Returns:
+        Decrypted plaintext string, or the original value if a no-op.
+    """
+    if value is None or key is None:
+        return value
+    try:
+        return decrypt_field(value, key)
+    except InvalidKeyError:
+        # Plaintext row not yet migrated — return as-is.
+        return value
