@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-03-31
+
+### Added
+
+- **Grouped expense dashboard** — the Expenses view now groups spending by category group, with drill-down into individual category breakdowns per envelope
+- **Budget metrics** — envelope cards now show the number of expenses and the count of off-budget (unassigned) expenses directly on the Budget page
+- **Expense editing** — any manually-entered expense can be edited inline from the Expenses page: change the date, amount, description, category or envelope, or delete with a confirmation step
+- **Quick expense without a category** — the Quick Expense form no longer requires a configured category: expenses can be recorded directly linked to an envelope; off-budget expenses can also be entered from the Budget page banner
+- **Community files** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md` added for open-source contributors
+- **Tutorials** — step-by-step installation and usage guides in English and French
+
+### Changed
+
+- **CI** — backend lint and test jobs now run in parallel; Poetry and mypy caches added; Docker images are built on Git tags only, with `develop-latest`/`latest`/`x.y.z` tagging strategy
+
+---
+
 ## [0.6.1] - 2026-03-30
 
 ### Fixed

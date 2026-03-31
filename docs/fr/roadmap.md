@@ -19,6 +19,11 @@ Les items sont regroupés par priorité et peuvent évoluer.
 - [x] **Durcissement sécurité** — rate limiting sur les endpoints d'auth, liste noire JWT, headers de sécurité stricts, bcrypt 10→12 rounds, limite de taille des requêtes, sanitisation HTML des saisies libres
 - [x] **Dock mobile masqué** — `z-50`, `viewport-fit=cover` et padding `safe-area-inset-bottom` pour que le dock ne cache plus le contenu sur iPhone
 - [x] **Correction du démarrage** — répertoire `data/` créé automatiquement avant les migrations au premier lancement
+- [x] **Tableau de bord des dépenses par groupe** — la vue Dépenses regroupe par groupe de catégories avec drill-down par enveloppe
+- [x] **Métriques budgétaires** — les cartes d'enveloppe affichent le nombre de dépenses et le nombre de dépenses hors budget
+- [x] **Édition des dépenses** — modifier date, montant, description, catégorie, enveloppe ou supprimer depuis la page Dépenses
+- [x] **Dépense rapide sans catégorie** — la saisie rapide lie directement à une enveloppe ; dépenses hors budget saisissables depuis la bannière Budget
+- [x] **Fichiers de contribution & tutoriels** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, tutoriels d'installation et de prise en main (EN + FR)
 
 ### Vue des dépenses par catégorie
 

@@ -19,6 +19,11 @@ Items are grouped by priority and may change as the project evolves.
 - [x] **Security hardening** — rate limiting on auth endpoints, JWT blocklist, strict security headers, bcrypt rounds 10→12, request size cap, HTML input sanitisation
 - [x] **Mobile dock overlap** — `z-50`, `viewport-fit=cover`, and `safe-area-inset-bottom` padding ensuring the bottom dock never hides content on iPhone
 - [x] **App startup fix** — `data/` directory auto-created before migrations on first launch
+- [x] **Grouped expense dashboard** — Expenses view groups spending by category group with per-envelope drill-down
+- [x] **Budget metrics** — envelope cards show expense count and off-budget expense count on the Budget page
+- [x] **Expense editing** — edit date, amount, description, category, envelope or delete from the Expenses page
+- [x] **Quick expense without category** — Quick Expense links directly to an envelope; off-budget expenses from Budget page banner
+- [x] **Community files & tutorials** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, installation and usage tutorials (EN + FR)
 
 ### Category Spending View
 
