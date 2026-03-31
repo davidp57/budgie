@@ -15,6 +15,7 @@ const baseEnvelope: EnvelopeLine = {
   budgeted: 20000, // 200.00 €
   activity: -5000, // -50.00 €
   available: 15000, // 150.00 €
+  expense_count: 0,
 }
 
 describe('EnvelopeCard', () => {
