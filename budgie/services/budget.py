@@ -2,14 +2,14 @@
 
 from collections import defaultdict
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from budgie.models.account import Account
 from budgie.models.budget import BudgetAllocation
 from budgie.models.category import Category
-from budgie.models.envelope import Envelope
+from budgie.models.envelope import Envelope, envelope_categories
 from budgie.models.transaction import Transaction
 from budgie.schemas.budget import (
     BudgetAllocationUpdate,
@@ -199,6 +199,39 @@ async def get_month_budget_view(
     total_budgeted: int = total_budgeted_row.scalar_one()
 
     # Build envelope lines
+    # Count all transactions per envelope for the month.
+    # A transaction belongs to an envelope if:
+    #   1. envelope_id = env.id (directly assigned), OR
+    #   2. envelope_id IS NULL but category_id is in the envelope's categories
+    #      (e.g. created via pointage with only a category set)
+    env_ids = [env.id for env in envelopes]
+    expense_counts: dict[int, int] = {}
+    if env_ids:
+        resolved_env_id = case(
+            (Transaction.envelope_id.isnot(None), Transaction.envelope_id),
+            else_=envelope_categories.c.envelope_id,
+        )
+        count_result = await db.execute(
+            select(resolved_env_id, func.count(Transaction.id))
+            .join(Account, Transaction.account_id == Account.id)
+            .outerjoin(
+                envelope_categories,
+                and_(
+                    Transaction.category_id == envelope_categories.c.category_id,
+                    Transaction.envelope_id.is_(None),
+                ),
+            )
+            .where(
+                resolved_env_id.in_(env_ids),
+                func.strftime("%Y-%m", Transaction.date) == month,
+                Account.user_id == user_id,
+            )
+            .group_by(resolved_env_id)
+        )
+        expense_counts = {
+            row[0]: row[1] for row in count_result.all() if row[0] is not None
+        }
+
     envelope_lines = []
     for env in envelopes:
         b = budgeted_this_month.get(env.id, 0)
@@ -230,6 +263,7 @@ async def get_month_budget_view(
                 budgeted=b,
                 activity=a,
                 available=available,
+                expense_count=expense_counts.get(env.id, 0),
             )
         )
 

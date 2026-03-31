@@ -223,8 +223,13 @@ The budget page shows your envelopes as **cards** (DrawerCards). Each card displ
 - **Budgeted**: allocated amount (click to edit)
 - **Activity**: total transactions for the month
 - **Available**: remaining to spend (green if positive, red if negative)
+- **Amber triangle badge** (top-right corner): number of transactions recorded for this envelope this month. Tap the badge to jump to the matching expense list.
 
 Click an envelope to filter the corresponding transactions in the bottom panel.
+
+At the bottom of the envelope grid, an **"Off-budget expense"** banner lets you record a transaction not linked to any envelope:
+- Tap the left side to open the Quick Expense sheet in off-budget mode.
+- If unassigned expenses exist, an amber pill on the right shows the count — tap it to see them in the Expenses view.
 
 ### Expenses Page
 
@@ -236,8 +241,11 @@ The **Expenses** page (`/depenses`) shows virtual transactions (manually entered
 - **Group by**: envelope, category, or category group
 - **Inline edit modal**: change date, amount, memo, category, and envelope
 - **Delete** with confirmation
-- **Dashboard mode** 🥧: doughnut charts per envelope showing spending by category
-  - Click a slice to drill down and see the matching expense list
+- **Dashboard mode** 🥧: doughnut charts showing spending by category
+  - **Per envelope** (default): one chart per envelope
+  - **Per category group**: one chart per category group — switch with the toggle above the charts
+  - Click a chart to expand a drill-down panel showing all expenses grouped by category
+  - Click a different slice to highlight it on the doughnut; click the same slice again to close the panel
 - Reconciled expenses show a link to the matched bank transaction
 
 ---
@@ -389,6 +397,10 @@ The **Quick Expense** page (⚡) lets you enter a transaction in seconds:
 4. Submit
 
 The transaction is linked directly to the envelope — no category selection required. If you later want to assign a category, you can edit the transaction.
+
+### Off-budget mode
+
+Tap the **"Off-budget expense"** banner at the bottom of the envelope grid to record a transaction without an envelope. The sheet opens with the header "Off-budget" and saves the transaction with `envelope_id = null`. You can later assign it to an envelope via the Expenses edit modal.
 
 ### Presets
 

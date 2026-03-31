@@ -16,6 +16,7 @@ from budgie.schemas.transaction import (
     TransactionUpdate,
 )
 from budgie.services.transaction import (
+    count_unassigned_expenses,
     create_transaction,
     delete_transaction,
     get_planned_unlinked,
@@ -174,6 +175,31 @@ async def create_transaction_endpoint(
             status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
         ) from exc
     return TransactionRead.model_validate(txn)
+
+
+@router.get("/unassigned-count")
+async def get_unassigned_count(
+    db: DBSession,
+    current_user: CurrentUser,
+) -> dict[str, int]:
+    """Count manually-created expenses with no envelope assigned.
+
+    Counts transactions that are manually created (import_hash IS NULL),
+    not created during reconciliation (reconciled_with_id IS NULL), and
+    not linked to any envelope (envelope_id IS NULL). A category may or
+    may not be set.
+
+    Used by the frontend to display the "Hors budget" badge.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+
+    Returns:
+        Dict with a single ``count`` key.
+    """
+    count = await count_unassigned_expenses(db, current_user.id)
+    return {"count": count}
 
 
 @router.get("/{transaction_id}", response_model=TransactionRead)

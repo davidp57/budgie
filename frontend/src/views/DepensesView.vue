@@ -13,7 +13,9 @@
  */
 
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { listGroupsWithCategories } from '@/api/categories'
+import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { listEnvelopes } from '@/api/envelopes'
 import {
   deleteTransaction,
@@ -33,6 +35,7 @@ import DonutChart from '@/components/DonutChart.vue'
 
 // ── Data ──────────────────────────────────────────────────────────
 
+const route = useRoute()
 const allExpenses = ref<Transaction[]>([])
 const groups = ref<CategoryGroupWithCategories[]>([])
 const envelopes = ref<Envelope[]>([])
@@ -47,11 +50,20 @@ const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padS
 const filterMonth = ref(currentMonth)
 const filterEnvelopeId = ref<number | null>(null)
 const filterGroupId = ref<number | null>(null)
+// When true, show only manually-created expenses with no envelope ("hors budget").
+// Same definition as the unassigned badge: envelope_id null + not a bank import + not a pointage expense.
+const filterUnassigned = ref(false)
+const unassigned = useUnassignedCount()
 
 // List of expenses filtered by the current UI filters.
 // The dashboard always uses the full allExpenses set.
 const expenses = computed<Transaction[]>(() => {
   let result = allExpenses.value
+  if (filterUnassigned.value) {
+    return result.filter(
+      (t) => t.envelope_id === null && t.import_hash === null && t.reconciled_with_id === null,
+    )
+  }
   if (filterEnvelopeId.value !== null) {
     const targetEnv = envelopes.value.find((e) => e.id === filterEnvelopeId.value)
     result = result.filter((t) => {
@@ -125,7 +137,20 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  // Initialize filters from URL query params
+  if (route.query.envelope_id) {
+    filterEnvelopeId.value = Number(route.query.envelope_id)
+  }
+  if (route.query.month) {
+    filterMonth.value = String(route.query.month)
+  }
+  if (route.query.unassigned === 'true') {
+    filterUnassigned.value = true
+    filterMonth.value = '' // show all months for unassigned view
+  }
+  await load()
+})
 
 // ── Lookup helpers ────────────────────────────────────────────────
 
@@ -278,6 +303,7 @@ async function saveEdit(): Promise<void> {
     const idx = allExpenses.value.findIndex((t) => t.id === editTxn.value!.id)
     if (idx !== -1) allExpenses.value[idx] = updated
     closeEdit()
+    unassigned.refresh()
   } catch {
     editError.value = 'Erreur lors de la sauvegarde.'
   } finally {
@@ -293,6 +319,7 @@ async function confirmDelete(): Promise<void> {
     await deleteTransaction(id)
     allExpenses.value = allExpenses.value.filter((t) => t.id !== id)
     closeEdit()
+    unassigned.refresh()
   } catch {
     editError.value = 'Erreur lors de la suppression.'
   } finally {
@@ -333,37 +360,66 @@ function monthLabel(ym: string): string {
 
 // ── Dashboard data ────────────────────────────────────────────────
 
-// Drill-down selection: which envelope + which category slice was clicked
+// Toggle between grouping by envelope or by category group
+const dashboardGroupBy = ref<'envelope' | 'category_group'>('envelope')
+
+// Unified chart item (used for both envelope and category-group dashboards)
+interface DashboardChartItem {
+  key: string     // 'env-<id>' | 'grp-<id>' | '__none__'
+  name: string
+  total: number
+  labels: string[]
+  data: number[]
+}
+
+// Drill-down selection: which chart card is open + which slice is highlighted on the donut
 interface DashboardSelection {
-  envelopeKey: string   // 'env-<id>' | '__none__'
-  envelopeName: string
-  categoryLabel: string // matches the label in the chart
+  chartKey: string
+  chartName: string
+  highlightLabel: string // label of the slice currently highlighted on the donut
 }
 const dashboardSelection = ref<DashboardSelection | null>(null)
 
 function onSliceClick(
-  envelopeKey: string,
-  envelopeName: string,
+  chartKey: string,
+  chartName: string,
   payload: { label: string; index: number },
 ): void {
-  // Toggle: clicking the same slice again clears the selection
-  if (
-    dashboardSelection.value?.envelopeKey === envelopeKey &&
-    dashboardSelection.value?.categoryLabel === payload.label
-  ) {
-    dashboardSelection.value = null
+  if (dashboardSelection.value?.chartKey === chartKey) {
+    if (dashboardSelection.value.highlightLabel === payload.label) {
+      // Click same slice again: close panel
+      dashboardSelection.value = null
+    } else {
+      // Different slice on same card: just update highlight
+      dashboardSelection.value.highlightLabel = payload.label
+    }
   } else {
-    dashboardSelection.value = { envelopeKey, envelopeName, categoryLabel: payload.label }
+    dashboardSelection.value = { chartKey, chartName, highlightLabel: payload.label }
   }
 }
 
-// Expenses filtered by the clicked donut slice
-const sliceFilteredExpenses = computed<Transaction[]>(() => {
+// All expenses belonging to the selected chart card (envelope or category group)
+const drilldownExpenses = computed<Transaction[]>(() => {
   const sel = dashboardSelection.value
   if (!sel) return []
 
+  if (dashboardGroupBy.value === 'category_group') {
+    return allExpenses.value.filter((txn) => {
+      if (sel.chartKey === '__none__') {
+        if (txn.category_id !== null) {
+          return !groups.value.some((g) => g.categories.some((c) => c.id === txn.category_id))
+        }
+        return true
+      }
+      if (txn.category_id === null) return false
+      const gid = Number(sel.chartKey.replace('grp-', ''))
+      const grp = groups.value.find((g) => g.id === gid)
+      return grp?.categories.some((c) => c.id === txn.category_id) ?? false
+    })
+  }
+
+  // envelope mode
   return allExpenses.value.filter((txn) => {
-    // Match the envelope
     const envId = txn.envelope_id
     let txnEnvKey: string
     if (envId !== null) {
@@ -376,38 +432,42 @@ const sliceFilteredExpenses = computed<Transaction[]>(() => {
     } else {
       txnEnvKey = '__none__'
     }
-    if (txnEnvKey !== sel.envelopeKey) return false
-
-    // Match the category label
-    const catLabel = categoryName(txn.category_id)
-    return catLabel === sel.categoryLabel
+    return txnEnvKey === sel.chartKey
   })
 })
 
-interface EnvelopeChartData {
-  envelopeKey: string
-  envelopeId: number | null
-  name: string
+// drilldownExpenses grouped by category (sorted: most negative total first)
+interface DrilldownGroup {
+  label: string
   total: number
-  labels: string[]
-  data: number[]
+  items: Transaction[]
 }
+const drilldownGrouped = computed<DrilldownGroup[]>(() => {
+  const map = new Map<string, DrilldownGroup>()
+  for (const txn of drilldownExpenses.value) {
+    const label = categoryName(txn.category_id)
+    if (!map.has(label)) map.set(label, { label, total: 0, items: [] })
+    const grp = map.get(label)!
+    grp.total += txn.amount
+    grp.items.push(txn)
+  }
+  return [...map.values()].sort((a, b) => a.total - b.total)
+})
 
-const dashboardData = computed<EnvelopeChartData[]>(() => {
+const dashboardData = computed<DashboardChartItem[]>(() => {
   // Use ALL expenses for the month (independent of list filters)
   const all = allExpenses.value
 
   // Build a map: envelopeKey → { meta, categoryTotals }
   const map = new Map<string, {
-    envelopeId: number | null
     name: string
     cats: Map<string, number>
     total: number
   }>()
 
-  function ensureEnv(key: string, envId: number | null, name: string): void {
+  function ensureEnv(key: string, name: string): void {
     if (!map.has(key)) {
-      map.set(key, { envelopeId: envId, name, cats: new Map(), total: 0 })
+      map.set(key, { name, cats: new Map(), total: 0 })
     }
   }
 
@@ -429,7 +489,7 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
       if (matchedEnv) {
         envKey = `env-${matchedEnv.id}`
         envName = `${matchedEnv.emoji} ${matchedEnv.name}`
-        ensureEnv(envKey, matchedEnv.id, envName)
+        ensureEnv(envKey, envName)
       } else {
         envKey = '__none__'
         envName = 'Sans tiroir'
@@ -439,7 +499,7 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
       envName = 'Sans tiroir'
     }
 
-    ensureEnv(envKey, envKey === '__none__' ? null : (envId ?? null), envName)
+    ensureEnv(envKey, envName)
     const entry = map.get(envKey)!
     entry.total += txn.amount
 
@@ -454,22 +514,70 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
     entry.cats.set(catLabel, (entry.cats.get(catLabel) ?? 0) + txn.amount)
   }
 
-  // Convert to array, only keep envelopes with actual data
-  return [...map.values()]
-    .filter((e) => e.total !== 0)
-    .sort((a, b) => a.total - b.total) // most negative first
-    .map((e): EnvelopeChartData => {
+  // Convert to array, only keep entries with actual data
+  return [...map.entries()]
+    .filter(([, e]) => e.total !== 0)
+    .sort(([, a], [, b]) => a.total - b.total) // most negative first
+    .map(([key, e]): DashboardChartItem => {
       const labels: string[] = []
       const data: number[] = []
-      // Sort categories by absolute amount desc
       const sorted = [...e.cats.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
       for (const [label, amount] of sorted) {
         labels.push(label)
         data.push(amount)
       }
-      return { envelopeKey: e.envelopeId !== null ? `env-${e.envelopeId}` : '__none__', envelopeId: e.envelopeId, name: e.name, total: e.total, labels, data }
+      return { key, name: e.name, total: e.total, labels, data }
     })
 })
+
+const dashboardGroupData = computed<DashboardChartItem[]>(() => {
+  const all = allExpenses.value
+  const map = new Map<string, { name: string; cats: Map<string, number>; total: number }>()
+
+  for (const txn of all) {
+    let grpKey = '__none__'
+    let grpName = 'Sans catégorie'
+    let catLabel = '—'
+
+    if (txn.category_id !== null) {
+      catLabel = categoryName(txn.category_id)
+      let found: CategoryGroupWithCategories | undefined
+      for (const g of groups.value) {
+        if (g.categories.some((c) => c.id === txn.category_id)) { found = g; break }
+      }
+      if (found) {
+        grpKey = `grp-${found.id}`
+        grpName = found.name
+      } else {
+        grpKey = '__none__'
+        grpName = 'Sans groupe'
+      }
+    }
+
+    if (!map.has(grpKey)) map.set(grpKey, { name: grpName, cats: new Map(), total: 0 })
+    const entry = map.get(grpKey)!
+    entry.total += txn.amount
+    entry.cats.set(catLabel, (entry.cats.get(catLabel) ?? 0) + txn.amount)
+  }
+
+  return [...map.entries()]
+    .filter(([, e]) => e.total !== 0)
+    .sort(([, a], [, b]) => a.total - b.total)
+    .map(([key, e]): DashboardChartItem => {
+      const labels: string[] = []
+      const data: number[] = []
+      const sorted = [...e.cats.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      for (const [label, amount] of sorted) {
+        labels.push(label)
+        data.push(amount)
+      }
+      return { key, name: e.name, total: e.total, labels, data }
+    })
+})
+
+const activeChartData = computed<DashboardChartItem[]>(() =>
+  dashboardGroupBy.value === 'category_group' ? dashboardGroupData.value : dashboardData.value,
+)
 </script>
 
 <template>
@@ -688,7 +796,7 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
       </div>
       <template v-else>
         <!-- Summary bar -->
-        <div class="flex justify-between items-center mb-5 px-1 text-sm">
+        <div class="flex justify-between items-center mb-4 px-1 text-sm">
           <span class="text-base-content/60">{{ expenses.length }} dépense{{ expenses.length > 1 ? 's' : '' }}</span>
           <span
             class="font-semibold tabular-nums"
@@ -698,34 +806,55 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
           </span>
         </div>
 
-        <!-- Donut charts grid — one per envelope -->
+        <!-- Dashboard groupBy toggle -->
+        <div class="flex gap-2 mb-5">
+          <div class="join">
+            <button
+              class="join-item btn btn-sm"
+              :class="dashboardGroupBy === 'envelope' ? 'btn-primary' : 'btn-ghost'"
+              @click="dashboardGroupBy = 'envelope'; dashboardSelection = null"
+            >
+              🗂 Par tiroir
+            </button>
+            <button
+              class="join-item btn btn-sm"
+              :class="dashboardGroupBy === 'category_group' ? 'btn-primary' : 'btn-ghost'"
+              @click="dashboardGroupBy = 'category_group'; dashboardSelection = null"
+            >
+              📁 Par groupe
+            </button>
+          </div>
+        </div>
+
+        <!-- Donut charts grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
-            v-for="chart in dashboardData"
-            :key="chart.envelopeKey"
+            v-for="chart in activeChartData"
+            :key="chart.key"
             class="card bg-base-100 shadow p-4 transition-shadow"
-            :class="dashboardSelection?.envelopeKey === chart.envelopeKey ? 'ring-2 ring-primary' : ''"
+            :class="dashboardSelection?.chartKey === chart.key ? 'ring-2 ring-primary' : ''"
           >
             <DonutChart
               :title="chart.name"
               :labels="chart.labels"
               :data="chart.data"
               :total="chart.total"
-              :active-label="dashboardSelection?.envelopeKey === chart.envelopeKey ? dashboardSelection.categoryLabel : null"
-              @slice-click="onSliceClick(chart.envelopeKey, chart.name, $event)"
+              :active-label="dashboardSelection?.chartKey === chart.key ? dashboardSelection.highlightLabel : null"
+              @slice-click="onSliceClick(chart.key, chart.name, $event)"
             />
           </div>
         </div>
 
         <!-- ── Drill-down panel ── -->
         <transition name="fade">
-          <div v-if="dashboardSelection && sliceFilteredExpenses.length > 0" class="mt-6">
+          <div v-if="dashboardSelection && drilldownExpenses.length > 0" class="mt-6">
             <div class="flex items-center gap-2 mb-3">
               <span class="text-sm font-semibold">
-                🗂 {{ dashboardSelection.envelopeName }} — {{ dashboardSelection.categoryLabel }}
+                {{ dashboardGroupBy === 'category_group' ? '📁' : '🗂' }}
+                {{ dashboardSelection.chartName }}
               </span>
               <span class="badge badge-neutral badge-sm tabular-nums">
-                {{ formatAmount(sliceFilteredExpenses.reduce((s, t) => s + t.amount, 0)) }}
+                {{ formatAmount(drilldownExpenses.reduce((s, t) => s + t.amount, 0)) }}
               </span>
               <button
                 class="btn btn-ghost btn-xs ml-auto"
@@ -734,49 +863,59 @@ const dashboardData = computed<EnvelopeChartData[]>(() => {
                 ✕ Fermer
               </button>
             </div>
-            <div class="card bg-base-100 shadow overflow-hidden">
-              <table class="table table-sm">
-                <thead>
-                  <tr class="text-xs text-base-content/50">
-                    <th class="w-16">Date</th>
-                    <th>Libellé</th>
-                    <th class="hidden sm:table-cell text-center">Pointé</th>
-                    <th class="text-right">Montant</th>
-                    <th class="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="txn in sliceFilteredExpenses"
-                    :key="txn.id"
-                    class="hover cursor-pointer"
-                    @click="openEdit(txn)"
-                  >
-                    <td class="text-xs tabular-nums text-base-content/60 whitespace-nowrap">
-                      {{ formatDate(txn.date) }}
-                    </td>
-                    <td>
-                      <span class="text-sm">{{ txn.memo ?? '—' }}</span>
-                      <div v-if="txn.linked_transaction" class="text-xs text-base-content/50 mt-0.5">
-                        🏦 {{ txn.linked_transaction.memo ?? '(sans libellé)' }}
-                        · {{ formatAmount(txn.linked_transaction.amount) }}
-                      </div>
-                    </td>
-                    <td class="hidden sm:table-cell text-center">
-                      <span v-if="txn.reconciled_with_id" class="badge badge-success badge-xs" title="Pointé">✓</span>
-                    </td>
-                    <td
-                      class="text-right text-sm font-semibold tabular-nums whitespace-nowrap"
-                      :class="txn.amount < 0 ? 'text-error' : 'text-success'"
+
+            <!-- One sub-section per category -->
+            <div v-for="catGrp in drilldownGrouped" :key="catGrp.label" class="mb-4">
+              <div class="flex justify-between items-center px-3 py-1 bg-base-200 rounded-t text-xs font-semibold text-base-content/70 uppercase tracking-wide">
+                <span>{{ catGrp.label }}</span>
+                <span :class="catGrp.total < 0 ? 'text-error' : 'text-success'">
+                  {{ formatAmount(catGrp.total) }}
+                </span>
+              </div>
+              <div class="card bg-base-100 shadow overflow-hidden rounded-t-none">
+                <table class="table table-sm">
+                  <thead>
+                    <tr class="text-xs text-base-content/50">
+                      <th class="w-16">Date</th>
+                      <th>Libellé</th>
+                      <th class="hidden sm:table-cell text-center">Pointé</th>
+                      <th class="text-right">Montant</th>
+                      <th class="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="txn in catGrp.items"
+                      :key="txn.id"
+                      class="hover cursor-pointer"
+                      @click="openEdit(txn)"
                     >
-                      {{ formatAmount(txn.amount) }}
-                    </td>
-                    <td class="text-right">
-                      <button class="btn btn-ghost btn-xs" title="Modifier" @click.stop="openEdit(txn)">✏️</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                      <td class="text-xs tabular-nums text-base-content/60 whitespace-nowrap">
+                        {{ formatDate(txn.date) }}
+                      </td>
+                      <td>
+                        <span class="text-sm">{{ txn.memo ?? '—' }}</span>
+                        <div v-if="txn.linked_transaction" class="text-xs text-base-content/50 mt-0.5">
+                          🏦 {{ txn.linked_transaction.memo ?? '(sans libellé)' }}
+                          · {{ formatAmount(txn.linked_transaction.amount) }}
+                        </div>
+                      </td>
+                      <td class="hidden sm:table-cell text-center">
+                        <span v-if="txn.reconciled_with_id" class="badge badge-success badge-xs" title="Pointé">✓</span>
+                      </td>
+                      <td
+                        class="text-right text-sm font-semibold tabular-nums whitespace-nowrap"
+                        :class="txn.amount < 0 ? 'text-error' : 'text-success'"
+                      >
+                        {{ formatAmount(txn.amount) }}
+                      </td>
+                      <td class="text-right">
+                        <button class="btn btn-ghost btn-xs" title="Modifier" @click.stop="openEdit(txn)">✏️</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </transition>

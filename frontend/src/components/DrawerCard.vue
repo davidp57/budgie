@@ -59,15 +59,19 @@ const props = withDefaults(defineProps<{
   showGoalBar?: boolean
   /** Force fill to 100% regardless of available/budgeted ratio (use in definition/config screens). */
   fullFill?: boolean
+  /** Show the amber expense-count triangle badge. Disable in config/editing screens. */
+  showBadge?: boolean
 }>(), {
   showMoney: true,
   showCalendar: true,
   showSubtitle: true,
   showGoalBar: true,
+  showBadge: true,
 })
 
 const emit = defineEmits<{
   tap: [line: EnvelopeLine]
+  badgeTap: [line: EnvelopeLine]
 }>()
 
 // Pick color from palette based on envelope_id
@@ -171,8 +175,7 @@ function moneyStyle(index: number): Record<string, string> {
       boxShadow: `0 2px 8px rgba(0,0,0,0.1)`,
     }"
     @click="emit('tap', line)"
-  >
-    <!-- Saturated fill = remaining budget (z-10) -->
+  >    <!-- Saturated fill = remaining budget (z-10) -->
     <div class="absolute inset-0 z-10 pointer-events-none">
       <!-- Regular / Cumulative: fill from left -->
       <div
@@ -292,6 +295,16 @@ function moneyStyle(index: number): Record<string, string> {
           {{ formatAmount(line.available) }}/{{ formatAmount(line.target_amount!) }}
         </span>
       </div>
+    </div>
+
+    <!-- Expense count badge — diagonal triangle top-right corner (z-30) -->
+    <div
+      v-if="props.showBadge && line.expense_count > 0"
+      class="badge-tri"
+      :class="{ 'three-digits': line.expense_count >= 100 }"
+      @click.stop="emit('badgeTap', line)"
+    >
+      <span class="badge-num">{{ line.expense_count }}</span>
     </div>
   </button>
 </template>
@@ -471,5 +484,34 @@ function moneyStyle(index: number): Record<string, string> {
     inset 0 -2px 8px rgba(0, 0, 0, 0.08);
   pointer-events: none;
   z-index: 30;
+}
+
+/* ── Expense count badge — diagonal triangle top-right ── */
+.badge-tri {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 42px;
+  background: #f59e0b;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  z-index: 40;
+  cursor: pointer;
+}
+
+.badge-tri.three-digits {
+  width: 54px;
+  height: 54px;
+}
+
+.badge-num {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  line-height: 1;
 }
 </style>

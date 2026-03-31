@@ -56,3 +56,8 @@ export async function updateTransaction(
 export async function deleteTransaction(id: number): Promise<void> {
   await client.delete(`/api/transactions/${id}`)
 }
+
+export async function getUnassignedCount(): Promise<{ count: number }> {
+  const { data } = await client.get<{ count: number }>('/api/transactions/unassigned-count')
+  return data
+}

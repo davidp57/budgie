@@ -223,8 +223,13 @@ La page budget affiche vos enveloppes sous forme de **cartes** (DrawerCards). Ch
 - **Budgété** : montant alloué (cliquez pour modifier)
 - **Activité** : total des transactions du mois
 - **Disponible** : reste à dépenser (vert si positif, rouge si négatif)
+- **Badge triangle ambré** (coin supérieur droit) : nombre de transactions enregistrées sur ce tiroir ce mois-ci. Appuyez dessus pour accéder directement à la liste des dépenses correspondantes.
 
 Cliquez sur une enveloppe pour filtrer les transactions correspondantes dans le panneau du bas.
+
+En bas de la grille des tiroirs, une bannière **« Dépense hors budget »** permet de saisir une transaction sans tiroir associé :
+- Tapez le côté gauche pour ouvrir la saisie rapide en mode hors budget.
+- Si des dépenses hors budget existent, une pastille ambrée à droite indique le nombre — tapez dessus pour les voir dans la vue Dépenses.
 
 ### Page Dépenses
 
@@ -236,8 +241,11 @@ La page **Dépenses** (`/depenses`) affiche les transactions virtuelles (saisies
 - **Regroupement** : par tiroir, catégorie ou groupe de catégories
 - **Modal d'édition** : modifier la date, le montant, le mémo, la catégorie et le tiroir
 - **Suppression** avec confirmation
-- **Mode Dashboard** 🥧 : camemberts par tiroir montrant les dépenses par catégorie
-  - Cliquez sur une tranche pour afficher la liste des dépenses correspondantes
+- **Mode Dashboard** 🥧 : camemberts montrant les dépenses par catégorie
+  - **Par tiroir** (par défaut) : un graphique par tiroir
+  - **Par groupe de catégories** : un graphique par groupe — basculez avec le toggle au-dessus des graphiques
+  - Cliquez sur un graphique pour afficher un panneau détaillé avec toutes les dépenses du tiroir/groupe, regroupées par catégorie
+  - Cliquez sur une autre tranche pour la mettre en surbrillance ; cliquez à nouveau sur la même pour fermer le panneau
 - Les dépenses réconciliées affichent un lien vers la transaction bancaire pointée
 
 ---
@@ -389,7 +397,9 @@ La page **QuickExpense** (⚡) permet de saisir une transaction en quelques seco
 4. Validez
 
 La transaction est liée directement au tiroir (enveloppe) — aucune catégorie n’est requise. Si vous souhaitez préciser une catégorie, vous pouvez modifier la transaction après saisie.
+### Mode hors budget
 
+Appuyez sur la bannière **« Dépense hors budget »** en bas de la grille des tiroirs pour enregistrer une transaction sans tiroir. La saisie s'ouvre avec l'en-tête « Hors budget » et sauvegarde la transaction avec `envelope_id = null`. Vous pourrez l'affecter à un tiroir ultérieurement via le modal d'édition de la page Dépenses.
 ### Préréglages
 
 Vous pouvez créer des **préréglages** pour les dépenses fréquentes (ex. « Boulangerie — 1,20 € »). Un clic suffit ensuite pour pré-remplir le formulaire.

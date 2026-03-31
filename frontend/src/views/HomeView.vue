@@ -2,28 +2,51 @@
 /**
  * HomeView — Main screen showing all budget drawer cards.
  * Tap a card → opens QuickExpense bottom sheet.
+ * Tap badge on a card → navigates to /depenses filtered by that envelope.
+ * Ghost banner → opens QuickExpense without envelope (Hors budget).
  */
 
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useBudgetStore } from '@/stores/budget'
+import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { listAccounts } from '@/api/accounts'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
 import type { Account, EnvelopeLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
 
+const router = useRouter()
 const budgetStore = useBudgetStore()
-const selectedDrawer = ref<EnvelopeLine | null>(null)
+const unassigned = useUnassignedCount()
+
+const drawerForExpense = ref<EnvelopeLine | null>(null)
+const showQuickExpense = ref(false)
 const defaultAccount = ref<Account | null>(null)
 
 function onDrawerTap(line: EnvelopeLine): void {
-  selectedDrawer.value = line
+  drawerForExpense.value = line
+  showQuickExpense.value = true
+}
+
+function onBadgeTap(line: EnvelopeLine): void {
+  router.push({ name: 'depenses', query: { envelope_id: line.envelope_id, month: budgetStore.month } })
+}
+
+function onGhostBannerTap(): void {
+  drawerForExpense.value = null
+  showQuickExpense.value = true
+}
+
+function onUnassignedPillTap(): void {
+  router.push({ name: 'depenses', query: { unassigned: 'true' } })
 }
 
 function closeExpense(): void {
-  selectedDrawer.value = null
+  showQuickExpense.value = false
   // Reload budget to reflect new transaction
   budgetStore.loadMonth()
+  unassigned.refresh()
 }
 
 // Formatted month name in French (e.g. "Mars 2026")
@@ -64,6 +87,7 @@ onMounted(async () => {
   } catch {
     // 401 errors are handled by the client interceptor (redirect to login)
   }
+  await unassigned.refresh()
 })
 </script>
 
@@ -112,7 +136,26 @@ onMounted(async () => {
         :key="line.envelope_id"
         :line="line"
         @tap="onDrawerTap"
+        @badge-tap="onBadgeTap"
       />
+
+      <!-- Ghost banner — "Hors budget" quick expense (spans full grid width) -->
+      <div
+        class="ghost-banner"
+        :class="{ 'has-unassigned': unassigned.count.value > 0 }"
+        role="button"
+        tabindex="0"
+        @click="onGhostBannerTap"
+        @keydown.enter="onGhostBannerTap"
+      >
+        <span class="gb-icon">📦</span>
+        <span class="gb-label">Dépense hors budget</span>
+        <button
+          v-if="unassigned.count.value > 0"
+          class="gb-count"
+          @click.stop="onUnassignedPillTap"
+        >{{ unassigned.count.value }} à assigner →</button>
+      </div>
     </div>
   </div>
 
@@ -125,9 +168,74 @@ onMounted(async () => {
 
   <!-- Quick expense bottom sheet -->
   <QuickExpense
-    v-if="selectedDrawer && defaultAccount"
-    :drawer="selectedDrawer"
+    v-if="showQuickExpense && defaultAccount"
+    :drawer="drawerForExpense"
     :account-id="defaultAccount.id"
     @close="closeExpense"
   />
 </template>
+
+<style scoped>
+/* ── Ghost banner — "Hors budget" ─────────────────────────────── */
+
+/* Spans full grid width */
+.ghost-banner {
+  grid-column: 1 / -1;
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 14px;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+  outline: none;
+}
+
+.ghost-banner:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* State: has unassigned expenses */
+.ghost-banner.has-unassigned {
+  border: 2px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.gb-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.gb-label {
+  flex: 1;
+}
+
+/* Pill linking to /depenses?unassigned=true */
+.gb-count {
+  margin-left: auto;
+  background: #f59e0b;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.gb-count:focus-visible {
+  outline: 2px solid #92400e;
+  outline-offset: 2px;
+}
+</style>
