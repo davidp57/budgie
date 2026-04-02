@@ -40,20 +40,21 @@ export async function webauthnRegisterComplete(
   return data
 }
 
-export async function webauthnAuthBegin(username: string): Promise<WebAuthnOptions> {
+export async function webauthnAuthBegin(username?: string): Promise<WebAuthnOptions> {
   const { data } = await client.post<WebAuthnOptions>(
     '/api/auth/webauthn/authenticate/begin',
-    { username },
+    username ? { username } : {},
   )
   return data
 }
 
 export async function webauthnAuthComplete(
   credential: Record<string, unknown>,
+  challengeToken?: string,
 ): Promise<LoginResponse> {
   const { data } = await client.post<LoginResponse>(
     '/api/auth/webauthn/authenticate/complete',
-    { credential },
+    { credential, ...(challengeToken !== undefined ? { challenge_token: challengeToken } : {}) },
   )
   return data
 }

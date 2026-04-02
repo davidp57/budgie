@@ -80,21 +80,40 @@ export async function createPasskey(
 
 // ── Authentication ─────────────────────────────────────────────────────────────
 
+/**
+ * Fixed PRF eval input shared across all Budgie clients.
+ *
+ * Each passkey (credential) produces a unique 32-byte HMAC-SHA-256 output for
+ * this constant salt, so using a single application-level constant is safe.
+ */
+export const PRF_EVAL_INPUT: Uint8Array = new TextEncoder().encode('budgie-passphrase-v1')
+
 interface ServerAuthOptions {
   challenge: string
   allowCredentials?: Array<{ id: string; type: string }>
   [key: string]: unknown
 }
 
+interface PrfExtensionOutput {
+  results?: {
+    first?: ArrayBuffer
+  }
+}
+
 /**
  * Run the browser side of WebAuthn authentication.
  *
  * @param serverOptions - JSON options object from `POST /authenticate/begin`.
- * @returns A JSON-serialisable assertion object ready to `POST /authenticate/complete`.
+ * @param requestPrf - When `true`, request the PRF extension so the caller can
+ *   use the output to wrap/unwrap the encryption passphrase locally.
+ * @returns An object containing the JSON-serialisable assertion for the server
+ *   and, when `requestPrf` is `true`, the raw PRF output (or `null` if the
+ *   authenticator does not support PRF).
  */
 export async function getPasskey(
   serverOptions: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
+  requestPrf = false,
+): Promise<{ credential: Record<string, unknown>; prfOutput: ArrayBuffer | null }> {
   const opts = serverOptions as ServerAuthOptions
 
   const publicKey: PublicKeyCredentialRequestOptions = {
@@ -104,6 +123,7 @@ export async function getPasskey(
       ...c,
       id: base64urlToUint8Array(c.id),
     })),
+    ...(requestPrf ? { extensions: { prf: { eval: { first: PRF_EVAL_INPUT } } } } : {}),
   } as PublicKeyCredentialRequestOptions
 
   const assertion = (await navigator.credentials.get({
@@ -112,8 +132,16 @@ export async function getPasskey(
 
   if (!assertion) throw new Error('No assertion returned from browser')
 
+  // Extract PRF output when requested (null if authenticator does not support it)
+  let prfOutput: ArrayBuffer | null = null
+  if (requestPrf) {
+    const ext = assertion.getClientExtensionResults() as Record<string, unknown>
+    const prf = ext['prf'] as PrfExtensionOutput | undefined
+    prfOutput = prf?.results?.first ?? null
+  }
+
   const response = assertion.response as AuthenticatorAssertionResponse
-  return {
+  const credential: Record<string, unknown> = {
     id: assertion.id,
     rawId: arrayBufferToBase64url(assertion.rawId),
     type: assertion.type,
@@ -124,6 +152,7 @@ export async function getPasskey(
       userHandle: response.userHandle ? arrayBufferToBase64url(response.userHandle) : null,
     },
   }
+  return { credential, prfOutput }
 }
 
 export function isWebAuthnSupported(): boolean {

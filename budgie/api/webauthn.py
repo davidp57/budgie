@@ -186,19 +186,33 @@ async def authenticate_begin(
     schema: WebAuthnAuthBeginRequest,
     db: DBSession,
 ) -> WebAuthnAuthBeginResponse:
-    """Start WebAuthn authentication for the given username.
+    """Start WebAuthn authentication.
+
+    If ``username`` is provided, returns challenge options pre-populated with
+    that user's credential IDs (faster, avoids a device picker).
+
+    If ``username`` is omitted, initiates a discoverable (usernameless) flow:
+    ``allowCredentials`` is empty and the authenticator proposes all passkeys
+    for this origin.  A ``challenge_token`` is returned and must be sent back
+    in the ``authenticate/complete`` request.
 
     Args:
-        schema: Username identifying the user.
+        schema: Optional username.
         db: Async database session.
 
     Returns:
-        PublicKeyCredentialRequestOptions to pass to browser's
+        ``PublicKeyCredentialRequestOptions`` to pass to
         ``navigator.credentials.get()``.
 
     Raises:
-        HTTPException: 404 if the user does not exist or has no credentials.
+        HTTPException: 404 if the username is given but unknown.
+        HTTPException: 400 if the username is given but has no passkeys.
     """
+    if schema.username is None:
+        # Discoverable flow — no username required
+        token, options = webauthn_service.begin_discoverable_authentication()
+        return WebAuthnAuthBeginResponse(options=options, challenge_token=token)
+
     user = await get_user_by_username(db, schema.username)
     if user is None:
         raise HTTPException(
@@ -268,12 +282,21 @@ async def authenticate_complete(
         )
 
     try:
-        new_sign_count = webauthn_service.complete_authentication(
-            user_id=cred.user_id,
-            credential=schema.credential,
-            stored_public_key=cred.public_key,
-            stored_sign_count=cred.sign_count,
-        )
+        if schema.challenge_token is not None:
+            new_sign_count = webauthn_service.complete_discoverable_authentication(
+                challenge_token=schema.challenge_token,
+                user_id=cred.user_id,
+                credential=schema.credential,
+                stored_public_key=cred.public_key,
+                stored_sign_count=cred.sign_count,
+            )
+        else:
+            new_sign_count = webauthn_service.complete_authentication(
+                user_id=cred.user_id,
+                credential=schema.credential,
+                stored_public_key=cred.public_key,
+                stored_sign_count=cred.sign_count,
+            )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -297,4 +320,5 @@ async def authenticate_complete(
         access_token=token,
         needs_encryption_setup=not user.is_encrypted,
         is_encrypted=user.is_encrypted,
+        username=user.username,
     )

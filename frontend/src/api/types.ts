@@ -10,6 +10,7 @@ export interface LoginResponse {
   token_type: string
   needs_encryption_setup: boolean
   is_encrypted: boolean
+  username?: string
 }
 
 export interface WebAuthnCredential {
@@ -20,6 +21,7 @@ export interface WebAuthnCredential {
 
 export interface WebAuthnOptions {
   options: Record<string, unknown>
+  challenge_token?: string
 }
 
 // ── Accounts ─────────────────────────────────────────────────────
