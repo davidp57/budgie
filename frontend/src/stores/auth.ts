@@ -147,6 +147,7 @@ export const useAuthStore = defineStore('auth', () => {
     isEncrypted.value = response.is_encrypted
     sessionPassphrase.value = null
     prfOutput.value = prf ?? null
+    sessionStorage.removeItem('encryption_unlocked')
     localStorage.setItem('access_token', response.access_token)
     localStorage.setItem('username', resolvedUsername)
     localStorage.setItem('needs_encryption_setup', String(response.needs_encryption_setup))

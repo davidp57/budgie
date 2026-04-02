@@ -14,8 +14,8 @@ services:
       - UPLOAD_DIR=/app/data/uploads
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
-      - WEBAUTHN_RP_ID=dpierron.synology.me
-      - WEBAUTHN_ORIGIN=https://dpierron.synology.me:8443
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
+      - WEBAUTHN_ORIGIN=${WEBAUTHN_ORIGIN:-http://localhost:${BUDGIE_PORT:-8080}}
     mem_limit: 256m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]

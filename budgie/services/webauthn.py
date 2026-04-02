@@ -13,6 +13,7 @@ import base64
 import json
 import secrets
 import threading
+import time
 
 import webauthn
 from webauthn.helpers.structs import (
@@ -26,33 +27,62 @@ from budgie.config import settings
 
 # ── In-process challenge caches ───────────────────────────────────────────
 
-# Username-based flow: keyed by user_id
-_challenges: dict[int, bytes] = {}
+# Challenges expire after 5 minutes — long enough for any legitimate flow,
+# short enough to bound memory usage from abandoned sessions.
+_CHALLENGE_TTL_SECONDS = 300
+
+# Username-based flow: keyed by user_id → (challenge_bytes, expiry_timestamp)
+_challenges: dict[int, tuple[bytes, float]] = {}
 _challenge_lock = threading.Lock()
 
-# Discoverable flow: keyed by an opaque random token
-_anon_challenges: dict[str, bytes] = {}
+# Discoverable flow: keyed by opaque token → (challenge_bytes, expiry_timestamp)
+_anon_challenges: dict[str, tuple[bytes, float]] = {}
 _anon_lock = threading.Lock()
 
 
-def _set_challenge(user_id: int, challenge: bytes) -> None:
+def _purge_expired_challenges() -> None:
+    """Remove stale entries from both challenge caches (called on every write)."""
+    now = time.monotonic()
     with _challenge_lock:
-        _challenges[user_id] = challenge
+        expired_ids = [uid for uid, (_, exp) in _challenges.items() if exp < now]
+        for uid in expired_ids:
+            del _challenges[uid]
+    with _anon_lock:
+        expired_tokens = [
+            tok for tok, (_, exp) in _anon_challenges.items() if exp < now
+        ]
+        for tok in expired_tokens:
+            del _anon_challenges[tok]
+
+
+def _set_challenge(user_id: int, challenge: bytes) -> None:
+    _purge_expired_challenges()
+    with _challenge_lock:
+        _challenges[user_id] = (challenge, time.monotonic() + _CHALLENGE_TTL_SECONDS)
 
 
 def _pop_challenge(user_id: int) -> bytes | None:
     with _challenge_lock:
-        return _challenges.pop(user_id, None)
+        entry = _challenges.pop(user_id, None)
+    if entry is None:
+        return None
+    challenge, expiry = entry
+    return challenge if time.monotonic() < expiry else None
 
 
 def _set_anon_challenge(token: str, challenge: bytes) -> None:
+    _purge_expired_challenges()
     with _anon_lock:
-        _anon_challenges[token] = challenge
+        _anon_challenges[token] = (challenge, time.monotonic() + _CHALLENGE_TTL_SECONDS)
 
 
 def _pop_anon_challenge(token: str) -> bytes | None:
     with _anon_lock:
-        return _anon_challenges.pop(token, None)
+        entry = _anon_challenges.pop(token, None)
+    if entry is None:
+        return None
+    challenge, expiry = entry
+    return challenge if time.monotonic() < expiry else None
 
 
 def _b64url_encode(data: bytes) -> str:
