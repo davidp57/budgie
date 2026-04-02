@@ -93,6 +93,7 @@ class EnvelopeLineRead(BaseModel):
     activity: int
     available: int
     expense_count: int = 0
+    is_budget_inherited: bool = False
 
 
 class MonthBudgetResponse(BaseModel):

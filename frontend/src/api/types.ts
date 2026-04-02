@@ -145,6 +145,7 @@ export interface EnvelopeLine {
   activity: number // centimes
   available: number // centimes
   expense_count: number
+  is_budget_inherited: boolean // true if budgeted comes from previous month (no explicit allocation)
 }
 
 export interface MonthBudget {

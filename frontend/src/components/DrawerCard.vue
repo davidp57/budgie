@@ -236,7 +236,11 @@ function moneyStyle(index: number): Record<string, string> {
           <!-- Budget info -->
           <div v-if="props.showSubtitle" class="text-sm text-white/80 mt-1.5 drop-shadow-sm font-medium">
         <template v-if="drawerType !== 'reserve'">
-          {{ formatAmount(Math.abs(line.activity)) }} dépensé sur {{ formatAmount(line.budgeted) }}
+          {{ formatAmount(Math.abs(line.activity)) }} dépensé sur {{ formatAmount(line.budgeted) }}<span
+            v-if="line.is_budget_inherited"
+            class="ml-1 opacity-70"
+            title="Budget hérité du mois précédent"
+          >↩</span>
         </template>
         <template v-else>
           {{ formatAmount(Math.abs(line.activity)) }} dépensé

@@ -230,10 +230,18 @@ const fillY = computed(() => 44 - 42 * fillRatio.value)
       <template v-else>
         <button
           class="btn btn-ghost btn-xs tabular-nums font-normal"
-          title="Click to edit budgeted amount"
+          :class="editedValue === undefined && envelope.is_budget_inherited ? 'opacity-50 italic' : ''"
+          :title="editedValue === undefined && envelope.is_budget_inherited
+            ? 'Montant hérité du mois précédent — cliquez pour définir le budget de ce mois'
+            : 'Cliquez pour modifier le budget'"
           @click.stop="startEdit"
         >
           {{ formatAmount(editedValue ?? envelope.budgeted) }}
+          <span
+            v-if="editedValue === undefined && envelope.is_budget_inherited"
+            class="ml-0.5 text-xs opacity-70"
+            aria-label="Hérité du mois précédent"
+          >↩</span>
         </button>
       </template>
     </div>
