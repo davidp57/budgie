@@ -570,7 +570,7 @@ For each envelope:
 
 The `EnvelopeLineRead` schema includes `is_budget_inherited: bool` to signal when the
 displayed `budgeted` was inherited from a previous month rather than explicitly set for
-the current month. The UI renders inherited values in italic with a `↩` indicator.
+the current month. The UI renders inherited values in italics with a `↩` indicator.
 
 ### Top-Level Calculation
 

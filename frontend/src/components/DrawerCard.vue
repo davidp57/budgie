@@ -240,6 +240,7 @@ function moneyStyle(index: number): Record<string, string> {
             v-if="line.is_budget_inherited"
             class="ml-1 opacity-70"
             title="Budget hérité du mois précédent"
+            aria-label="Budget hérité du mois précédent"
           >↩</span>
         </template>
         <template v-else>

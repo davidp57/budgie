@@ -68,49 +68,47 @@ async def get_month_budget_view(
     }
     all_cat_ids = list(cat_to_env.keys())
 
-    # 2. Budgeted this month per envelope
-    budgeted_result = await db.execute(
-        select(BudgetAllocation.envelope_id, BudgetAllocation.budgeted).where(
+    # 2. Budgeted amounts per envelope: current-month explicit OR most-recent prior
+    #    (sticky inheritance). A single window-function query picks the best-matching
+    #    allocation for each envelope, prioritising the current month over any prior.
+    rollover_ids = {env.id for env in envelopes if env.rollover}
+    ranked_subq = (
+        select(
+            BudgetAllocation.envelope_id,
+            BudgetAllocation.budgeted,
+            BudgetAllocation.month,
+            func.row_number()
+            .over(
+                partition_by=BudgetAllocation.envelope_id,
+                order_by=[
+                    case((BudgetAllocation.month == month, 0), else_=1),
+                    BudgetAllocation.month.desc(),
+                ],
+            )
+            .label("rn"),
+        )
+        .where(
             BudgetAllocation.envelope_id.in_(env_ids),
-            BudgetAllocation.month == month,
+            BudgetAllocation.month <= month,
         )
+        .subquery()
     )
-    budgeted_this_month: dict[int, int] = {
-        row[0]: row[1] for row in budgeted_result.all()
-    }
-
-    # 2b. Sticky-budget inheritance: for rollover=False envelopes with no current-month
-    #     allocation, inherit the budgeted amount from the most recent prior month.
-    #     This makes regular budgets "sticky" — they persist until changed explicitly.
-    no_alloc_non_rollover_ids = [
-        env.id
-        for env in envelopes
-        if not env.rollover and env.id not in budgeted_this_month
-    ]
+    alloc_result = await db.execute(
+        select(
+            ranked_subq.c.envelope_id,
+            ranked_subq.c.budgeted,
+            ranked_subq.c.month,
+        ).where(ranked_subq.c.rn == 1)
+    )
+    budgeted_this_month: dict[int, int] = {}
     inherited_budgeted: dict[int, int] = {}
-    if no_alloc_non_rollover_ids:
-        max_prior_subq = (
-            select(
-                BudgetAllocation.envelope_id,
-                func.max(BudgetAllocation.month).label("max_month"),
-            )
-            .where(
-                BudgetAllocation.envelope_id.in_(no_alloc_non_rollover_ids),
-                BudgetAllocation.month < month,
-            )
-            .group_by(BudgetAllocation.envelope_id)
-            .subquery()
-        )
-        prior_alloc_result = await db.execute(
-            select(BudgetAllocation.envelope_id, BudgetAllocation.budgeted).join(
-                max_prior_subq,
-                and_(
-                    BudgetAllocation.envelope_id == max_prior_subq.c.envelope_id,
-                    BudgetAllocation.month == max_prior_subq.c.max_month,
-                ),
-            )
-        )
-        inherited_budgeted = {row[0]: row[1] for row in prior_alloc_result.all()}
+    for row in alloc_result.all():
+        env_id, budgeted, alloc_month = row
+        if alloc_month == month:
+            budgeted_this_month[env_id] = budgeted
+        elif env_id not in rollover_ids:
+            # Non-rollover envelope with no current allocation → inherit prior month
+            inherited_budgeted[env_id] = budgeted
 
     # Effective budgeted = inherited (from prior month) OR explicit (this month).
     # Actual allocations always take precedence over inherited ones.

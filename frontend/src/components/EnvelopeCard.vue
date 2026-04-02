@@ -230,7 +230,7 @@ const fillY = computed(() => 44 - 42 * fillRatio.value)
       <template v-else>
         <button
           class="btn btn-ghost btn-xs tabular-nums font-normal"
-          :class="editedValue === undefined && envelope.is_budget_inherited ? 'opacity-50 italic' : ''"
+          :class="editedValue === undefined && envelope.is_budget_inherited ? 'italic' : ''"
           :title="editedValue === undefined && envelope.is_budget_inherited
             ? 'Montant hérité du mois précédent — cliquez pour définir le budget de ce mois'
             : 'Cliquez pour modifier le budget'"
