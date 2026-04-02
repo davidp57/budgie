@@ -24,6 +24,8 @@ Les items sont regroupés par priorité et peuvent évoluer.
 - [x] **Édition des dépenses** — modifier date, montant, description, catégorie, enveloppe ou supprimer depuis la page Dépenses
 - [x] **Dépense rapide sans catégorie** — la saisie rapide lie directement à une enveloppe ; dépenses hors budget saisissables depuis la bannière Budget
 - [x] **Fichiers de contribution & tutoriels** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, tutoriels d'installation et de prise en main (EN + FR)
+- [x] **Chiffrement au repos** — noms de bénéficiaires, mémos et descriptions chiffrés côté serveur avec AES-256-GCM ; données existantes migrées automatiquement au démarrage
+- [x] **Héritage automatique du budget** — les montants budgétés se reportent automatiquement d’un mois à l’autre ; une icône `↩` signale tout montant hérité dans l’interface
 
 ### Vue des dépenses par catégorie
 

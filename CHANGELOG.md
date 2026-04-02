@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-04-02
+
+### Added
+
+- **Sticky budget inheritance** — for non-rollover envelopes with no explicit allocation in the current month, the budgeted amount is automatically carried forward from the most recent prior month; a `↩` indicator appears next to any inherited amount in the UI (budget table, drawer tiles, and drawer subtitle)
+- **`is_budget_inherited` flag** — the budget API response now includes a boolean field per envelope signalling whether the displayed amount was inherited from a prior month rather than set explicitly
+
+### Security
+
+- **Encryption at rest** — payee names, transaction memos, descriptions, and notes are now encrypted server-side using AES-256-GCM; existing data is migrated transparently on first startup with the encryption key configured via `FIELD_ENCRYPTION_KEY`
+
+### Changed
+
+- **Budget query performance** — sticky-budget inheritance now uses a single window-function SQL query (`ROW_NUMBER OVER PARTITION BY`) instead of a second round-trip to find the most recent prior allocation
+
+---
+
 ## [0.7.0] - 2026-03-31
 
 ### Added

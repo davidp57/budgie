@@ -24,6 +24,8 @@ Items are grouped by priority and may change as the project evolves.
 - [x] **Expense editing** — edit date, amount, description, category, envelope or delete from the Expenses page
 - [x] **Quick expense without category** — Quick Expense links directly to an envelope; off-budget expenses from Budget page banner
 - [x] **Community files & tutorials** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, installation and usage tutorials (EN + FR)
+- [x] **Encryption at rest** — payee names, memos, and descriptions encrypted server-side using AES-256-GCM; existing data migrated transparently on startup
+- [x] **Sticky budget inheritance** — budget amounts carry forward automatically month-to-month; a `↩` indicator marks any inherited amount in the UI
 
 ### Category Spending View
 
