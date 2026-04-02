@@ -113,6 +113,15 @@ async function submitPin(): Promise<void> {
       return
     }
     await auth.unlock(stored)
+    // Silently upgrade to PRF if the passkey PRF output is still in memory.
+    // Next time, the user won't need the PIN at all.
+    if (pinAvailable && auth.prfOutput) {
+      try {
+        await prf.storePrfPassphrase(auth.prfOutput, stored)
+      } catch {
+        // Non-critical — continue without PRF
+      }
+    }
     await router.push('/')
   } catch (err) {
     error.value = extractError(err, 'Unlock failed.')
