@@ -68,16 +68,51 @@ async def get_month_budget_view(
     }
     all_cat_ids = list(cat_to_env.keys())
 
-    # 2. Budgeted this month per envelope
-    budgeted_result = await db.execute(
-        select(BudgetAllocation.envelope_id, BudgetAllocation.budgeted).where(
-            BudgetAllocation.envelope_id.in_(env_ids),
-            BudgetAllocation.month == month,
+    # 2. Budgeted amounts per envelope: current-month explicit OR most-recent prior
+    #    (sticky inheritance). A single window-function query picks the best-matching
+    #    allocation for each envelope, prioritising the current month over any prior.
+    rollover_ids = {env.id for env in envelopes if env.rollover}
+    ranked_subq = (
+        select(
+            BudgetAllocation.envelope_id,
+            BudgetAllocation.budgeted,
+            BudgetAllocation.month,
+            func.row_number()
+            .over(
+                partition_by=BudgetAllocation.envelope_id,
+                order_by=[
+                    case((BudgetAllocation.month == month, 0), else_=1),
+                    BudgetAllocation.month.desc(),
+                ],
+            )
+            .label("rn"),
         )
+        .where(
+            BudgetAllocation.envelope_id.in_(env_ids),
+            BudgetAllocation.month <= month,
+        )
+        .subquery()
     )
-    budgeted_this_month: dict[int, int] = {
-        row[0]: row[1] for row in budgeted_result.all()
-    }
+    alloc_result = await db.execute(
+        select(
+            ranked_subq.c.envelope_id,
+            ranked_subq.c.budgeted,
+            ranked_subq.c.month,
+        ).where(ranked_subq.c.rn == 1)
+    )
+    budgeted_this_month: dict[int, int] = {}
+    inherited_budgeted: dict[int, int] = {}
+    for row in alloc_result.all():
+        env_id, budgeted, alloc_month = row
+        if alloc_month == month:
+            budgeted_this_month[env_id] = budgeted
+        elif env_id not in rollover_ids:
+            # Non-rollover envelope with no current allocation → inherit prior month
+            inherited_budgeted[env_id] = budgeted
+
+    # Effective budgeted = inherited (from prior month) OR explicit (this month).
+    # Actual allocations always take precedence over inherited ones.
+    effective_budgeted: dict[int, int] = {**inherited_budgeted, **budgeted_this_month}
 
     # 3. Activity this month per category (signed amounts, virtual included)
     #    Only for transactions WITHOUT a direct envelope_id (fallback path)
@@ -189,14 +224,9 @@ async def get_month_budget_view(
     )
     income: int = income_row.scalar_one()
 
-    # 7. Total budgeted this month (for to_be_budgeted)
-    total_budgeted_row = await db.execute(
-        select(func.coalesce(func.sum(BudgetAllocation.budgeted), 0)).where(
-            BudgetAllocation.envelope_id.in_(env_ids),
-            BudgetAllocation.month == month,
-        )
-    )
-    total_budgeted: int = total_budgeted_row.scalar_one()
+    # 7. Total effective budgeted this month (actual + inherited) for to_be_budgeted.
+    #    Inherited allocations count as committed income just like explicit ones.
+    total_budgeted: int = sum(effective_budgeted.values())
 
     # Build envelope lines
     # Count all transactions per envelope for the month.
@@ -234,8 +264,9 @@ async def get_month_budget_view(
 
     envelope_lines = []
     for env in envelopes:
-        b = budgeted_this_month.get(env.id, 0)
+        b = effective_budgeted.get(env.id, 0)
         a = int(activity_this_month.get(env.id, 0))
+        is_inherited = env.id in inherited_budgeted
         if env.rollover:
             available = int(cum_budgeted.get(env.id, 0)) + int(
                 cum_activity.get(env.id, 0)
@@ -264,6 +295,7 @@ async def get_month_budget_view(
                 activity=a,
                 available=available,
                 expense_count=expense_counts.get(env.id, 0),
+                is_budget_inherited=is_inherited,
             )
         )
 

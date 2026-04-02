@@ -556,22 +556,29 @@ Entry point: `services/budget.py` → `get_budget_month(session, user_id, month)
 ```
 For each envelope:
   budgeted  = BudgetAllocation.budgeted WHERE envelope_id = X AND month = target_month
-              (0 if no allocation)
+              OR, if rollover=False and no allocation exists for target_month:
+              BudgetAllocation.budgeted WHERE month = MAX(month < target_month)
+              (sticky budget — inherits most recent prior allocation; 0 if no history)
   activity  = SUM(Transaction.amount) WHERE category_id IN envelope.category_ids
               AND month(date) = target_month           ← includes is_virtual=True
 
   IF envelope.rollover:
     available = SUM(budgeted_m - activity_m) over all months m ≤ target_month
   ELSE:
-    available = budgeted + activity  (current month only)
+    available = budgeted + activity  (current month only; uses sticky budget)
 ```
+
+The `EnvelopeLineRead` schema includes `is_budget_inherited: bool` to signal when the
+displayed `budgeted` was inherited from a previous month rather than explicitly set for
+the current month. The UI renders inherited values in italics with a `↩` indicator.
 
 ### Top-Level Calculation
 
 ```
 income          = SUM(amount) WHERE amount > 0 AND month = target_month
-total_budgeted  = SUM(BudgetAllocation.budgeted) WHERE month = target_month
-to_be_budgeted  = income - total_budgeted
+effective_budgeted = actual allocations this month
+                   + inherited allocations (sticky, for rollover=False without current alloc)
+to_be_budgeted  = income - SUM(effective_budgeted)
 ```
 
 **Key invariant**: `is_virtual=True` transactions affect `activity` (and `available`) but are excluded from real account balance calculations.

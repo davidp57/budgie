@@ -556,22 +556,29 @@ Point d'entrée : `services/budget.py` → `get_budget_month(session, user_id, m
 ```
 Pour chaque enveloppe :
   budgeted  = BudgetAllocation.budgeted WHERE envelope_id = X AND month = mois_cible
-              (0 si aucune allocation)
+              OU, si rollover=False et aucune allocation pour le mois courant :
+              BudgetAllocation.budgeted WHERE month = MAX(month < mois_cible)
+              (budget collé — hérite de l’allocation la plus récente ; 0 si aucun historique)
   activity  = SUM(Transaction.amount) WHERE category_id IN envelope.category_ids
               AND month(date) = mois_cible           ← inclut is_virtual=True
 
   SI envelope.rollover :
     available = SUM(budgeted_m - activity_m) sur tous les mois m ≤ mois_cible
   SINON :
-    available = budgeted + activity  (mois en cours uniquement)
+    available = budgeted + activity  (mois en cours uniquement ; utilise le budget collé)
 ```
+
+Le schéma `EnvelopeLineRead` inclut `is_budget_inherited: bool` pour signaler quand le
+`budgeted` affiché a été hérité d’un mois précédent plutôt qu’explicitement défini
+pour le mois courant. L’UI affiche les valeurs héritées en italique avec un indicateur `↩`.
 
 ### Calcul global
 
 ```
-income          = SUM(amount) WHERE amount > 0 AND month = mois_cible
-total_budgeted  = SUM(BudgetAllocation.budgeted) WHERE month = mois_cible
-to_be_budgeted  = income - total_budgeted
+income             = SUM(amount) WHERE amount > 0 AND month = mois_cible
+effective_budgeted = allocations explicites du mois
+                   + allocations héritées (collées, pour rollover=False sans allocation courante)
+to_be_budgeted     = income - SUM(effective_budgeted)
 ```
 
 **Invariant** : les transactions `is_virtual=True` affectent `activity` (et `available`) mais sont exclues des soldes de comptes réels.
