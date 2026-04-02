@@ -92,6 +92,9 @@ def begin_registration(
     )
     _set_challenge(user_id, options.challenge)
     result: dict[str, object] = json.loads(webauthn.options_to_json(options))
+    # Request the PRF extension so 1Password and compatible authenticators
+    # can provide a deterministic key for client-side passphrase wrapping.
+    result["extensions"] = {"prf": {}}
     return result
 
 
