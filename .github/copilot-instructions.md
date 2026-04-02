@@ -125,8 +125,8 @@ When the user asks to commit, follow these steps **in order** before creating th
 
 1. **Tests** — verify existing tests still pass; add or update tests for all new/changed behavior.
 2. **Quality checks** — run all checks and fix all issues before proceeding:
-   - Backend: `poetry run ruff check .`, `poetry run mypy budgie/`, `poetry run pytest`
-   - Frontend: `cd frontend && npx vue-tsc --noEmit -p tsconfig.app.json`, `npx eslint src/`, `npx vitest run`
+   - Backend: `poetry run ruff check .`, `poetry run ruff format --check .`, `poetry run mypy budgie/`, `poetry run pytest`
+   - Frontend: `cd frontend && npx vue-tsc --noEmit -p tsconfig.app.json`, `cd frontend && npx vue-tsc --noEmit` (CI-exact, no `-p`), `npx eslint src/`, `npx vitest run`
 3. **Documentation** — verify and update all relevant docs:
    - `docs/en/` and `docs/fr/` user/developer guides — update if the change affects user-facing behavior or architecture.
    - Docstrings — update if public API signatures or behavior changed.

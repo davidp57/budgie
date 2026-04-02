@@ -4,8 +4,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import set_committed_value
 
-from budgie.api.deps import CurrentUser, DBSession
+from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.models.transaction import Transaction
 from budgie.schemas.budget import MONTH_PATTERN
 from budgie.schemas.transaction import (
@@ -15,6 +16,7 @@ from budgie.schemas.transaction import (
     TransactionRead,
     TransactionUpdate,
 )
+from budgie.services.crypto import decrypt_str
 from budgie.services.transaction import (
     count_unassigned_expenses,
     create_transaction,
@@ -33,6 +35,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 async def list_planned_unlinked(
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> list[TransactionRead]:
     """List all unlinked (pending) planned transactions for the user.
 
@@ -42,11 +45,12 @@ async def list_planned_unlinked(
     Args:
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
 
     Returns:
         List of pending planned transaction data.
     """
-    txns = await get_planned_unlinked(db, current_user.id)
+    txns = await get_planned_unlinked(db, current_user.id, session_key=session_key)
     return [TransactionRead.model_validate(t) for t in txns]
 
 
@@ -55,6 +59,7 @@ async def match_planned_transaction(
     schema: PlannedMatchRequest,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> TransactionRead:
     """Link a real transaction to a planned one, marking the planned as reconciled.
 
@@ -62,6 +67,7 @@ async def match_planned_transaction(
         schema: Match request with real and planned transaction IDs.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         Updated real transaction data.
@@ -70,7 +76,9 @@ async def match_planned_transaction(
         HTTPException: 404 if either transaction is not found.
         HTTPException: 400 if the planned transaction ID is invalid.
     """
-    real_txn = await get_transaction(db, schema.real_transaction_id, current_user.id)
+    real_txn = await get_transaction(
+        db, schema.real_transaction_id, current_user.id, session_key=session_key
+    )
     if real_txn is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -91,6 +99,7 @@ async def match_planned_transaction(
 async def list_transactions(
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
     account_id: int | None = None,
     transaction_status: str | None = None,
     month: Annotated[str | None, Query(pattern=MONTH_PATTERN)] = None,
@@ -105,6 +114,7 @@ async def list_transactions(
     Args:
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
         account_id: Optional account filter.
         transaction_status: Optional filter by status (planned/real/reconciled).
         month: Optional YYYY-MM month filter.
@@ -130,16 +140,20 @@ async def list_transactions(
         expenses_only=expenses_only,
         limit=limit,
         offset=offset,
+        session_key=session_key,
     )
 
-    # Batch-load linked bank transactions to avoid N+1 queries
+    # Batch-load linked bank transactions to avoid N+1 queries; decrypt their memos too.
     linked_ids = [t.reconciled_with_id for t in txns if t.reconciled_with_id]
     linked_map: dict[int, Transaction] = {}
     if linked_ids:
         result = await db.execute(
             select(Transaction).where(Transaction.id.in_(linked_ids))
         )
-        linked_map = {t.id: t for t in result.scalars()}
+        linked_txns = list(result.scalars())
+        for lt in linked_txns:
+            set_committed_value(lt, "memo", decrypt_str(lt.memo, session_key))
+        linked_map = {lt.id: lt for lt in linked_txns}
 
     reads: list[TransactionRead] = []
     for t in txns:
@@ -157,6 +171,7 @@ async def create_transaction_endpoint(
     schema: TransactionCreate,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> TransactionRead:
     """Create a new transaction.
 
@@ -164,12 +179,15 @@ async def create_transaction_endpoint(
         schema: Transaction creation data.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         Created transaction data.
     """
     try:
-        txn = await create_transaction(db, schema, current_user.id)
+        txn = await create_transaction(
+            db, schema, current_user.id, session_key=session_key
+        )
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
@@ -207,6 +225,7 @@ async def get_transaction_endpoint(
     transaction_id: int,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> TransactionRead:
     """Get a single transaction by ID.
 
@@ -214,6 +233,7 @@ async def get_transaction_endpoint(
         transaction_id: Transaction primary key.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         Transaction data.
@@ -221,7 +241,9 @@ async def get_transaction_endpoint(
     Raises:
         HTTPException: 404 if not found.
     """
-    txn = await get_transaction(db, transaction_id, current_user.id)
+    txn = await get_transaction(
+        db, transaction_id, current_user.id, session_key=session_key
+    )
     if txn is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found"
@@ -236,6 +258,7 @@ async def update_transaction_endpoint(
     schema: TransactionUpdate,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> TransactionRead:
     """Partially update a transaction.
 
@@ -244,19 +267,16 @@ async def update_transaction_endpoint(
         schema: Partial update data.
         db: Async database session.
         current_user: JWT-authenticated user.
-
-    Returns:
-        Updated transaction data.
-
-    Raises:
-        HTTPException: 404 if not found.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
     """
-    txn = await get_transaction(db, transaction_id, current_user.id)
+    txn = await get_transaction(
+        db, transaction_id, current_user.id, session_key=session_key
+    )
     if txn is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found"
         )
-    updated = await update_transaction(db, txn, schema)
+    updated = await update_transaction(db, txn, schema, session_key=session_key)
     return TransactionRead.model_validate(updated)
 
 
@@ -265,6 +285,7 @@ async def delete_transaction_endpoint(
     transaction_id: int,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> None:
     """Delete a transaction.
 
@@ -272,11 +293,14 @@ async def delete_transaction_endpoint(
         transaction_id: Transaction primary key.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Raises:
         HTTPException: 404 if not found.
     """
-    txn = await get_transaction(db, transaction_id, current_user.id)
+    txn = await get_transaction(
+        db, transaction_id, current_user.id, session_key=session_key
+    )
     if txn is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found"

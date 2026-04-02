@@ -556,22 +556,29 @@ Point d'entrée : `services/budget.py` → `get_budget_month(session, user_id, m
 ```
 Pour chaque enveloppe :
   budgeted  = BudgetAllocation.budgeted WHERE envelope_id = X AND month = mois_cible
-              (0 si aucune allocation)
+              OU, si rollover=False et aucune allocation pour le mois courant :
+              BudgetAllocation.budgeted WHERE month = MAX(month < mois_cible)
+              (budget collé — hérite de l’allocation la plus récente ; 0 si aucun historique)
   activity  = SUM(Transaction.amount) WHERE category_id IN envelope.category_ids
               AND month(date) = mois_cible           ← inclut is_virtual=True
 
   SI envelope.rollover :
     available = SUM(budgeted_m - activity_m) sur tous les mois m ≤ mois_cible
   SINON :
-    available = budgeted + activity  (mois en cours uniquement)
+    available = budgeted + activity  (mois en cours uniquement ; utilise le budget collé)
 ```
+
+Le schéma `EnvelopeLineRead` inclut `is_budget_inherited: bool` pour signaler quand le
+`budgeted` affiché a été hérité d’un mois précédent plutôt qu’explicitement défini
+pour le mois courant. L’UI affiche les valeurs héritées en italique avec un indicateur `↩`.
 
 ### Calcul global
 
 ```
-income          = SUM(amount) WHERE amount > 0 AND month = mois_cible
-total_budgeted  = SUM(BudgetAllocation.budgeted) WHERE month = mois_cible
-to_be_budgeted  = income - total_budgeted
+income             = SUM(amount) WHERE amount > 0 AND month = mois_cible
+effective_budgeted = allocations explicites du mois
+                   + allocations héritées (collées, pour rollover=False sans allocation courante)
+to_be_budgeted     = income - SUM(effective_budgeted)
 ```
 
 **Invariant** : les transactions `is_virtual=True` affectent `activity` (et `available`) mais sont exclues des soldes de comptes réels.
@@ -961,7 +968,8 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | `encryption_salt` | `bytes` | Sel Argon2 (16 octets) |
 | `challenge_blob` | `str` | base64(nonce + texte chiffré + tag) — pour la vérification de la clé |
 | `argon2_params` | `str` | JSON : `{time_cost, memory_cost, parallelism}` |
-| `is_encrypted` | `bool` | Indique si les données ont été migrées au format chiffré |
+| `is_encrypted` | `bool` | Indique si le chiffrement a été *configuré* pour le compte (passphrase définie) |
+| `fields_encrypted` | `bool` | Indique si les données en base (mémos, noms de bénéficiaires) sont réellement chiffrées |
 
 #### Nouvelle table `webauthn_credentials`
 
@@ -1017,20 +1025,20 @@ Une fois la passphrase validée, le serveur :
 1. Lit toutes les données de l'utilisateur (en clair, déjà en RAM).
 2. Chiffre chaque champ avec la nouvelle clé.
 3. Enregistre tout dans une **transaction SQLite unique** — rollback en cas d'erreur.
-4. Met `is_encrypted = True`.
+4. Met `fields_encrypted = True` (et `is_encrypted = True` si ce n'était pas encore le cas).
 
 #### Code de transition
-Pendant le déploiement progressif, la couche service gère les deux états :
+Pendant le déploiement progressif, la couche service gère les deux états via le fallback de déchiffrement :
 
 ```python
-# Dans les fonctions de service, après chargement d'un objet :
-if user.is_encrypted:
-    name = crypto.decrypt(account.name, session_key)
-else:
-    name = account.name  # fallback texte clair
+# crypto.decrypt_str retourne la valeur brute si le déchiffrement échoue,
+# gérant ainsi de façon transparente les lignes pas encore migrées.
+memo = crypto.decrypt_str(txn.memo, session_key)
 ```
 
-Ce garde `if user.is_encrypted` peut être supprimé une fois tous les utilisateurs migrés.
+Le flag `fields_encrypted` permet à `/unlock` de détecter les comptes pour lesquels `is_encrypted=True`
+a été écrit par une ancienne version du serveur qui n'avait jamais chiffré les données en base, et
+de déclencher la migration de façon transparente au prochain déverrouillage.
 
 #### Passkeys optionnelles
 Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'authentifier avec mot de passe + passphrase. Passkeys et PIN sont uniquement des couches de confort.

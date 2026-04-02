@@ -10,6 +10,7 @@ export interface LoginResponse {
   token_type: string
   needs_encryption_setup: boolean
   is_encrypted: boolean
+  username?: string
 }
 
 export interface WebAuthnCredential {
@@ -20,6 +21,7 @@ export interface WebAuthnCredential {
 
 export interface WebAuthnOptions {
   options: Record<string, unknown>
+  challenge_token?: string
 }
 
 // ── Accounts ─────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ export interface EnvelopeLine {
   activity: number // centimes
   available: number // centimes
   expense_count: number
+  is_budget_inherited: boolean // true if budgeted comes from previous month (no explicit allocation)
 }
 
 export interface MonthBudget {

@@ -556,22 +556,29 @@ Entry point: `services/budget.py` → `get_budget_month(session, user_id, month)
 ```
 For each envelope:
   budgeted  = BudgetAllocation.budgeted WHERE envelope_id = X AND month = target_month
-              (0 if no allocation)
+              OR, if rollover=False and no allocation exists for target_month:
+              BudgetAllocation.budgeted WHERE month = MAX(month < target_month)
+              (sticky budget — inherits most recent prior allocation; 0 if no history)
   activity  = SUM(Transaction.amount) WHERE category_id IN envelope.category_ids
               AND month(date) = target_month           ← includes is_virtual=True
 
   IF envelope.rollover:
     available = SUM(budgeted_m - activity_m) over all months m ≤ target_month
   ELSE:
-    available = budgeted + activity  (current month only)
+    available = budgeted + activity  (current month only; uses sticky budget)
 ```
+
+The `EnvelopeLineRead` schema includes `is_budget_inherited: bool` to signal when the
+displayed `budgeted` was inherited from a previous month rather than explicitly set for
+the current month. The UI renders inherited values in italics with a `↩` indicator.
 
 ### Top-Level Calculation
 
 ```
 income          = SUM(amount) WHERE amount > 0 AND month = target_month
-total_budgeted  = SUM(BudgetAllocation.budgeted) WHERE month = target_month
-to_be_budgeted  = income - total_budgeted
+effective_budgeted = actual allocations this month
+                   + inherited allocations (sticky, for rollover=False without current alloc)
+to_be_budgeted  = income - SUM(effective_budgeted)
 ```
 
 **Key invariant**: `is_virtual=True` transactions affect `activity` (and `available`) but are excluded from real account balance calculations.
@@ -961,7 +968,8 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | `encryption_salt` | `bytes` | Argon2 salt (16 bytes) |
 | `challenge_blob` | `str` | base64(nonce + ciphertext + tag) — used for key verification |
 | `argon2_params` | `str` | JSON: `{time_cost, memory_cost, parallelism}` |
-| `is_encrypted` | `bool` | Whether data has been migrated to encrypted format |
+| `is_encrypted` | `bool` | Whether encryption has been *configured* for the account (passphrase set) |
+| `fields_encrypted` | `bool` | Whether field-level data (memos, payee names) has actually been encrypted in the DB |
 
 #### New table `webauthn_credentials`
 
@@ -1017,20 +1025,20 @@ Once the passphrase is validated, the server:
 1. Reads all user data (plaintext, already in RAM).
 2. Encrypts every field with the new key.
 3. Writes everything in a **single SQLite transaction** — rollback on any error.
-4. Sets `is_encrypted = True`.
+4. Sets `fields_encrypted = True` (and `is_encrypted = True` if not already set).
 
 #### Transition code
-During the progressive rollout, the service layer must handle both states:
+During the progressive rollout, the service layer handles both states by catching decryption failures:
 
 ```python
-# In service functions, after loading a record:
-if user.is_encrypted:
-    name = crypto.decrypt(account.name, session_key)
-else:
-    name = account.name  # plaintext fallback
+# crypto.decrypt_str falls back to raw value when decryption fails,
+# transparently handling rows that were not yet migrated.
+memo = crypto.decrypt_str(txn.memo, session_key)
 ```
 
-This `if user.is_encrypted` guard can be removed once all users have migrated.
+The `fields_encrypted` flag allows `/unlock` to detect accounts where `is_encrypted=True`
+was set by an older server that never ran the actual field encryption, and transparently
+trigger the migration at the next unlock.
 
 #### Passkeys are optional
 Passkeys are never required. A migrated user can always authenticate with password + passphrase. Passkeys and PIN are convenience layers only.

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from budgie.importers.base import ImportedTransaction
 from budgie.models.account import Account
 from budgie.models.transaction import Transaction
+from budgie.services.crypto import encrypt_str
 
 
 class ImportResult(BaseModel):
@@ -29,6 +30,7 @@ async def confirm_import(
     account_id: int,
     user_id: int,
     transactions: list[ImportedTransaction],
+    session_key: bytes | None = None,
 ) -> ImportResult:
     """Persist a list of parsed transactions, skipping duplicates.
 
@@ -47,6 +49,7 @@ async def confirm_import(
         account_id: Database ID of the target account.
         user_id: Owner user ID (ownership check).
         transactions: Parsed transactions to import.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         An :class:`ImportResult` with ``imported`` and ``duplicates``
@@ -78,7 +81,7 @@ async def confirm_import(
             account_id=account_id,
             date=txn.date,
             amount=txn.amount,
-            memo=txn.description,
+            memo=encrypt_str(txn.description, session_key),
             import_hash=txn.import_hash,
             status="real",
         )

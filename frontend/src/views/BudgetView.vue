@@ -574,7 +574,12 @@ onMounted(async () => {
                 class="text-[42px] leading-none font-extrabold tabular-nums tracking-tight drop-shadow-lg cursor-pointer"
                 @click.stop="startEditAmount(line)"
               >
-                {{ formatAmount(line.budgeted) }}
+                {{ formatAmount(line.budgeted) }}<span
+                  v-if="line.is_budget_inherited"
+                  class="text-lg ml-1 opacity-70"
+                  title="Budget hérité du mois précédent — cliquez pour définir le budget de ce mois"
+                  aria-label="Budget hérité du mois précédent"
+                >↩</span>
               </span>
               <!-- Goal: inline-editable, shown bigger for cumulative envelopes -->
               <div v-if="line.envelope_type === 'cumulative'" class="mt-1">

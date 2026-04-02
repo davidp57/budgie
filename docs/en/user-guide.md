@@ -513,7 +513,27 @@ volumes:
    - `WEBAUTHN_RP_ID` = your domain without scheme or port (e.g. `budgie.your-domain.com`) — required for Passkeys to work
    - `WEBAUTHN_ORIGIN` = full frontend URL (e.g. `https://budgie.your-domain.com`) — must match exactly what the browser shows
 
+   **Alternative — embed values directly in the YAML** (simpler if you don't use the Portainer environment variables panel):
+   Replace the `${...}` placeholders with the actual values directly in the stack YAML:
+   ```yaml
+   environment:
+     - SECRET_KEY=a3f7b9c1d4e8...   # your generated key
+     - DATABASE_URL=sqlite+aiosqlite:////app/data/budgie.db
+     - UPLOAD_DIR=/app/data/uploads
+     - PUID=1026
+     - PGID=100
+     - CORS_ORIGINS=https://dpierron.synology.me:8443
+     - WEBAUTHN_RP_ID=dpierron.synology.me
+     - WEBAUTHN_ORIGIN=https://dpierron.synology.me:8443
+   ```
+   > ⚠️ When hardcoding values in the YAML, be careful not to share or commit the stack definition — it will contain your `SECRET_KEY`.
+
 5. **Deploy the stack**
+
+> **Passkey error: "The requested RPID did not match the origin"** — This error appears when `WEBAUTHN_RP_ID` doesn't match the domain used to access the app. Make sure:
+> - `WEBAUTHN_RP_ID` = the bare domain, **no** scheme, **no** port: `dpierron.synology.me`
+> - `WEBAUTHN_ORIGIN` = the full URL as shown in the browser address bar: `https://dpierron.synology.me:8443`
+> After fixing the values, redeploy or restart the container.
 
 > **Important notes**:
 > - **`image:` not `build:`** — Portainer cannot build images from source. The image is automatically published to GHCR by CI.

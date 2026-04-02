@@ -202,3 +202,111 @@ async def test_authenticate_begin_returns_options(
     data = resp.json()
     assert "options" in data
     assert "challenge" in data["options"]
+    # Username-based flow: no challenge_token
+    assert data.get("challenge_token") is None
+
+
+# ── Authentication begin — discoverable flow ──────────────────────────────────
+
+
+async def test_authenticate_begin_discoverable_no_username(client: AsyncClient) -> None:
+    """Omitting username triggers the discoverable flow."""
+    resp = await client.post(
+        "/api/auth/webauthn/authenticate/begin",
+        json={},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "options" in data
+    assert "challenge" in data["options"]
+    # Discoverable flow: empty allowCredentials and a challenge_token
+    assert data["challenge_token"] is not None
+    assert data["options"].get("allowCredentials") == []
+
+
+async def test_authenticate_begin_discoverable_empty_username(
+    client: AsyncClient,
+) -> None:
+    """Explicitly passing null username also triggers discoverable flow."""
+    resp = await client.post(
+        "/api/auth/webauthn/authenticate/begin",
+        json={"username": None},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["challenge_token"] is not None
+
+
+# ── Authentication complete — discoverable flow (mocked) ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_authenticate_complete_discoverable(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Full discoverable auth flow using mocked WebAuthn verification."""
+    await _register_alice(client)
+
+    user = await get_user_by_username(db_session, "alice")
+    assert user is not None
+    cred = await _make_credential(db_session, user.id)
+
+    # Begin — discoverable flow to obtain the challenge_token
+    begin_resp = await client.post(
+        "/api/auth/webauthn/authenticate/begin",
+        json={},
+    )
+    assert begin_resp.status_code == 200
+    challenge_token = begin_resp.json()["challenge_token"]
+    assert challenge_token is not None
+
+    # Encode the fake credential_id as base64url (no padding) to match
+    # what navigator.credentials.get() would return for rawId
+    import base64
+
+    raw_id_b64 = base64.urlsafe_b64encode(cred.credential_id).rstrip(b"=").decode()
+
+    fake_verified = MagicMock()
+    fake_verified.new_sign_count = 1
+
+    with patch(
+        "budgie.services.webauthn.webauthn.verify_authentication_response",
+        return_value=fake_verified,
+    ):
+        resp = await client.post(
+            "/api/auth/webauthn/authenticate/complete",
+            json={
+                "credential": {"rawId": raw_id_b64, "type": "public-key"},
+                "challenge_token": challenge_token,
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    # Backend returns the username in discoverable flow
+    assert data["username"] == "alice"
+
+
+async def test_authenticate_complete_discoverable_bad_token(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """An unknown challenge_token returns 401."""
+    await _register_alice(client)
+
+    user = await get_user_by_username(db_session, "alice")
+    assert user is not None
+    cred = await _make_credential(db_session, user.id)
+
+    import base64
+
+    raw_id_b64 = base64.urlsafe_b64encode(cred.credential_id).rstrip(b"=").decode()
+
+    resp = await client.post(
+        "/api/auth/webauthn/authenticate/complete",
+        json={
+            "credential": {"rawId": raw_id_b64, "type": "public-key"},
+            "challenge_token": "invalid-token-xyz",
+        },
+    )
+    assert resp.status_code == 401

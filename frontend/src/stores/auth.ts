@@ -25,8 +25,14 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.getItem('needs_encryption_setup') === 'true',
   )
   const isEncrypted = ref<boolean>(localStorage.getItem('is_encrypted') === 'true')
-  /** Passphrase held in memory for the session only (never persisted). */
+/** Passphrase held in memory for the session only (never persisted). */
   const sessionPassphrase = ref<string | null>(null)
+  /**
+   * PRF output from the latest passkey assertion (memory only, never persisted).
+   * Used by UnlockEncryptionView to auto-unlock encryption immediately after a
+   * passkey login without asking for a separate PIN.
+   */
+  const prfOutput = ref<ArrayBuffer | null>(null)
   /** Registered passkeys for the current user (loaded on demand). */
   const webauthnCredentials = ref<WebAuthnCredential[]>([])
 
@@ -73,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     needsEncryptionSetup.value = false
     isEncrypted.value = false
     sessionPassphrase.value = null
+    prfOutput.value = null
     webauthnCredentials.value = []
     localStorage.removeItem('access_token')
     localStorage.removeItem('username')
@@ -105,31 +112,44 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Start passkey authentication for `user`; returns challenge options
-   * to pass to `navigator.credentials.get()`.
+   * Start passkey authentication.  When ``user`` is provided (username-based
+   * flow), returns only the options.  When omitted (discoverable flow),
+   * also returns the ``challengeToken`` that must be sent back at complete.
    */
-  async function webauthnAuthBegin(user: string): Promise<Record<string, unknown>> {
-    const { options } = await apiWebauthnAuthBegin(user)
-    return options
+  async function webauthnAuthBegin(
+    user?: string,
+  ): Promise<{ options: Record<string, unknown>; challengeToken?: string }> {
+    const resp = await apiWebauthnAuthBegin(user)
+    return { options: resp.options, challengeToken: resp.challenge_token }
   }
 
   /**
    * Complete passkey authentication after `navigator.credentials.get()`.
    * Stores the JWT exactly like a password login.
+   *
+   * In the discoverable flow ``user`` is unknown upfront; the backend returns
+   * the username inside the token response.
+   *
+   * When ``prf`` is provided (PRF output from the passkey assertion), it is
+   * stored in memory so UnlockEncryptionView can auto-decrypt the passphrase.
    */
   async function webauthnAuthComplete(
-    user: string,
     credential: Record<string, unknown>,
+    user?: string,
+    challengeToken?: string,
+    prf?: ArrayBuffer | null,
   ): Promise<void> {
-    const response = await apiWebauthnAuthComplete(credential)
+    const response = await apiWebauthnAuthComplete(credential, challengeToken)
+    const resolvedUsername = user ?? response.username ?? ''
     token.value = response.access_token
-    username.value = user
+    username.value = resolvedUsername
     needsEncryptionSetup.value = response.needs_encryption_setup
     isEncrypted.value = response.is_encrypted
     sessionPassphrase.value = null
+    prfOutput.value = prf ?? null
     sessionStorage.removeItem('encryption_unlocked')
     localStorage.setItem('access_token', response.access_token)
-    localStorage.setItem('username', user)
+    localStorage.setItem('username', resolvedUsername)
     localStorage.setItem('needs_encryption_setup', String(response.needs_encryption_setup))
     localStorage.setItem('is_encrypted', String(response.is_encrypted))
   }
@@ -151,6 +171,7 @@ export const useAuthStore = defineStore('auth', () => {
     needsEncryptionSetup,
     isEncrypted,
     sessionPassphrase,
+    prfOutput,
     webauthnCredentials,
     isAuthenticated,
     isUnlocked,

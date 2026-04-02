@@ -3,14 +3,17 @@
 Wraps the ``webauthn`` library to handle credential registration and
 authentication.  The relying-party origin and ID are loaded from settings.
 
-State (pending challenges) is held in-process RAM keyed by ``user_id``.
-For a single-user NAS deployment this is acceptable; a Redis cache would
-be needed for multi-process setups.
+State (pending challenges) is held in-process RAM keyed by ``user_id`` for
+the username-based flow, and by an opaque token for the discoverable
+(usernameless) flow.  For a single-user NAS deployment this is acceptable;
+a Redis cache would be needed for multi-process setups.
 """
 
 import base64
 import json
+import secrets
 import threading
+import time
 
 import webauthn
 from webauthn.helpers.structs import (
@@ -22,20 +25,64 @@ from webauthn.helpers.structs import (
 
 from budgie.config import settings
 
-# ── In-process challenge cache (user_id → bytes) ──────────────────────────
+# ── In-process challenge caches ───────────────────────────────────────────
 
-_challenges: dict[int, bytes] = {}
+# Challenges expire after 5 minutes — long enough for any legitimate flow,
+# short enough to bound memory usage from abandoned sessions.
+_CHALLENGE_TTL_SECONDS = 300
+
+# Username-based flow: keyed by user_id → (challenge_bytes, expiry_timestamp)
+_challenges: dict[int, tuple[bytes, float]] = {}
 _challenge_lock = threading.Lock()
+
+# Discoverable flow: keyed by opaque token → (challenge_bytes, expiry_timestamp)
+_anon_challenges: dict[str, tuple[bytes, float]] = {}
+_anon_lock = threading.Lock()
+
+
+def _purge_expired_challenges() -> None:
+    """Remove stale entries from both challenge caches (called on every write)."""
+    now = time.monotonic()
+    with _challenge_lock:
+        expired_ids = [uid for uid, (_, exp) in _challenges.items() if exp < now]
+        for uid in expired_ids:
+            del _challenges[uid]
+    with _anon_lock:
+        expired_tokens = [
+            tok for tok, (_, exp) in _anon_challenges.items() if exp < now
+        ]
+        for tok in expired_tokens:
+            del _anon_challenges[tok]
 
 
 def _set_challenge(user_id: int, challenge: bytes) -> None:
+    _purge_expired_challenges()
     with _challenge_lock:
-        _challenges[user_id] = challenge
+        _challenges[user_id] = (challenge, time.monotonic() + _CHALLENGE_TTL_SECONDS)
 
 
 def _pop_challenge(user_id: int) -> bytes | None:
     with _challenge_lock:
-        return _challenges.pop(user_id, None)
+        entry = _challenges.pop(user_id, None)
+    if entry is None:
+        return None
+    challenge, expiry = entry
+    return challenge if time.monotonic() < expiry else None
+
+
+def _set_anon_challenge(token: str, challenge: bytes) -> None:
+    _purge_expired_challenges()
+    with _anon_lock:
+        _anon_challenges[token] = (challenge, time.monotonic() + _CHALLENGE_TTL_SECONDS)
+
+
+def _pop_anon_challenge(token: str) -> bytes | None:
+    with _anon_lock:
+        entry = _anon_challenges.pop(token, None)
+    if entry is None:
+        return None
+    challenge, expiry = entry
+    return challenge if time.monotonic() < expiry else None
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -75,6 +122,9 @@ def begin_registration(
     )
     _set_challenge(user_id, options.challenge)
     result: dict[str, object] = json.loads(webauthn.options_to_json(options))
+    # Request the PRF extension so 1Password and compatible authenticators
+    # can provide a deterministic key for client-side passphrase wrapping.
+    result["extensions"] = {"prf": {}}
     return result
 
 
@@ -162,6 +212,74 @@ def complete_authentication(
     challenge = _pop_challenge(user_id)
     if challenge is None:
         raise ValueError("No pending authentication challenge for this user.")
+
+    verified = webauthn.verify_authentication_response(
+        credential=json.dumps(credential),
+        expected_challenge=challenge,
+        expected_rp_id=settings.webauthn_rp_id,
+        expected_origin=settings.webauthn_origin,
+        credential_public_key=stored_public_key,
+        credential_current_sign_count=stored_sign_count,
+        require_user_verification=False,
+    )
+    new_count: int = verified.new_sign_count
+    return new_count
+
+
+# ── Discoverable (usernameless) authentication ────────────────────────────────
+
+
+def begin_discoverable_authentication() -> tuple[str, dict[str, object]]:
+    """Generate WebAuthn authentication options for the discoverable flow.
+
+    Sends an empty ``allowCredentials`` list so the browser/authenticator
+    presents all passkeys stored for this origin, without requiring the user
+    to type a username first.
+
+    Returns:
+        A tuple ``(challenge_token, options_dict)``.  ``challenge_token`` is an
+        opaque random string that the client must echo back in the complete
+        request so the server can retrieve the matching challenge.
+    """
+    options = webauthn.generate_authentication_options(
+        rp_id=settings.webauthn_rp_id,
+        allow_credentials=[],
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+    token = secrets.token_urlsafe(32)
+    _set_anon_challenge(token, options.challenge)
+    result: dict[str, object] = json.loads(webauthn.options_to_json(options))
+    return token, result
+
+
+def complete_discoverable_authentication(
+    challenge_token: str,
+    user_id: int,
+    credential: dict[str, object],
+    stored_public_key: bytes,
+    stored_sign_count: int,
+) -> int:
+    """Verify a WebAuthn discoverable authentication response.
+
+    Uses the challenge stored by ``begin_discoverable_authentication`` and
+    identified by ``challenge_token``.
+
+    Args:
+        challenge_token: Opaque token from ``begin_discoverable_authentication``.
+        user_id: ID of the user identified by credential lookup.
+        credential: The ``PublicKeyCredential`` assertion JSON from the browser.
+        stored_public_key: The public key bytes stored at registration time.
+        stored_sign_count: The sign counter stored at registration time.
+
+    Returns:
+        The new sign count to persist.
+
+    Raises:
+        ValueError: If the token is unknown/expired or verification fails.
+    """
+    challenge = _pop_anon_challenge(challenge_token)
+    if challenge is None:
+        raise ValueError("Unknown or expired challenge token. Please try again.")
 
     verified = webauthn.verify_authentication_response(
         credential=json.dumps(credential),

@@ -658,6 +658,177 @@ async def test_direct_envelope_tx_not_double_counted(db_session: AsyncSession) -
     assert view.envelopes[0].activity == -5000  # not -10000
 
 
+# ── Tests: sticky budget (rollover=False month-over-month) ────────
+
+
+async def test_budgeted_inherits_previous_month_when_no_current_allocation(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: inherit most recent prior month when no current allocation.
+
+    Sticky budget — the budgeted amount persists until explicitly changed.
+    """
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Groceries", rollover=False)
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=20000)
+    # No allocation for 2026-03
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 20000
+    assert view.envelopes[0].is_budget_inherited is True
+
+
+async def test_budgeted_zero_and_not_inherited_when_no_prior_allocation(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: envelope with zero history shows budgeted=0, not inherited."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    await _make_envelope(db_session, user.id, "New Envelope", rollover=False)
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 0
+    assert view.envelopes[0].is_budget_inherited is False
+
+
+async def test_explicit_allocation_overrides_inherited(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: explicit current-month allocation overrides inherited."""
+    # (takes precedence over any prior-month allocation)
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Bills", rollover=False)
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=20000)
+    await _make_allocation(db_session, env.id, "2026-03", budgeted=15000)  # explicit
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 15000  # explicit, not inherited 20000
+    assert view.envelopes[0].is_budget_inherited is False
+
+
+async def test_available_uses_inherited_budget_plus_current_activity(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: available = inherited_budgeted + current_month_activity."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Groceries", rollover=False)
+    await _link_category(db_session, env.id, cat.id)
+    account = await _make_account(db_session, user.id)
+
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=20000)
+    # No March allocation; spend 5000 in March
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 3, 10), -5000, cat.id
+    )
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 20000
+    assert view.envelopes[0].available == 15000  # 20000 - 5000
+
+
+async def test_available_negative_balance_does_not_carry_for_non_rollover(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: available for new month starts fresh from inherited budget.
+
+    Even if the previous month had a negative balance, it must not bleed
+    into the current month's available.
+    """
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    cat, _ = await _make_category(db_session, user.id)
+    env = await _make_envelope(db_session, user.id, "Bills", rollover=False)
+    await _link_category(db_session, env.id, cat.id)
+    account = await _make_account(db_session, user.id)
+
+    # Feb: budget 100€, spent 120€ → available -20€
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=10000)
+    await _make_transaction(
+        db_session, account.id, datetime.date(2026, 2, 15), -12000, cat.id
+    )
+    # March: no allocation, no activity
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    # available = inherited 10000 + march_activity(0) = 10000
+    # The -20€ deficit from Feb must NOT leak into March
+    assert view.envelopes[0].available == 10000
+
+
+async def test_to_be_budgeted_includes_inherited_allocations(
+    db_session: AsyncSession,
+) -> None:
+    """to_be_budgeted counts inherited allocations, so income is correctly split."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Groceries", rollover=False)
+    account = await _make_account(db_session, user.id)
+
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=20000)
+    # Income in March, no March allocation
+    await _make_transaction(db_session, account.id, datetime.date(2026, 3, 1), 300000)
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    # to_be_budgeted = income(300000) - inherited(20000) = 280000
+    assert view.to_be_budgeted == 280000
+
+
+async def test_sticky_budget_uses_most_recent_prior_month(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=False: when multiple prior allocations exist, use the most recent."""
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Transport", rollover=False)
+    await _make_allocation(db_session, env.id, "2026-01", budgeted=5000)
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=7000)
+    # No allocation for 2026-03
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 7000  # most recent prior month
+
+
+async def test_rollover_true_not_affected_by_sticky_budget(
+    db_session: AsyncSession,
+) -> None:
+    """rollover=True envelopes are not affected by sticky budget logic.
+
+    For rollover envelopes, available is always cumulative; budgeted for the
+    current month is 0 when there is no explicit allocation, and
+    is_budget_inherited is always False.
+    """
+    from budgie.services.budget import get_month_budget_view
+
+    user = await _make_user(db_session)
+    env = await _make_envelope(db_session, user.id, "Savings", rollover=True)
+    await _make_allocation(db_session, env.id, "2026-02", budgeted=10000)
+    # No allocation for 2026-03
+
+    view = await get_month_budget_view(db_session, "2026-03", user.id)
+
+    assert view.envelopes[0].budgeted == 0  # no explicit alloc for Mar
+    assert view.envelopes[0].is_budget_inherited is False
+    # available = cumulative: 10000 (from Feb) + 0 activity = 10000
+    assert view.envelopes[0].available == 10000
+
+
 async def test_rollover_cumulative_with_direct_envelope_id(
     db_session: AsyncSession,
 ) -> None:

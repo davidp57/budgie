@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from budgie.api.deps import CurrentUser, DBSession
+from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.payee import PayeeCreate, PayeeRead, PayeeUpdate
 from budgie.services.payee import (
     create_payee,
@@ -19,17 +19,19 @@ router = APIRouter(prefix="/api/payees", tags=["payees"])
 async def list_payees(
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> list[PayeeRead]:
     """List all payees for the authenticated user.
 
     Args:
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
 
     Returns:
         List of payee data.
     """
-    payees = await get_payees(db, current_user.id)
+    payees = await get_payees(db, current_user.id, session_key=session_key)
     return [PayeeRead.model_validate(p) for p in payees]
 
 
@@ -38,6 +40,7 @@ async def create_payee_endpoint(
     schema: PayeeCreate,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> PayeeRead:
     """Create a new payee.
 
@@ -45,11 +48,12 @@ async def create_payee_endpoint(
         schema: Payee creation data.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for encryption.
 
     Returns:
         Created payee data.
     """
-    payee = await create_payee(db, schema, current_user.id)
+    payee = await create_payee(db, schema, current_user.id, session_key=session_key)
     return PayeeRead.model_validate(payee)
 
 
@@ -58,6 +62,7 @@ async def get_payee_endpoint(
     payee_id: int,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> PayeeRead:
     """Get a single payee by ID.
 
@@ -65,6 +70,7 @@ async def get_payee_endpoint(
         payee_id: Payee primary key.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
 
     Returns:
         Payee data.
@@ -72,7 +78,7 @@ async def get_payee_endpoint(
     Raises:
         HTTPException: 404 if payee not found.
     """
-    payee = await get_payee(db, payee_id, current_user.id)
+    payee = await get_payee(db, payee_id, current_user.id, session_key=session_key)
     if payee is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Payee not found"
@@ -86,6 +92,7 @@ async def update_payee_endpoint(
     schema: PayeeUpdate,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> PayeeRead:
     """Partially update a payee.
 
@@ -94,6 +101,7 @@ async def update_payee_endpoint(
         schema: Partial update data.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for encryption/decryption.
 
     Returns:
         Updated payee data.
@@ -101,12 +109,12 @@ async def update_payee_endpoint(
     Raises:
         HTTPException: 404 if payee not found.
     """
-    payee = await get_payee(db, payee_id, current_user.id)
+    payee = await get_payee(db, payee_id, current_user.id, session_key=session_key)
     if payee is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Payee not found"
         )
-    updated = await update_payee(db, payee, schema)
+    updated = await update_payee(db, payee, schema, session_key=session_key)
     return PayeeRead.model_validate(updated)
 
 
@@ -115,6 +123,7 @@ async def delete_payee_endpoint(
     payee_id: int,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> None:
     """Delete a payee.
 
@@ -122,11 +131,12 @@ async def delete_payee_endpoint(
         payee_id: Payee primary key.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key (used for get check only).
 
     Raises:
         HTTPException: 404 if payee not found.
     """
-    payee = await get_payee(db, payee_id, current_user.id)
+    payee = await get_payee(db, payee_id, current_user.id, session_key=session_key)
     if payee is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Payee not found"

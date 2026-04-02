@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from budgie.api.deps import CurrentUser, DBSession
+from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.categorizer import (
     BatchCategorizeRequest,
     BatchCategorizeResponse,
@@ -18,6 +18,7 @@ async def categorize_batch(
     body: BatchCategorizeRequest,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> BatchCategorizeResponse:
     """Categorize a batch of transactions for the authenticated user.
 
@@ -37,6 +38,7 @@ async def categorize_batch(
         body: Batch request with a list of transactions to categorize.
         db: Async database session.
         current_user: JWT-authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         :class:`~budgie.schemas.categorizer.BatchCategorizeResponse` with
@@ -50,6 +52,7 @@ async def categorize_batch(
             txn.payee_name,
             txn.memo,
             txn.amount,
+            session_key=session_key,
         )
         results.append(result)
     return BatchCategorizeResponse(results=results)
