@@ -19,11 +19,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { createPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
 import { usePinStorage } from '@/composables/usePinStorage'
+import { usePrfStorage } from '@/composables/usePrfStorage'
 import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
 const router = useRouter()
 const pinStorage = usePinStorage()
+const prfStorage = usePrfStorage()
 const { theme, toggle: toggleTheme } = useTheme()
 
 function logout(): void {
@@ -77,6 +79,7 @@ const passkeyError = ref('')
 const passkeyLoading = ref(false)
 const newPasskeyName = ref('')
 const pinHasStored = ref(false)
+const prfHasStored = ref(false)
 
 async function registerPasskey(): Promise<void> {
   passkeyError.value = ''
@@ -108,6 +111,11 @@ async function clearPin(): Promise<void> {
   pinHasStored.value = false
 }
 
+async function clearPrfPassphrase(): Promise<void> {
+  prfStorage.clearPrfPassphrase()
+  prfHasStored.value = false
+}
+
 onMounted(async () => {
   try {
     const prefs = await getPreferences()
@@ -115,6 +123,7 @@ onMounted(async () => {
     await loadAll()
     await auth.loadWebAuthnCredentials()
     pinHasStored.value = await pinStorage.hasStoredPassphrase()
+    prfHasStored.value = prfStorage.hasPrfPassphrase()
   } catch {
     // 401 errors are handled by the client interceptor (redirect to login)
   }
@@ -440,6 +449,21 @@ async function confirmReset(): Promise<void> {
         </template>
         <p v-else class="text-base-content/50 text-sm">
           ⚠️ PIN requires HTTPS. Connect securely to use this feature.
+        </p>
+
+        <!-- Passkey unlock management -->
+        <div class="divider text-xs">Passkey unlock</div>
+        <template v-if="webAuthnSupported && pinAvailable">
+          <div v-if="prfHasStored" class="flex items-center justify-between">
+            <p class="text-sm">Your passphrase is saved on this device and unlocks via passkey.</p>
+            <button class="btn btn-ghost btn-sm text-error" @click="clearPrfPassphrase">Remove</button>
+          </div>
+          <p v-else class="text-base-content/50 text-sm">
+            No passkey unlock set up. Unlock your encryption with your passphrase to be offered this option.
+          </p>
+        </template>
+        <p v-else class="text-base-content/50 text-sm">
+          ⚠️ Passkey unlock requires HTTPS and a compatible browser.
         </p>
       </div>
     </section>

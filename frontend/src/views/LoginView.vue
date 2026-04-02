@@ -68,16 +68,12 @@ async function submit(): Promise<void> {
 }
 
 async function loginWithPasskey(): Promise<void> {
-  if (!username.value) {
-    error.value = 'Enter your username first.'
-    return
-  }
   error.value = ''
   loading.value = true
   try {
-    const options = await auth.webauthnAuthBegin(username.value)
-    const assertion = await getPasskey(options)
-    await auth.webauthnAuthComplete(username.value, assertion)
+    const { options, challengeToken } = await auth.webauthnAuthBegin(username.value || undefined)
+    const { credential, prfOutput } = await getPasskey(options, true)
+    await auth.webauthnAuthComplete(credential, username.value || undefined, challengeToken, prfOutput)
     await router.push('/')
   } catch (err) {
     error.value = extractError(err, 'Passkey authentication failed.')

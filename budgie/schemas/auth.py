@@ -23,12 +23,15 @@ class TokenResponse(BaseModel):
         token_type: Always 'bearer'.
         needs_encryption_setup: True if the user has not yet set up encryption.
         is_encrypted: True if the user has encryption enabled.
+        username: Authenticated username — populated by the WebAuthn discoverable
+            flow where the client may not know the username in advance.
     """
 
     access_token: str
     token_type: str = "bearer"
     needs_encryption_setup: bool = False
     is_encrypted: bool = False
+    username: str | None = None
 
 
 class SetupEncryptionRequest(BaseModel):
@@ -74,19 +77,29 @@ class WebAuthnRegistrationCompleteRequest(BaseModel):
 
 
 class WebAuthnAuthBeginRequest(BaseModel):
-    """Username sent to the server to start a WebAuthn authentication flow.
+    """Request body to start a WebAuthn authentication flow.
 
     Attributes:
-        username: The user's account username.
+        username: The user's account username.  Optional — when omitted, the
+            server initiates a discoverable (usernameless) flow and the
+            authenticator proposes all passkeys stored for this origin.
     """
 
-    username: str
+    username: str | None = None
 
 
 class WebAuthnAuthBeginResponse(BaseModel):
-    """Challenge options returned to the browser to initiate authentication."""
+    """Challenge options returned to the browser to initiate authentication.
+
+    Attributes:
+        options: ``PublicKeyCredentialRequestOptions`` to pass to
+            ``navigator.credentials.get()``.
+        challenge_token: Opaque token — only present in the discoverable flow.
+            The client must echo it back in the ``authenticate/complete`` request.
+    """
 
     options: dict[str, object]
+    challenge_token: str | None = None
 
 
 class WebAuthnAuthCompleteRequest(BaseModel):
@@ -94,9 +107,12 @@ class WebAuthnAuthCompleteRequest(BaseModel):
 
     Attributes:
         credential: The JSON-serialised ``PublicKeyCredential`` assertion.
+        challenge_token: Opaque token from ``authenticate/begin`` — required
+            when the discoverable (usernameless) flow was used.
     """
 
     credential: dict[str, object]
+    challenge_token: str | None = None
 
 
 class WebAuthnCredentialRead(BaseModel):
