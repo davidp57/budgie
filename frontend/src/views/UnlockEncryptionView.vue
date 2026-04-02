@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePinStorage } from '@/composables/usePinStorage'
 import { usePrfStorage } from '@/composables/usePrfStorage'
-import { getPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
+import { getPasskey } from '@/composables/useWebAuthn'
 
 function extractError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
@@ -26,7 +26,7 @@ const prf = usePrfStorage()
  * 'pin'        — PIN entry (localStorage passphrase stored)
  * 'pin-setup'  — offer PIN setup after successful passphrase unlock
  * 'prf'        — tap to unlock with passkey (PRF-wrapped passphrase stored)
- * 'prf-setup'  — offer passkey unlock setup after successful passphrase unlock
+ * 'prf-setup'  — offer passkey unlock setup (only when no prfOutput in store)
  */
 type UnlockMode = 'passphrase' | 'pin' | 'pin-setup' | 'prf' | 'prf-setup'
 const mode = ref<UnlockMode>('passphrase')
@@ -69,10 +69,21 @@ async function submitPassphrase(): Promise<void> {
   loading.value = true
   try {
     await auth.unlock(passphrase.value)
-    // Offer passkey-based unlock first (stronger UX), then PIN, then done
-    if (pinAvailable && !hasPrfStored.value && isWebAuthnSupported()) {
-      mode.value = 'prf-setup'
-    } else if (pinAvailable && !hasPinStored.value) {
+
+    // If we already have a PRF output from the passkey login (in-memory),
+    // save it silently — no second authenticator gesture needed.
+    if (pinAvailable && !hasPrfStored.value && auth.prfOutput) {
+      try {
+        await prf.storePrfPassphrase(auth.prfOutput, passphrase.value)
+      } catch {
+        // Save failed (not HTTPS, etc.) — fall through to PIN setup
+      }
+      await router.push('/')
+      return
+    }
+
+    // Offer PIN setup as fallback when no PRF is available
+    if (pinAvailable && !hasPinStored.value) {
       mode.value = 'pin-setup'
     } else {
       await router.push('/')
@@ -192,8 +203,8 @@ async function submitPrfSetup(): Promise<void> {
     const { options } = await auth.webauthnAuthBegin(auth.username ?? undefined)
     const { prfOutput } = await getPasskey(options, true)
     if (!prfOutput) {
-      error.value =
-        'Your device does not support passkey unlock. Would you like to set up a PIN instead?'
+      // Device does not support PRF — fall back to PIN setup
+      mode.value = 'pin-setup'
       return
     }
     await prf.storePrfPassphrase(prfOutput, passphrase.value)
