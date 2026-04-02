@@ -25,8 +25,7 @@ Les items sont regroupés par priorité et peuvent évoluer.
 - [x] **Dépense rapide sans catégorie** — la saisie rapide lie directement à une enveloppe ; dépenses hors budget saisissables depuis la bannière Budget
 - [x] **Fichiers de contribution & tutoriels** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, tutoriels d'installation et de prise en main (EN + FR)
 - [x] **Chiffrement au repos** — noms de bénéficiaires, mémos et descriptions chiffrés côté serveur avec AES-256-GCM ; données existantes migrées automatiquement au démarrage
-- [x] **Héritage automatique du budget** — les montants budgétés se reportent automatiquement d’un mois à l’autre ; une icône `↩` signale tout montant hérité dans l’interface
-
+- [x] **Héritage automatique du budget** — les montants budgétés se reportent automatiquement d’un mois à l’autre ; une icône `↩` signale tout montant hérité dans l’interface- [x] **Déverrouillage par passkey (PRF)** — la connexion par passkey (Face ID / Touch ID) déverrouille automatiquement le chiffrement de bout en bout via l'extension WebAuthn PRF ; plus de PIN ni de phrase secrète après la première connexion
 ### Vue des dépenses par catégorie
 
 - [ ] Nouvelle vue dédiée affichant les dépenses pointées (rapprochées) par catégorie et par groupe pour un mois sélectionné

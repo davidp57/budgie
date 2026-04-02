@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-04-02
+
+### Added
+
+- **Passkey unlock (PRF)** — logging in with a passkey (Face ID / Touch ID via 1Password or a compatible authenticator) now automatically unlocks end-to-end encryption without any PIN or passphrase prompt; the encryption passphrase is wrapped locally using the WebAuthn PRF extension and never sent to the server
+
+### Fixed
+
+- **PRF extension requested at registration** — `extensions: {prf: {}}` is now included in WebAuthn registration options so that FIDO2-compliant authenticators (1Password, etc.) expose PRF output on future authentications; existing passkeys must be deleted and re-registered once for PRF to take effect
+- **In-memory PRF output reused** — when the user logs in with a passkey and then enters their passphrase manually, the PRF output already held in memory is used to save the wrapped passphrase silently, without requiring a second authenticator gesture
+- **Auto-upgrade PIN → PRF** — if the user had a PIN stored and logs in with a passkey that provides PRF output, the passphrase is silently re-wrapped with PRF; subsequent logins no longer require the PIN
+
+---
+
 ## [0.8.0] - 2026-04-02
 
 ### Added

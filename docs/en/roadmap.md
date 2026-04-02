@@ -26,6 +26,7 @@ Items are grouped by priority and may change as the project evolves.
 - [x] **Community files & tutorials** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, installation and usage tutorials (EN + FR)
 - [x] **Encryption at rest** — payee names, memos, and descriptions encrypted server-side using AES-256-GCM; existing data migrated transparently on startup
 - [x] **Sticky budget inheritance** — budget amounts carry forward automatically month-to-month; a `↩` indicator marks any inherited amount in the UI
+- [x] **Passkey unlock (PRF)** — logging in with a passkey (Face ID / Touch ID) automatically unlocks end-to-end encryption via the WebAuthn PRF extension; no PIN or passphrase required after the first login
 
 ### Category Spending View
 
