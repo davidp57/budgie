@@ -18,6 +18,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from budgie.models.account import Account
 from budgie.models.category import Category
@@ -36,6 +37,7 @@ from budgie.schemas.reconciliation import (
     RuleMatchRead,
     SuggestionRead,
 )
+from budgie.services.crypto import decrypt_str, encrypt_str
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -168,17 +170,28 @@ async def _get_account(
     return result.scalar_one_or_none()
 
 
-async def _get_tx(db: AsyncSession, tx_id: int, user_id: int) -> Transaction | None:
+async def _get_tx(
+    db: AsyncSession,
+    tx_id: int,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> Transaction | None:
     result = await db.execute(
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
         .where(Transaction.id == tx_id, Account.user_id == user_id)
     )
-    return result.scalar_one_or_none()
+    txn = result.scalar_one_or_none()
+    if txn is not None:
+        set_committed_value(txn, "memo", decrypt_str(txn.memo, session_key))
+    return txn
 
 
 async def _month_txs(
-    db: AsyncSession, account_id: int, month: str
+    db: AsyncSession,
+    account_id: int,
+    month: str,
+    session_key: bytes | None = None,
 ) -> Sequence[Transaction]:
     """Return all transactions for *account_id* in *month* (YYYY-MM)."""
     result = await db.execute(
@@ -187,7 +200,10 @@ async def _month_txs(
             func.strftime("%Y-%m", Transaction.date) == month,
         )
     )
-    return result.scalars().all()
+    txns = result.scalars().all()
+    for txn in txns:
+        set_committed_value(txn, "memo", decrypt_str(txn.memo, session_key))
+    return txns
 
 
 def _to_bank_read(tx: Transaction) -> BankTxRead:
@@ -230,6 +246,7 @@ async def get_view(
     user_id: int,
     account_id: int,
     month: str,
+    session_key: bytes | None = None,
 ) -> ReconciliationViewResponse:
     """Return the full reconciliation view for *account_id* and *month*.
 
@@ -238,6 +255,7 @@ async def get_view(
         user_id: Authenticated user.
         account_id: Account to reconcile.
         month: Month in YYYY-MM format.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         A :class:`ReconciliationViewResponse` with bank txs, budget expenses,
@@ -247,7 +265,7 @@ async def get_view(
     if account is None:
         raise ValueError(f"Account {account_id} not found")
 
-    all_txs = await _month_txs(db, account_id, month)
+    all_txs = await _month_txs(db, account_id, month, session_key=session_key)
     bank_list = [tx for tx in all_txs if _is_bank(tx)]
     expense_list = [tx for tx in all_txs if not _is_bank(tx)]
 
@@ -444,6 +462,7 @@ async def get_suggestions(
     user_id: int,
     account_id: int,
     month: str,
+    session_key: bytes | None = None,
 ) -> list[SuggestionRead]:
     """Return rule-based suggestions for unlinked transactions.
 
@@ -452,11 +471,12 @@ async def get_suggestions(
         user_id: Authenticated user.
         account_id: Account to analyse.
         month: Month in YYYY-MM format.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
 
     Returns:
         List of :class:`SuggestionRead` with scoring.
     """
-    view = await get_view(db, user_id, account_id, month)
+    view = await get_view(db, user_id, account_id, month, session_key=session_key)
     return view.suggestions
 
 
@@ -464,6 +484,7 @@ async def link(
     db: AsyncSession,
     user_id: int,
     req: LinkRequest,
+    session_key: bytes | None = None,
 ) -> LinkRead:
     """Create a reconciliation link between a bank tx and a budget expense.
 
@@ -473,6 +494,7 @@ async def link(
         db: Async database session.
         user_id: Authenticated user.
         req: Link request payload.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         The newly created :class:`LinkRead`.
@@ -481,7 +503,7 @@ async def link(
         ValueError: If either transaction is not found or the bank tx is
             already linked.
     """
-    bank = await _get_tx(db, req.bank_tx_id, user_id)
+    bank = await _get_tx(db, req.bank_tx_id, user_id, session_key=session_key)
     if bank is None:
         raise ValueError(f"Bank transaction {req.bank_tx_id} not found")
     if bank.import_hash is None:
@@ -489,7 +511,7 @@ async def link(
             f"Transaction {req.bank_tx_id} is not a bank-imported transaction"
         )
 
-    expense = await _get_tx(db, req.expense_id, user_id)
+    expense = await _get_tx(db, req.expense_id, user_id, session_key=session_key)
     if expense is None:
         raise ValueError(f"Expense {req.expense_id} not found")
     if expense.import_hash is not None:
@@ -513,7 +535,7 @@ async def link(
         expense.amount = bank.amount
 
     if req.memo is not None:
-        expense.memo = req.memo
+        expense.memo = encrypt_str(req.memo, session_key)
 
     expense.reconciled_with_id = bank.id
 
