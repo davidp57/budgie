@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-04-03
+
+### Fixed
+
+- **Reconciliation view labels decrypted** — transaction labels imported from a bank were displayed as raw base64 ciphertexts in the reconciliation view when end-to-end encryption was enabled; the reconciliation service now correctly decrypts `memo` fields using the session key before returning them to the UI
+
+---
+
 ## [0.9.0] - 2026-04-02
 
 ### Added
