@@ -8,6 +8,7 @@ from budgie.models.account import Account
 from budgie.models.transaction import Transaction
 from budgie.schemas.transaction import TransactionCreate, TransactionUpdate
 from budgie.services.crypto import decrypt_str, encrypt_str
+from budgie.services.ownership import ensure_references_owned
 
 
 async def get_transactions(
@@ -234,6 +235,14 @@ async def create_transaction(
             " to the current user."
         )
 
+    await ensure_references_owned(
+        db,
+        user_id,
+        category_id=schema.category_id,
+        envelope_id=schema.envelope_id,
+        payee_id=schema.payee_id,
+    )
+
     deprecated_fields = {"cleared", "is_virtual", "virtual_linked_id"}
 
     data = {k: v for k, v in schema.model_dump().items() if k not in deprecated_fields}
@@ -250,6 +259,7 @@ async def update_transaction(
     db: AsyncSession,
     txn: Transaction,
     schema: TransactionUpdate,
+    user_id: int,
     session_key: bytes | None = None,
 ) -> Transaction:
     """Partially update a transaction.
@@ -258,10 +268,15 @@ async def update_transaction(
         db: Async database session.
         txn: Existing Transaction instance.
         schema: Partial update schema.
+        user_id: Owner user ID (checks the new payee/category/envelope).
         session_key: AES-256-GCM encryption key, or None if not unlocked.
 
     Returns:
         Updated Transaction instance.
+
+    Raises:
+        ForeignReferenceError: If a new payee, category or envelope belongs
+            to another user.
     """
     _allowed_fields = {
         "date",
@@ -273,7 +288,15 @@ async def update_transaction(
         "status",
         "income_for_month",
     }
-    for field, value in schema.model_dump(exclude_unset=True).items():
+    changes = schema.model_dump(exclude_unset=True)
+    await ensure_references_owned(
+        db,
+        user_id,
+        category_id=changes.get("category_id"),
+        envelope_id=changes.get("envelope_id"),
+        payee_id=changes.get("payee_id"),
+    )
+    for field, value in changes.items():
         if field in _allowed_fields:
             if field == "memo":
                 value = encrypt_str(value, session_key)

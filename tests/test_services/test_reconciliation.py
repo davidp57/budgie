@@ -873,3 +873,117 @@ def test_matches_rule_pattern_miss() -> None:
     """A transaction whose memo does not contain the pattern must not match."""
     rule = _make_rule(pattern="netflix")
     assert not _matches_rule(rule, _make_tx(-999, memo="APPLE.COM/BILL"))
+
+
+# ---------------------------------------------------------------------------
+# Encryption: get_view / link decrypt/encrypt memos transparently
+# ---------------------------------------------------------------------------
+
+_TEST_KEY = b"\xab" * 32  # Fixed 32-byte key for tests
+
+
+async def test_get_view_decrypts_bank_tx_memo(db_session: AsyncSession) -> None:
+    """Bank tx memos are decrypted in the view when session_key is given."""
+    from budgie.services.crypto import encrypt_field
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    encrypted_memo = encrypt_field("CARTE 01/03/26 CARREFOUR CB*1234", _TEST_KEY)
+    bank = Transaction(
+        account_id=acc.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-5000,
+        memo=encrypted_memo,
+        status="real",
+        import_hash="hash-encrypted",
+    )
+    db_session.add(bank)
+    await db_session.commit()
+
+    view = await svc.get_view(
+        db_session, user.id, acc.id, "2026-03", session_key=_TEST_KEY
+    )
+
+    assert len(view.bank_txs) == 1
+    assert view.bank_txs[0].label == "CARTE 01/03/26 CARREFOUR CB*1234"
+
+
+async def test_get_view_decrypts_expense_memo(db_session: AsyncSession) -> None:
+    """Expense memos are decrypted in the view when session_key is given."""
+    from budgie.services.crypto import encrypt_field
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    encrypted_memo = encrypt_field("Courses Carrefour", _TEST_KEY)
+    exp = Transaction(
+        account_id=acc.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-5000,
+        memo=encrypted_memo,
+        status="real",
+        import_hash=None,
+    )
+    db_session.add(exp)
+    await db_session.commit()
+
+    view = await svc.get_view(
+        db_session, user.id, acc.id, "2026-03", session_key=_TEST_KEY
+    )
+
+    assert len(view.expenses) == 1
+    assert view.expenses[0].label == "Courses Carrefour"
+
+
+@pytest.mark.asyncio
+async def test_link_encrypts_memo_in_db(db_session: AsyncSession) -> None:
+    """Memo in link request is encrypted in the DB when session_key is given."""
+    from budgie.schemas.reconciliation import LinkRequest
+    from budgie.services.crypto import decrypt_field
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+
+    bank = _bank_tx(acc.id, -1000, label="CARREFOUR")
+    exp = _expense(acc.id, -1000)
+    db_session.add_all([bank, exp])
+    await db_session.commit()
+
+    req = LinkRequest(bank_tx_id=bank.id, expense_id=exp.id, memo="Courses du samedi")
+    await svc.link(db_session, user.id, req, session_key=_TEST_KEY)
+
+    await db_session.refresh(exp)
+    assert exp.memo is not None
+    assert exp.memo != "Courses du samedi"
+    assert decrypt_field(exp.memo, _TEST_KEY) == "Courses du samedi"
+
+
+@pytest.mark.asyncio
+async def test_link_rule_pattern_uses_decrypted_memo(db_session: AsyncSession) -> None:
+    """Auto-created rule pattern is extracted from the decrypted bank tx memo."""
+    from budgie.schemas.reconciliation import LinkRequest
+    from budgie.services.crypto import encrypt_field
+
+    user = await _create_user(db_session)
+    acc = await _create_account(db_session, user.id)
+    cat = await _create_category(db_session, user.id, "Streaming")
+
+    encrypted_memo = encrypt_field("CARTE 01/03/26 NETFLIX.COM CB*1234", _TEST_KEY)
+    bank = Transaction(
+        account_id=acc.id,
+        date=datetime.date(2026, 3, 10),
+        amount=-1599,
+        memo=encrypted_memo,
+        status="real",
+        import_hash="hash-netflix",
+    )
+    exp = _expense(acc.id, -1599, category_id=cat.id)
+    db_session.add_all([bank, exp])
+    await db_session.commit()
+
+    req = LinkRequest(bank_tx_id=bank.id, expense_id=exp.id)
+    result = await svc.link(db_session, user.id, req, session_key=_TEST_KEY)
+
+    assert result.created_rule is not None
+    assert result.created_rule.pattern == "NETFLIX.COM"

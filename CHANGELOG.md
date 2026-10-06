@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **PIN unlock** — the 4–6 digit PIN option that kept the encryption passphrase on the device is removed: a PIN that short cannot protect it. Passkey unlock (PRF) remains; elsewhere the passphrase is typed. A PIN saved by an earlier version is erased from the browser on the next visit
+
+### Changed
+
+- **`SECRET_KEY` is now mandatory** — the server refuses to start when `SECRET_KEY` is missing, shorter than 32 characters, or still set to a placeholder shipped with the repository; set it in `.env` before upgrading (`openssl rand -hex 32`). Changing it signs every user out once
+- **Import deduplication per account** — a bank line already imported into one account no longer prevents importing the same line into another account (database migration `a3b4c5d6e7f8`)
+
+### Fixed
+
+- **Ownership of referenced objects** — categories, envelopes and payees referenced by categorization rules, payees and transactions must belong to the current user (otherwise `404`); assigning categories to an envelope no longer detaches categories the user does not own; names resolved in the reconciliation view are restricted to the user's own categories and envelopes. A record that already points at another user's object must have that reference changed or cleared before it can be edited
+- **Category rule updates validated** — updating a rule now applies the same regex checks as creating one, on the rule as it will be stored (so a stored rule with an invalid regex must get a valid pattern on its next edit); such a rule is skipped instead of failing the whole request
+
+---
+
+## [0.9.1] - 2026-04-03
+
+### Fixed
+
+- **Reconciliation view labels decrypted** — transaction labels imported from a bank were displayed as raw base64 ciphertexts in the reconciliation view when end-to-end encryption was enabled; the reconciliation service now correctly decrypts `memo` fields using the session key before returning them to the UI
+
 ---
 
 ## [0.9.0] - 2026-04-02

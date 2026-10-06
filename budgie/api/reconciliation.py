@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from budgie.api.deps import CurrentUser, DBSession
+from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.reconciliation import (
     ClotureRequest,
     ClotureResponse,
@@ -22,6 +22,7 @@ async def get_reconciliation_view(
     month: str,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> ReconciliationViewResponse:
     """Return the full reconciliation view for an account and month.
 
@@ -30,9 +31,12 @@ async def get_reconciliation_view(
         month: Month in YYYY-MM format.
         db: Database session.
         current_user: Authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
     """
     try:
-        return await svc.get_view(db, current_user.id, account_id, month)
+        return await svc.get_view(
+            db, current_user.id, account_id, month, session_key=session_key
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -45,6 +49,7 @@ async def get_suggestions(
     month: str,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> list[SuggestionRead]:
     """Return rule-based matching suggestions for unlinked transactions.
 
@@ -53,9 +58,12 @@ async def get_suggestions(
         month: Month in YYYY-MM format.
         db: Database session.
         current_user: Authenticated user.
+        session_key: AES-256-GCM decryption key, or None if not unlocked.
     """
     try:
-        return await svc.get_suggestions(db, current_user.id, account_id, month)
+        return await svc.get_suggestions(
+            db, current_user.id, account_id, month, session_key=session_key
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -67,6 +75,7 @@ async def create_link(
     req: LinkRequest,
     db: DBSession,
     current_user: CurrentUser,
+    session_key: SessionKey,
 ) -> LinkRead:
     """Create a reconciliation link between a bank tx and a budget expense.
 
@@ -74,9 +83,10 @@ async def create_link(
         req: Link request payload.
         db: Database session.
         current_user: Authenticated user.
+        session_key: AES-256-GCM encryption key, or None if not unlocked.
     """
     try:
-        return await svc.link(db, current_user.id, req)
+        return await svc.link(db, current_user.id, req, session_key=session_key)
     except ValueError as exc:
         message = str(exc)
         status_code = (

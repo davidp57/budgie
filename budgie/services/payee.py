@@ -7,6 +7,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from budgie.models.payee import Payee
 from budgie.schemas.payee import PayeeCreate, PayeeUpdate
 from budgie.services.crypto import decrypt_str, encrypt_str
+from budgie.services.ownership import ensure_references_owned
 
 
 async def get_payees(
@@ -81,6 +82,7 @@ async def create_payee(
     Returns:
         Newly created Payee instance (name decrypted for display).
     """
+    await ensure_references_owned(db, user_id, category_id=schema.auto_category_id)
     encrypted_name = encrypt_str(schema.name, session_key)
     payee = Payee(
         user_id=user_id,
@@ -113,6 +115,9 @@ async def update_payee(
         Updated Payee instance (name decrypted for display).
     """
     update_data = schema.model_dump(exclude_unset=True)
+    await ensure_references_owned(
+        db, payee.user_id, category_id=update_data.get("auto_category_id")
+    )
     if "name" in update_data:
         plaintext_name = update_data["name"]
         update_data["name"] = encrypt_str(plaintext_name, session_key) or plaintext_name

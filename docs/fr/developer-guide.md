@@ -850,7 +850,7 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | Variable | Défaut | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | URL de la base SQLAlchemy async |
-| `SECRET_KEY` | `change-me-in-production` | Clé HMAC de signature JWT — **à changer** |
+| `SECRET_KEY` | *(valeur d'exemple, refusée)* | Clé HMAC de signature JWT — le démarrage échoue tant qu'elle ne fait pas au moins 32 caractères (`check_secret_key`) |
 | `ALGORITHM` | `HS256` | Algorithme JWT |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Durée de vie du token (24 h) |
 | `UPLOAD_DIR` | `data/uploads` | Répertoire temporaire pour les fichiers importés |
@@ -912,7 +912,7 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | Dérivation de clé | **Argon2id** | time_cost=3, memory_cost=64 MiB, parallelism=4, sortie 256 bits |
 | Vérification de la clé | **Challenge blob** | Chiffrement AES-GCM d'un sel aléatoire de 32 octets ; le tag GCM valide la clé |
 | Authentification | **WebAuthn (Passkeys)** | `py_webauthn` (backend), API `navigator.credentials` (navigateur) |
-| Repli PIN | **PBKDF2-HMAC-SHA256** | 100k itérations, sel spécifique à l'appareil, encapsule la clé dans `localStorage` (nécessite HTTPS) |
+| Déverrouillage par passkey | **WebAuthn PRF** | La sortie PRF sert de clé AES-256-GCM pour encapsuler la passphrase dans `localStorage` (nécessite HTTPS) |
 | Document de récupération | **fpdf2** | PDF unique avec passphrase + QR code |
 
 ### Architecture
@@ -921,17 +921,16 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 ┌────────────────────────────────────────────────────────────┐
 │                        CLIENT                              │
 │                                                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
-│  │   Passkey     │   │  PIN + LS    │   │  Passphrase   │  │
-│  │ (biométrie)  │   │  (repli)     │   │  (initial /   │  │
-│  │              │   │              │   │  récupération)│  │
-│  └──────┬───────┘   └──────┬───────┘   └──────┬────────┘  │
-│         │                  │                   │           │
-│         ▼                  ▼                   ▼           │
-│   Déverrouille la     Déchiffre la       Argon2id        │
-│   clé locale chiffrée clé locale chiffrée dérive la clé   │
-│         │                  │                   │           │
-│         └──────────────────┴───────────────────┘           │
+│  ┌──────────────────────┐        ┌──────────────────────┐  │
+│  │  Passkey (PRF)       │        │  Passphrase          │  │
+│  │  (usage quotidien)   │        │  (initial / récup.)  │  │
+│  └──────────┬───────────┘        └──────────┬───────────┘  │
+│             │                               │              │
+│             ▼                               ▼              │
+│     Déchiffre la passphrase           Saisie par           │
+│     locale (clé PRF)                  l'utilisateur        │
+│             │                               │              │
+│             └───────────────┬───────────────┘              │
 │                            │                               │
 │                  clé_chiffrement (bytes)                    │
 │                            │                               │
@@ -991,18 +990,17 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 | `budgie/api/webauthn.py` | Endpoints WebAuthn (enregistrement & connexion) |
 | `budgie/models/webauthn.py` | Modèle ORM `WebAuthnCredential` |
 | `budgie/schemas/webauthn.py` | Schémas Pydantic WebAuthn |
-| `frontend/src/composables/usePinStorage.ts` | Chiffrement PIN, stockage clé localStorage |
+| `frontend/src/composables/usePrfStorage.ts` | Encapsulation de la passphrase avec la sortie PRF de la passkey |
 | `frontend/src/composables/useWebAuthn.ts` | Wrapper `navigator.credentials` |
 
 ### Flux de chiffrement
 
 1. **Inscription** : l'utilisateur crée username + mot de passe + passphrase → Argon2id dérive la clé → challenge blob créé → document PDF de récupération généré.
-2. **Connexion quotidienne (Passkey)** : authentification biométrique → obtention du JWT → la clé de chiffrement est déverrouillée séparément via PIN ou passphrase sur l'écran de déverrouillage.
-3. **Connexion quotidienne (PIN)** : PIN saisi → PBKDF2 dérive la clé d'encapsulation → déchiffre la clé depuis `localStorage` → clé envoyée au serveur.
-4. **Connexion de secours (passphrase)** : l'utilisateur saisit la passphrase → Argon2id redérive la clé → clé envoyée au serveur.
-5. **Accès aux données** : la couche service déchiffre en RAM avec la clé de session → sert le texte clair via l'API → le client affiche normalement.
-6. **Écriture de données** : la couche service chiffre chaque champ avec un nonce unique → stocke le blob base64 dans SQLite.
-7. **Déconnexion / expiration du token** : clé purgée du store en mémoire.
+2. **Connexion quotidienne (Passkey)** : authentification biométrique → obtention du JWT → la sortie PRF déchiffre la passphrase stockée localement, sinon la passphrase est saisie sur l'écran de déverrouillage.
+3. **Connexion de secours (passphrase)** : l'utilisateur saisit la passphrase → Argon2id redérive la clé → clé envoyée au serveur.
+4. **Accès aux données** : la couche service déchiffre en RAM avec la clé de session → sert le texte clair via l'API → le client affiche normalement.
+5. **Écriture de données** : la couche service chiffre chaque champ avec un nonce unique → stocke le blob base64 dans SQLite.
+6. **Déconnexion / expiration du token** : clé purgée du store en mémoire.
 
 ### Migration des comptes existants
 
@@ -1041,7 +1039,7 @@ a été écrit par une ancienne version du serveur qui n'avait jamais chiffré l
 de déclencher la migration de façon transparente au prochain déverrouillage.
 
 #### Passkeys optionnelles
-Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'authentifier avec mot de passe + passphrase. Passkeys et PIN sont uniquement des couches de confort.
+Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'authentifier avec mot de passe + passphrase. Les Passkeys sont uniquement une couche de confort.
 
 ### Mesures de sécurité
 
@@ -1049,7 +1047,7 @@ Les Passkeys ne sont jamais obligatoires. Un utilisateur migré peut toujours s'
 |---|---|
 | Interception de la clé en transit | HTTPS obligatoire (TLS 1.2+) |
 | Clé sur disque | Jamais écrite sur disque — RAM uniquement, purgée à la déconnexion/redémarrage |
-| Force brute du PIN | 5 tentatives échouées → purge de la clé locale |
+| Copie du profil navigateur | La passphrase stockée localement est encapsulée par une clé qui ne quitte jamais l'authentificateur (PRF) ; l'ancienne option PIN à 4–6 chiffres a été retirée, car un PIN aussi court se retrouve hors ligne par force brute |
 | Dump de la mémoire serveur | Clé présente uniquement pendant la session active ; `mlock` recommandé en production |
 | Vol de la base de données | Toutes les données sont chiffrées AES-256-GCM — inutilisables sans la clé |
 | Passphrase perdue | Données irrécupérables par conception — le document PDF de récupération atténue ce risque |

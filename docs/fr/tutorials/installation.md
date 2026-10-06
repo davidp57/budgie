@@ -48,7 +48,7 @@ SECRET_KEY=colle-ta-clé-aléatoire-ici
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080,http://192.168.1.50:8080
 ```
 
-> ⚠️ **Ne laisse jamais** `SECRET_KEY` à sa valeur par défaut en production.
+> ⚠️ Budgie **ne démarre pas** tant que `SECRET_KEY` ne contient pas une valeur aléatoire d'au moins 32 caractères.
 
 ### Étape 3 — Construire et démarrer
 

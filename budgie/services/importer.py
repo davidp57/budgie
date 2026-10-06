@@ -35,10 +35,13 @@ async def confirm_import(
     """Persist a list of parsed transactions, skipping duplicates.
 
     Transactions are considered duplicates if their ``import_hash``
-    already exists in the ``transactions`` table.  Deduplication is
-    performed in Python (one SELECT per transaction) rather than relying
-    solely on the database unique constraint, so that the caller always
-    receives accurate counts.
+    already exists **in the target account**.  The scope matters: the same
+    bank line can legitimately exist in another account (joint account,
+    shared supplier), and a global lookup would silently drop it here and
+    reveal the other account's data through the ``duplicates`` count.
+    Deduplication is performed in Python (one SELECT per transaction)
+    rather than relying solely on the database unique constraint, so that
+    the caller always receives accurate counts.
 
     When a transaction carries a ``virtual_linked_id``, the corresponding
     planned transaction is marked as ``status='reconciled'`` and the
@@ -71,7 +74,10 @@ async def confirm_import(
 
     for txn in transactions:
         result = await db.execute(
-            select(Transaction).where(Transaction.import_hash == txn.import_hash)
+            select(Transaction.id).where(
+                Transaction.account_id == account_id,
+                Transaction.import_hash == txn.import_hash,
+            )
         )
         if result.scalar_one_or_none() is not None:
             duplicates += 1

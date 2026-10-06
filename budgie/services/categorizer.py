@@ -140,6 +140,26 @@ async def categorize_transaction(
     return CategorizeResult(category_id=None, confidence="none")
 
 
+def regex_matches(pattern: str, value: str) -> bool:
+    """Case-insensitive ``re.search`` that treats an invalid pattern as no match.
+
+    Patterns are validated when a rule is written, but a rule stored before
+    that validation existed must make *that rule* fail, not the whole request.
+
+    Args:
+        pattern: Regular expression stored in a rule.
+        value: Transaction field value to test.
+
+    Returns:
+        ``True`` if the pattern compiles and matches *value*.
+    """
+    try:
+        return re.search(pattern, value, re.IGNORECASE) is not None
+    except re.error:
+        log.warning("Skipping category rule with invalid regex %r", pattern)
+        return False
+
+
 def _matches(pattern: str, match_type: str, value: str) -> bool:
     """Test whether *value* matches *pattern* according to *match_type*.
 
@@ -156,7 +176,7 @@ def _matches(pattern: str, match_type: str, value: str) -> bool:
     if match_type == "exact":
         return pattern.lower() == value.lower()
     if match_type == "regex":
-        return re.search(pattern, value, re.IGNORECASE) is not None
+        return regex_matches(pattern, value)
     return False
 
 

@@ -11,6 +11,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
+# Signing keys published in this repository (the default below and the old
+# value of ``.env.example``).  Anyone can forge a valid JWT with them.
+_PUBLIC_SECRET_KEYS = frozenset(
+    {"change-me-in-production", "change-me-to-a-random-string"}
+)
+SECRET_KEY_MIN_LENGTH = 32
+
+
+def check_secret_key(secret_key: str) -> None:
+    """Refuse a JWT signing key that is public or too short.
+
+    Called at startup: a server signing tokens with a known key accepts
+    tokens forged offline for any username, so it must not start at all.
+
+    Args:
+        secret_key: The configured ``SECRET_KEY``.
+
+    Raises:
+        RuntimeError: If the key is a published placeholder or shorter than
+            :data:`SECRET_KEY_MIN_LENGTH` characters.
+    """
+    if secret_key in _PUBLIC_SECRET_KEYS or len(secret_key) < SECRET_KEY_MIN_LENGTH:
+        raise RuntimeError(
+            "SECRET_KEY is not configured: set it in .env to a random value of at "
+            f"least {SECRET_KEY_MIN_LENGTH} characters, e.g. the output of "
+            "`openssl rand -hex 32`. Changing it signs out every user."
+        )
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -24,7 +52,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = f"sqlite+aiosqlite:///{DATA_DIR / 'budgie.db'}"
 
-    # Auth / JWT
+    # Auth / JWT — the default is a placeholder that check_secret_key() rejects
     secret_key: str = "change-me-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 hours

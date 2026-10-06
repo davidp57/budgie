@@ -850,7 +850,7 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLAlchemy async DB URL |
-| `SECRET_KEY` | `change-me-in-production` | JWT HMAC signing key — **must change** |
+| `SECRET_KEY` | *(placeholder, rejected)* | JWT HMAC signing key — startup fails unless it is set to ≥ 32 characters (`check_secret_key`) |
 | `ALGORITHM` | `HS256` | JWT algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Token lifetime (24 h) |
 | `UPLOAD_DIR` | `data/uploads` | Temp directory for uploaded files |
@@ -912,7 +912,7 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | Key derivation | **Argon2id** | time_cost=3, memory_cost=64 MiB, parallelism=4, 256-bit output |
 | Key verification | **Challenge blob** | AES-GCM encryption of random 32-byte salt; GCM tag validates the key |
 | Authentication | **WebAuthn (Passkeys)** | `py_webauthn` backend, `navigator.credentials` browser API |
-| PIN fallback | **PBKDF2-HMAC-SHA256** | 100k iterations, device-specific salt, wraps encryption key in `localStorage` (requires HTTPS) |
+| Passkey unlock | **WebAuthn PRF** | PRF output used as an AES-256-GCM key to wrap the passphrase in `localStorage` (requires HTTPS) |
 | PDF recovery | **fpdf2** | One-time PDF with passphrase + QR code |
 
 ### Architecture
@@ -921,17 +921,16 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 ┌────────────────────────────────────────────────────────────┐
 │                        CLIENT                              │
 │                                                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐  │
-│  │   Passkey     │   │   PIN + LS   │   │  Passphrase   │  │
-│  │  (biometric)  │   │  (fallback)  │   │  (initial /   │  │
-│  │              │   │              │   │   recovery)   │  │
-│  └──────┬───────┘   └──────┬───────┘   └──────┬────────┘  │
-│         │                  │                   │           │
-│         ▼                  ▼                   ▼           │
-│     Unlock local       Decrypt local      Argon2id        │
-│     encrypted key      encrypted key      derive key      │
-│         │                  │                   │           │
-│         └──────────────────┴───────────────────┘           │
+│  ┌──────────────────────┐        ┌──────────────────────┐  │
+│  │  Passkey (PRF)       │        │  Passphrase          │  │
+│  │  (daily use)         │        │  (initial / recovery)│  │
+│  └──────────┬───────────┘        └──────────┬───────────┘  │
+│             │                               │              │
+│             ▼                               ▼              │
+│     Unwrap locally stored             Typed by the user    │
+│     passphrase (PRF key)                                   │
+│             │                               │              │
+│             └───────────────┬───────────────┘              │
 │                            │                               │
 │                  encryption_key (bytes)                     │
 │                            │                               │
@@ -991,18 +990,17 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | `budgie/api/webauthn.py` | WebAuthn registration & login endpoints |
 | `budgie/models/webauthn.py` | `WebAuthnCredential` ORM model |
 | `budgie/schemas/webauthn.py` | WebAuthn Pydantic schemas |
-| `frontend/src/composables/usePinStorage.ts` | PIN-based key wrapping, localStorage key storage |
+| `frontend/src/composables/usePrfStorage.ts` | Passphrase wrapping with the passkey PRF output |
 | `frontend/src/composables/useWebAuthn.ts` | `navigator.credentials` wrapper |
 
 ### Encryption Flow
 
 1. **Registration**: user sets username + password + passphrase → Argon2id derives encryption key → challenge blob created → PDF recovery document generated.
-2. **Daily login (Passkey)**: biometric authentication → obtains JWT → encryption key then unlocked via PIN or passphrase on the unlock screen.
-3. **Daily login (PIN)**: PIN entered → PBKDF2 derives wrapping key → decrypts encryption key from `localStorage` → key sent to server.
-4. **Fallback login (passphrase)**: user enters passphrase → Argon2id re-derives key → key sent to server.
-5. **Data access**: service layer decrypts data in RAM using the session key → serves plaintext via API → client renders normally.
-6. **Data write**: service layer encrypts each field with unique nonce → stores base64 blob in SQLite.
-7. **Logout / token expiry**: key purged from in-memory store.
+2. **Daily login (Passkey)**: biometric authentication → obtains JWT → the PRF output unwraps the locally stored passphrase, otherwise the passphrase is typed on the unlock screen.
+3. **Fallback login (passphrase)**: user enters passphrase → Argon2id re-derives key → key sent to server.
+4. **Data access**: service layer decrypts data in RAM using the session key → serves plaintext via API → client renders normally.
+5. **Data write**: service layer encrypts each field with unique nonce → stores base64 blob in SQLite.
+6. **Logout / token expiry**: key purged from in-memory store.
 
 ### Migration of Existing Accounts
 
@@ -1041,7 +1039,7 @@ was set by an older server that never ran the actual field encryption, and trans
 trigger the migration at the next unlock.
 
 #### Passkeys are optional
-Passkeys are never required. A migrated user can always authenticate with password + passphrase. Passkeys and PIN are convenience layers only.
+Passkeys are never required. A migrated user can always authenticate with password + passphrase. Passkeys are a convenience layer only.
 
 ### Security Mitigations
 
@@ -1049,7 +1047,7 @@ Passkeys are never required. A migrated user can always authenticate with passwo
 |---|---|
 | Key interception in transit | HTTPS mandatory (TLS 1.2+) |
 | Key on disk | Never written to disk — RAM only, purged on logout/restart |
-| Brute-force PIN | 5 failed attempts → local key purge |
+| Copy of the browser profile | The locally stored passphrase is wrapped by a key that never leaves the authenticator (PRF); the former 4–6 digit PIN option was removed because a PIN that short can be brute-forced offline |
 | Server memory dump | Key held only during active session; `mlock` recommended for production |
 | Database theft | All data is AES-256-GCM encrypted — useless without key |
 | Lost passphrase | Data irrecoverable by design — PDF recovery document mitigates |

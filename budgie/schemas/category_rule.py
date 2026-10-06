@@ -13,6 +13,37 @@ MatchField = Literal["payee", "memo"]
 MatchType = Literal["contains", "exact", "regex"]
 TransactionType = Literal["any", "debit", "credit"]
 
+PATTERN_MAX_LENGTH = 100
+
+
+def check_rule_pattern(pattern: str, match_type: str) -> None:
+    """Validate a rule pattern for syntax errors and ReDoS risk.
+
+    Only ``"regex"`` patterns are checked; other match types accept any text.
+    Shared by the creation schema and by the update service, which must
+    validate the *merged* rule (a partial update may change only the pattern
+    of a rule that is already a regex, or only its match type).
+
+    Args:
+        pattern: Pattern text.
+        match_type: One of ``"contains"``, ``"exact"``, ``"regex"``.
+
+    Raises:
+        ValueError: If the regex does not compile or looks catastrophically
+            backtracking.
+    """
+    if match_type != "regex":
+        return
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex pattern: {exc}") from exc
+    if _REDOS_HEURISTIC.search(pattern):
+        raise ValueError(
+            "Regex pattern may cause catastrophic backtracking (ReDoS). "
+            "Avoid nested quantifiers such as (X+)+ or (X*)*."
+        )
+
 
 class CategoryRuleCreate(BaseModel):
     """Schema for creating a categorization rule.
@@ -30,7 +61,7 @@ class CategoryRuleCreate(BaseModel):
         max_amount: Optional upper bound on abs(amount) in centimes (inclusive).
     """
 
-    pattern: str = Field(..., min_length=1, max_length=100)
+    pattern: str = Field(..., min_length=1, max_length=PATTERN_MAX_LENGTH)
     match_field: MatchField
     match_type: MatchType
     category_id: int
@@ -56,17 +87,7 @@ class CategoryRuleCreate(BaseModel):
 
         Only applies when ``match_type`` is ``"regex"``.
         """
-        if self.match_type != "regex":
-            return self
-        try:
-            re.compile(self.pattern)
-        except re.error as exc:
-            raise ValueError(f"Invalid regex pattern: {exc}") from exc
-        if _REDOS_HEURISTIC.search(self.pattern):
-            raise ValueError(
-                "Regex pattern may cause catastrophic backtracking (ReDoS). "
-                "Avoid nested quantifiers such as (X+)+ or (X*)*."
-            )
+        check_rule_pattern(self.pattern, self.match_type)
         return self
 
 
@@ -114,7 +135,7 @@ class CategoryRuleUpdate(BaseModel):
         max_amount: New upper bound on abs(amount) in centimes.
     """
 
-    pattern: str | None = Field(None, min_length=1, max_length=200)
+    pattern: str | None = Field(None, min_length=1, max_length=PATTERN_MAX_LENGTH)
     match_field: MatchField | None = None
     match_type: MatchType | None = None
     category_id: int | None = None

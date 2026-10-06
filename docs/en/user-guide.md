@@ -104,7 +104,7 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key (see details below) |
+| `SECRET_KEY` | *(none)* | **Required** — JWT signing key; the server refuses to start without a valid one (see details below) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLite database URL (set automatically in Docker) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (see details below) |
 | `BUDGIE_PORT` | `8080` | External Docker container port |
@@ -115,8 +115,8 @@ All configuration is done via the `.env` file at the project root (copied from `
 This key is used to **sign and verify authentication tokens** (JWT). Every time a user logs in, the server creates a token signed with this key. If an attacker knows the key, they can forge valid tokens and access any account.
 
 **Rules:**
-- **Never** use the default value in production
 - Use a **random string of at least 32 characters** (64 hex characters recommended)
+- The server **refuses to start** if the key is missing, shorter than 32 characters, or still set to a placeholder value from the repository (`.env.example`, defaults) — the startup log tells you so
 - **Never share** the key or commit it to a repository
 - If you suspect the key has been compromised, **change it immediately** — all existing sessions will be invalidated (users must log in again)
 
@@ -170,7 +170,7 @@ CORS (Cross-Origin Resource Sharing) controls **which websites are allowed to ca
 | `PORT` | `8000` | Internal server port |
 | `DEBUG` | `false` | FastAPI debug mode |
 
-> ⚠️ **Important**: Always change `SECRET_KEY` before first production use. A weak key compromises JWT authentication.
+> ⚠️ **Important**: Set `SECRET_KEY` before the first start — the server will not start without a valid key.
 
 ---
 
@@ -673,17 +673,16 @@ When you create your Budgie account, you choose a **passphrase** (a memorable se
 
 ### Signing In
 
-Budgie offers three ways to authenticate, balancing security with convenience:
+Budgie offers two ways to unlock your encryption, balancing security with convenience:
 
 | Method | When to use | How it works |
 |---|---|---|
 | **Passkey (biometric)** | Daily use | Fingerprint or Face ID on your device → unlocks your encryption key stored locally |
-| **PIN** | Quick fallback | 4–6 digit PIN → decrypts your locally stored encryption key |
 | **Passphrase** | Initial setup, new device, recovery | You type the passphrase → the encryption key is re-derived |
 
-**PIN security**: after 5 failed PIN attempts, the locally stored encryption key is erased. You will need to re-enter your passphrase.
-
-> **PIN requires HTTPS** — the PIN uses the Web Crypto API (`crypto.subtle`) which is only available on secure origins (HTTPS or `localhost`). If the app is served over plain HTTP, the PIN option will not be offered.
+> **Passkey unlock requires HTTPS** and a browser supporting the WebAuthn PRF extension (Chrome, Safari; not Firefox yet). Elsewhere, you type your passphrase.
+>
+> Earlier versions offered a 4–6 digit PIN. It was removed: a PIN that short does not protect the passphrase stored on the device. Any PIN saved by an older version is erased automatically.
 
 ### Setting Up Passkeys
 
@@ -711,7 +710,6 @@ At account creation, Budgie generates a **recovery PDF** containing:
 | Scenario | Outcome |
 |---|---|
 | I change my phone | Register a new Passkey on the new device. Use passphrase to log in the first time. |
-| I forget my PIN | Re-enter your passphrase. You can set a new PIN afterward. |
 | I forget my passphrase but have the PDF | Use the passphrase from the printed PDF to recover access. |
 | I forget my passphrase AND lose the PDF | **Data is permanently lost.** This is the security trade-off: no admin back door. |
 | My NAS is stolen | Thief has encrypted blobs — useless without your passphrase. |

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,11 +44,18 @@ class Transaction(Base):
         status: Transaction status — planned (future), real, or reconciled.
         income_for_month: When set (YYYY-MM), this real transaction income is
             counted toward that month ``to_be_budgeted`` (N+1 mode).
-        import_hash: Unique hash for deduplication during import.
+        import_hash: Hash of the bank line, used for deduplication during
+            import.  Unique per account, not globally: the same bank line may
+            legitimately appear in two accounts.
         created_at: Timestamp of record creation.
     """
 
     __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "import_hash", name="uq_transactions_account_import_hash"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
@@ -65,7 +73,7 @@ class Transaction(Base):
         String(7), nullable=True, default=None
     )
     import_hash: Mapped[str | None] = mapped_column(
-        String(64), unique=True, nullable=True, default=None
+        String(64), nullable=True, default=None
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

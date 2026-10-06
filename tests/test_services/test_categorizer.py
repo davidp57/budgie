@@ -843,3 +843,43 @@ async def test_rule_any_type_matches_both_signs(
             db_session, user.id, None, "NETFLIX COM", amount=amount
         )
         assert result == CategorizeResult(category_id=cat.id, confidence="rule")
+
+
+# ---------------------------------------------------------------------------
+# Invalid regex stored in the database
+# ---------------------------------------------------------------------------
+
+
+async def test_invalid_stored_regex_skips_rule(db_session: AsyncSession) -> None:
+    """A rule whose regex no longer compiles is skipped, not raised.
+
+    Such a rule can predate write-time validation; it must fail on its own
+    instead of breaking categorization for every other rule.
+    """
+    user = await _make_user(db_session)
+    broken = await _make_category(db_session, user.id, name="Broken")
+    food = await _make_category(db_session, user.id, name="Food")
+    db_session.add_all(
+        [
+            CategoryRule(
+                user_id=user.id,
+                pattern="(unclosed",
+                match_field="memo",
+                match_type="regex",
+                category_id=broken.id,
+                priority=10,
+            ),
+            CategoryRule(
+                user_id=user.id,
+                pattern="carrefour",
+                match_field="memo",
+                match_type="contains",
+                category_id=food.id,
+                priority=0,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    result = await categorize_transaction(db_session, user.id, None, "CARREFOUR 12")
+    assert result == CategorizeResult(category_id=food.id, confidence="rule")

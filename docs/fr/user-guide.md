@@ -104,7 +104,7 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Obligatoire** — Clé de signature JWT (voir détails ci-dessous) |
+| `SECRET_KEY` | *(aucune)* | **Obligatoire** — Clé de signature JWT ; le serveur refuse de démarrer sans clé valide (voir détails ci-dessous) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | URL de la base SQLite (en Docker, défini automatiquement) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Origines autorisées (voir détails ci-dessous) |
 | `BUDGIE_PORT` | `8080` | Port externe du conteneur Docker |
@@ -115,8 +115,8 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 Cette clé est utilisée pour **signer et vérifier les tokens d'authentification** (JWT). À chaque connexion, le serveur crée un token signé avec cette clé. Si un attaquant connaît la clé, il peut forger des tokens valides et accéder à n'importe quel compte.
 
 **Règles :**
-- **Ne jamais** utiliser la valeur par défaut en production
 - Utiliser une **chaîne aléatoire d'au moins 32 caractères** (64 caractères hexadécimaux recommandés)
+- Le serveur **refuse de démarrer** si la clé est absente, fait moins de 32 caractères ou reprend une valeur d'exemple du dépôt (`.env.example`, valeurs par défaut) — le journal de démarrage l'indique
 - **Ne jamais partager** la clé ni la commiter dans un dépôt
 - En cas de suspicion de compromission, **changez-la immédiatement** — toutes les sessions en cours seront invalidées (les utilisateurs devront se reconnecter)
 
@@ -170,7 +170,7 @@ CORS (Cross-Origin Resource Sharing) contrôle **quels sites web sont autorisés
 | `PORT` | `8000` | Port interne du serveur |
 | `DEBUG` | `false` | Mode debug FastAPI |
 
-> ⚠️ **Important** : Changez toujours `SECRET_KEY` avant la première utilisation en production. Une clé faible compromet l'authentification JWT.
+> ⚠️ **Important** : Définissez `SECRET_KEY` avant le premier démarrage — le serveur ne démarre pas sans clé valide.
 
 ---
 
@@ -671,17 +671,16 @@ Lors de la création de votre compte Budgie, vous choisissez une **passphrase** 
 
 ### Connexion
 
-Budgie propose trois méthodes d'authentification, équilibrant sécurité et confort :
+Budgie propose deux méthodes pour déverrouiller le chiffrement, équilibrant sécurité et confort :
 
 | Méthode | Quand l'utiliser | Fonctionnement |
 |---|---|---|
 | **Passkey (biométrie)** | Usage quotidien | Empreinte digitale ou Face ID sur votre appareil → déverrouille la clé stockée localement |
-| **PIN** | Accès rapide de secours | PIN à 4–6 chiffres → déchiffre la clé stockée localement |
 | **Passphrase** | Configuration initiale, nouvel appareil, récupération | Vous saisissez la passphrase → la clé est redérivée |
 
-**Sécurité du PIN** : après 5 tentatives échouées, la clé stockée localement est effacée. Vous devrez ressaisir votre passphrase.
-
-> **Le PIN nécessite HTTPS** — le PIN utilise l'API Web Crypto (`crypto.subtle`) qui n'est disponible que sur des origines sécurisées (HTTPS ou `localhost`). Si l'application est servie en HTTP simple, le PIN ne sera pas proposé.
+> **Le déverrouillage par passkey nécessite HTTPS** et un navigateur qui gère l'extension WebAuthn PRF (Chrome, Safari ; pas encore Firefox). Ailleurs, vous saisissez votre passphrase.
+>
+> Les versions précédentes proposaient un PIN à 4–6 chiffres. Il a été retiré : un PIN aussi court ne protège pas la passphrase stockée sur l'appareil. Un PIN enregistré par une ancienne version est effacé automatiquement.
 
 ### Configurer les Passkeys
 
@@ -709,7 +708,6 @@ Vous pouvez enregistrer des Passkeys sur plusieurs appareils (téléphone, table
 | Scénario | Résultat |
 |---|---|
 | Je change de téléphone | Enregistrez une nouvelle Passkey. Utilisez la passphrase pour la première connexion. |
-| J'oublie mon PIN | Ressaisissez votre passphrase. Vous pourrez définir un nouveau PIN ensuite. |
 | J'oublie ma passphrase mais j'ai le PDF | Utilisez la passphrase du PDF imprimé pour récupérer l'accès. |
 | J'oublie ma passphrase ET je perds le PDF | **Données définitivement perdues.** C'est le compromis sécurité : pas de porte dérobée admin. |
 | Mon NAS est volé | Le voleur a des blobs chiffrés — inutilisables sans votre passphrase. |
