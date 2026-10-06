@@ -998,9 +998,9 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 1. **Registration**: user sets username + password + passphrase → Argon2id derives encryption key → challenge blob created → PDF recovery document generated.
 2. **Daily login (Passkey)**: biometric authentication → obtains JWT → the PRF output unwraps the locally stored passphrase, otherwise the passphrase is typed on the unlock screen.
 3. **Fallback login (passphrase)**: user enters passphrase → Argon2id re-derives key → key sent to server.
-5. **Data access**: service layer decrypts data in RAM using the session key → serves plaintext via API → client renders normally.
-6. **Data write**: service layer encrypts each field with unique nonce → stores base64 blob in SQLite.
-7. **Logout / token expiry**: key purged from in-memory store.
+4. **Data access**: service layer decrypts data in RAM using the session key → serves plaintext via API → client renders normally.
+5. **Data write**: service layer encrypts each field with unique nonce → stores base64 blob in SQLite.
+6. **Logout / token expiry**: key purged from in-memory store.
 
 ### Migration of Existing Accounts
 

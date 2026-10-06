@@ -998,9 +998,9 @@ Toutes les variables chargées par `budgie/config.py` (Pydantic `BaseSettings`) 
 1. **Inscription** : l'utilisateur crée username + mot de passe + passphrase → Argon2id dérive la clé → challenge blob créé → document PDF de récupération généré.
 2. **Connexion quotidienne (Passkey)** : authentification biométrique → obtention du JWT → la sortie PRF déchiffre la passphrase stockée localement, sinon la passphrase est saisie sur l'écran de déverrouillage.
 3. **Connexion de secours (passphrase)** : l'utilisateur saisit la passphrase → Argon2id redérive la clé → clé envoyée au serveur.
-5. **Accès aux données** : la couche service déchiffre en RAM avec la clé de session → sert le texte clair via l'API → le client affiche normalement.
-6. **Écriture de données** : la couche service chiffre chaque champ avec un nonce unique → stocke le blob base64 dans SQLite.
-7. **Déconnexion / expiration du token** : clé purgée du store en mémoire.
+4. **Accès aux données** : la couche service déchiffre en RAM avec la clé de session → sert le texte clair via l'API → le client affiche normalement.
+5. **Écriture de données** : la couche service chiffre chaque champ avec un nonce unique → stocke le blob base64 dans SQLite.
+6. **Déconnexion / expiration du token** : clé purgée du store en mémoire.
 
 ### Migration des comptes existants
 
