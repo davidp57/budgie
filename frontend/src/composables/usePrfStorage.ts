@@ -17,6 +17,24 @@
  */
 
 const WRAPPED_KEY = 'budgie_prf_wrap'
+const OFFER_DISMISSED_KEY = 'budgie_prf_offer_dismissed'
+
+/**
+ * Decide whether to offer passkey unlock after a passphrase unlock.
+ *
+ * @param ctx.supported - Browser has WebAuthn and Web Crypto (HTTPS / localhost).
+ * @param ctx.hasPrfStored - A PRF-wrapped passphrase already exists on this device.
+ * @param ctx.passkeyCount - Passkeys registered on the account.
+ * @param ctx.dismissed - The user declined the offer on this device.
+ */
+export function shouldOfferPrfSetup(ctx: {
+  supported: boolean
+  hasPrfStored: boolean
+  passkeyCount: number
+  dismissed: boolean
+}): boolean {
+  return ctx.supported && !ctx.hasPrfStored && ctx.passkeyCount > 0 && !ctx.dismissed
+}
 
 interface PrfWrappedPassphrase {
   iv: number[] // 12 bytes — AES-GCM nonce
@@ -91,8 +109,26 @@ export function usePrfStorage() {
     localStorage.removeItem(WRAPPED_KEY)
   }
 
+  /** True when the user asked not to be offered passkey unlock on this device. */
+  function isOfferDismissed(): boolean {
+    return localStorage.getItem(OFFER_DISMISSED_KEY) === 'true'
+  }
+
+  /** Stop offering passkey unlock after a passphrase unlock on this device. */
+  function dismissOffer(): void {
+    localStorage.setItem(OFFER_DISMISSED_KEY, 'true')
+  }
+
+  /** Offer passkey unlock again (e.g. after registering a new passkey). */
+  function clearOfferDismissal(): void {
+    localStorage.removeItem(OFFER_DISMISSED_KEY)
+  }
+
   return {
     hasPrfPassphrase,
+    isOfferDismissed,
+    dismissOffer,
+    clearOfferDismissal,
     storePrfPassphrase,
     retrievePrfPassphrase,
     clearPrfPassphrase,

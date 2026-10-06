@@ -3,8 +3,8 @@ import axios from 'axios'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { usePrfStorage } from '@/composables/usePrfStorage'
-import { getPasskey } from '@/composables/useWebAuthn'
+import { shouldOfferPrfSetup, usePrfStorage } from '@/composables/usePrfStorage'
+import { getPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
 
 function extractError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
@@ -22,7 +22,8 @@ const prf = usePrfStorage()
 /**
  * 'passphrase' — standard passphrase entry
  * 'prf'        — tap to unlock with passkey (PRF-wrapped passphrase stored)
- * 'prf-setup'  — offer passkey unlock setup (only when no prfOutput in store)
+ * 'prf-setup'  — offer passkey unlock setup after a passphrase unlock, when
+ *                the account has a passkey but no PRF output is in the store
  */
 type UnlockMode = 'passphrase' | 'prf' | 'prf-setup'
 const mode = ref<UnlockMode>('passphrase')
@@ -65,6 +66,9 @@ async function submitPassphrase(): Promise<void> {
       } catch {
         // Save failed (not HTTPS, etc.) — the passphrase stays the way in
       }
+    } else if (await canOfferPrfSetup()) {
+      mode.value = 'prf-setup'
+      return
     }
     await router.push('/')
   } catch (err) {
@@ -72,6 +76,28 @@ async function submitPassphrase(): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+/** Whether to offer passkey unlock now that the passphrase is in memory. */
+async function canOfferPrfSetup(): Promise<boolean> {
+  const supported = cryptoAvailable && isWebAuthnSupported()
+  if (!supported || hasPrfStored.value || prf.isOfferDismissed()) return false
+  try {
+    await auth.loadWebAuthnCredentials()
+  } catch {
+    return false // Non-critical — never block the unlock on this offer
+  }
+  return shouldOfferPrfSetup({
+    supported,
+    hasPrfStored: hasPrfStored.value,
+    passkeyCount: auth.webauthnCredentials.length,
+    dismissed: prf.isOfferDismissed(),
+  })
+}
+
+function declinePrfSetup(): void {
+  prf.dismissOffer()
+  void router.push('/')
 }
 
 // ── PRF auto-unlock (called on mount when auth.prfOutput is available) ────────
@@ -133,7 +159,10 @@ async function submitPrfSetup(): Promise<void> {
     const { options } = await auth.webauthnAuthBegin(auth.username ?? undefined)
     const { prfOutput } = await getPasskey(options, true)
     if (!prfOutput) {
-      error.value = 'Your device does not support passkey unlock.'
+      // This authenticator has no PRF: asking again on this device is pointless
+      prf.dismissOffer()
+      error.value =
+        'This passkey cannot unlock encryption on this device. You will keep using your passphrase.'
       return
     }
     await prf.storePrfPassphrase(prfOutput, passphrase.value)
@@ -166,6 +195,9 @@ async function submitPrfSetup(): Promise<void> {
         </button>
         <button type="button" class="btn btn-ghost btn-sm" @click="router.push('/')">
           Skip for now
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs" @click="declinePrfSetup">
+          Don't ask again on this device
         </button>
       </div>
     </div>

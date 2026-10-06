@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Passkey unlock offered after a passphrase unlock** — when the account has a passkey and the device has no passkey unlock yet, Budgie now offers to set it up right after the passphrase is typed (it was only set up when logging in with a passkey); the offer can be declined per device, and **Settings → Passkeys → Passkey unlock → Enable on this device** turns it on at any time
+
 ### Removed
 
 - **PIN unlock** — the 4–6 digit PIN option that kept the encryption passphrase on the device is removed: a PIN that short cannot protect it. Passkey unlock (PRF) remains; elsewhere the passphrase is typed. A PIN saved by an earlier version is erased from the browser on the next visit
