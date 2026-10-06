@@ -17,7 +17,7 @@ import { getPreferences, updatePreferences } from '@/api/users'
 import type { Account, CategoryGroupWithCategories } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
-import { createPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
+import { createPasskey, getPasskey, isWebAuthnSupported } from '@/composables/useWebAuthn'
 import { usePrfStorage } from '@/composables/usePrfStorage'
 import { useTheme } from '@/composables/useTheme'
 
@@ -86,6 +86,8 @@ async function registerPasskey(): Promise<void> {
     const credential = await createPasskey(options)
     await auth.webauthnRegisterComplete(credential, newPasskeyName.value || undefined)
     newPasskeyName.value = ''
+    // A new passkey may support PRF where the previous one did not
+    prfStorage.clearOfferDismissal()
   } catch (err: unknown) {
     passkeyError.value =
       err instanceof Error ? err.message : 'Failed to register passkey.'
@@ -100,6 +102,31 @@ async function removePasskey(id: number): Promise<void> {
     await auth.deleteWebAuthnCredential(id)
   } catch {
     passkeyError.value = 'Failed to delete passkey.'
+  }
+}
+
+const prfEnabling = ref(false)
+
+/** Wrap the in-memory passphrase with a passkey PRF output on this device. */
+async function enablePrfUnlock(): Promise<void> {
+  const passphrase = auth.sessionPassphrase
+  if (!passphrase) return
+  passkeyError.value = ''
+  prfEnabling.value = true
+  try {
+    const { options } = await auth.webauthnAuthBegin(auth.username ?? undefined)
+    const { prfOutput } = await getPasskey(options, true)
+    if (!prfOutput) {
+      passkeyError.value = 'This passkey cannot unlock encryption on this device.'
+      return
+    }
+    await prfStorage.storePrfPassphrase(prfOutput, passphrase)
+    prfStorage.clearOfferDismissal()
+    prfHasStored.value = true
+  } catch (err: unknown) {
+    passkeyError.value = err instanceof Error ? err.message : 'Failed to enable passkey unlock.'
+  } finally {
+    prfEnabling.value = false
   }
 }
 
@@ -434,8 +461,25 @@ async function confirmReset(): Promise<void> {
             <p class="text-sm">Your passphrase is saved on this device and unlocks via passkey.</p>
             <button class="btn btn-ghost btn-sm text-error" @click="clearPrfPassphrase">Remove</button>
           </div>
+          <div
+            v-else-if="auth.sessionPassphrase && auth.webauthnCredentials.length > 0"
+            class="flex items-center justify-between"
+          >
+            <p class="text-sm">Unlock with your passkey instead of typing your passphrase.</p>
+            <button
+              class="btn btn-outline btn-sm"
+              :disabled="prfEnabling"
+              @click="enablePrfUnlock"
+            >
+              <span v-if="prfEnabling" class="loading loading-spinner loading-xs"></span>
+              Enable on this device
+            </button>
+          </div>
+          <p v-else-if="auth.sessionPassphrase" class="text-base-content/50 text-sm">
+            Register a passkey above to unlock your encryption with it.
+          </p>
           <p v-else class="text-base-content/50 text-sm">
-            No passkey unlock set up. Unlock your encryption with your passphrase to be offered this option.
+            Passkey unlock applies to accounts with encryption enabled.
           </p>
         </template>
         <p v-else class="text-base-content/50 text-sm">

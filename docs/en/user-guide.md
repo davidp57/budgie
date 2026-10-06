@@ -694,6 +694,8 @@ Budgie offers two ways to unlock your encryption, balancing security with conven
 
 You can register Passkeys on multiple devices (phone, tablet, laptop).
 
+**Unlocking with your passkey.** Once your account has a passkey, Budgie offers to unlock your encryption with it each time you type your passphrase on a device where this is not set up yet. Accept, and the passphrase is saved on that device, wrapped by a key only your passkey can produce. Choose **Don't ask again on this device** to stop the offer; you can still turn it on later in **Settings → Security → Passkey unlock → Enable on this device**.
+
 ### Recovery Document (PDF)
 
 At account creation, Budgie generates a **recovery PDF** containing:

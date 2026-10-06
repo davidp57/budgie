@@ -692,6 +692,8 @@ Budgie propose deux méthodes pour déverrouiller le chiffrement, équilibrant s
 
 Vous pouvez enregistrer des Passkeys sur plusieurs appareils (téléphone, tablette, ordinateur).
 
+**Déverrouiller avec votre passkey.** Une fois qu'une passkey est enregistrée sur votre compte, Budgie vous propose de déverrouiller le chiffrement avec elle chaque fois que vous saisissez votre passphrase sur un appareil où ce n'est pas encore configuré. Si vous acceptez, la passphrase est enregistrée sur cet appareil, chiffrée par une clé que seule votre passkey sait produire. **Don't ask again on this device** arrête la proposition ; vous pourrez toujours l'activer plus tard dans **Paramètres → Sécurité → Passkey unlock → Enable on this device**.
+
 ### Document de récupération (PDF)
 
 À la création du compte, Budgie génère un **PDF de récupération** contenant :
