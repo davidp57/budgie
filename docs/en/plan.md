@@ -261,6 +261,8 @@ All user data is encrypted at rest using **AES-256-GCM** with a key derived from
 
 ### 9.3 — PIN-based local key storage
 
+> **Dropped.** Shipped in 0.3.0, then removed: a 4–6 digit PIN can be brute-forced offline from a copy of the browser profile. Passkey unlock (WebAuthn PRF) covers the use case.
+
 - [ ] User sets a **4-6 digit PIN** on the device
 - [ ] Derive a wrapping key from PIN using **PBKDF2** (100k iterations, device-specific salt)
 - [ ] Encrypt the encryption key with the wrapping key → store in **IndexedDB**

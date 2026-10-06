@@ -30,7 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * PRF output from the latest passkey assertion (memory only, never persisted).
    * Used by UnlockEncryptionView to auto-unlock encryption immediately after a
-   * passkey login without asking for a separate PIN.
+   * passkey login without asking for the passphrase.
    */
   const prfOutput = ref<ArrayBuffer | null>(null)
   /** Registered passkeys for the current user (loaded on demand). */

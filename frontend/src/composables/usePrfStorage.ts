@@ -12,7 +12,7 @@
  *   - A compatible authenticator (platform authenticators on modern OS)
  *
  * The passphrase is **never** sent to the server in this flow; the PRF secret
- * never leaves the authenticator.  Falls back to PIN or passphrase when PRF
+ * never leaves the authenticator.  Falls back to the passphrase when PRF
  * is unavailable.
  */
 

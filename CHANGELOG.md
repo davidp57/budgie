@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **PIN unlock** — the 4–6 digit PIN option that kept the encryption passphrase on the device is removed: a PIN that short cannot protect it. Passkey unlock (PRF) remains; elsewhere the passphrase is typed. A PIN saved by an earlier version is erased from the browser on the next visit
+
 ### Changed
 
 - **`SECRET_KEY` is now mandatory** — the server refuses to start when `SECRET_KEY` is missing, shorter than 32 characters, or still set to a placeholder shipped with the repository; set it in `.env` before upgrading (`openssl rand -hex 32`). Changing it signs every user out once

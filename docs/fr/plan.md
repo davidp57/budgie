@@ -261,6 +261,8 @@ Toutes les données utilisateur sont chiffrées au repos avec **AES-256-GCM** et
 
 ### 9.3 — Stockage local de la clé par PIN
 
+> **Abandonné.** Livré en 0.3.0 puis retiré : un PIN à 4–6 chiffres se retrouve hors ligne par force brute depuis une copie du profil navigateur. Le déverrouillage par passkey (WebAuthn PRF) couvre le besoin.
+
 - [ ] L'utilisateur définit un **PIN de 4 à 6 chiffres** sur l'appareil
 - [ ] Dériver une clé d'enveloppe depuis le PIN via **PBKDF2** (100 000 itérations, sel spécifique à l'appareil)
 - [ ] Chiffrer la clé de chiffrement avec la clé d'enveloppe → stocker dans **IndexedDB**

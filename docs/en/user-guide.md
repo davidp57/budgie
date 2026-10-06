@@ -673,17 +673,16 @@ When you create your Budgie account, you choose a **passphrase** (a memorable se
 
 ### Signing In
 
-Budgie offers three ways to authenticate, balancing security with convenience:
+Budgie offers two ways to unlock your encryption, balancing security with convenience:
 
 | Method | When to use | How it works |
 |---|---|---|
 | **Passkey (biometric)** | Daily use | Fingerprint or Face ID on your device → unlocks your encryption key stored locally |
-| **PIN** | Quick fallback | 4–6 digit PIN → decrypts your locally stored encryption key |
 | **Passphrase** | Initial setup, new device, recovery | You type the passphrase → the encryption key is re-derived |
 
-**PIN security**: after 5 failed PIN attempts, the locally stored encryption key is erased. You will need to re-enter your passphrase.
-
-> **PIN requires HTTPS** — the PIN uses the Web Crypto API (`crypto.subtle`) which is only available on secure origins (HTTPS or `localhost`). If the app is served over plain HTTP, the PIN option will not be offered.
+> **Passkey unlock requires HTTPS** and a browser supporting the WebAuthn PRF extension (Chrome, Safari; not Firefox yet). Elsewhere, you type your passphrase.
+>
+> Earlier versions offered a 4–6 digit PIN. It was removed: a PIN that short does not protect the passphrase stored on the device. Any PIN saved by an older version is erased automatically.
 
 ### Setting Up Passkeys
 
@@ -711,7 +710,6 @@ At account creation, Budgie generates a **recovery PDF** containing:
 | Scenario | Outcome |
 |---|---|
 | I change my phone | Register a new Passkey on the new device. Use passphrase to log in the first time. |
-| I forget my PIN | Re-enter your passphrase. You can set a new PIN afterward. |
 | I forget my passphrase but have the PDF | Use the passphrase from the printed PDF to recover access. |
 | I forget my passphrase AND lose the PDF | **Data is permanently lost.** This is the security trade-off: no admin back door. |
 | My NAS is stolen | Thief has encrypted blobs — useless without your passphrase. |

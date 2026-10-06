@@ -671,17 +671,16 @@ Lors de la création de votre compte Budgie, vous choisissez une **passphrase** 
 
 ### Connexion
 
-Budgie propose trois méthodes d'authentification, équilibrant sécurité et confort :
+Budgie propose deux méthodes pour déverrouiller le chiffrement, équilibrant sécurité et confort :
 
 | Méthode | Quand l'utiliser | Fonctionnement |
 |---|---|---|
 | **Passkey (biométrie)** | Usage quotidien | Empreinte digitale ou Face ID sur votre appareil → déverrouille la clé stockée localement |
-| **PIN** | Accès rapide de secours | PIN à 4–6 chiffres → déchiffre la clé stockée localement |
 | **Passphrase** | Configuration initiale, nouvel appareil, récupération | Vous saisissez la passphrase → la clé est redérivée |
 
-**Sécurité du PIN** : après 5 tentatives échouées, la clé stockée localement est effacée. Vous devrez ressaisir votre passphrase.
-
-> **Le PIN nécessite HTTPS** — le PIN utilise l'API Web Crypto (`crypto.subtle`) qui n'est disponible que sur des origines sécurisées (HTTPS ou `localhost`). Si l'application est servie en HTTP simple, le PIN ne sera pas proposé.
+> **Le déverrouillage par passkey nécessite HTTPS** et un navigateur qui gère l'extension WebAuthn PRF (Chrome, Safari ; pas encore Firefox). Ailleurs, vous saisissez votre passphrase.
+>
+> Les versions précédentes proposaient un PIN à 4–6 chiffres. Il a été retiré : un PIN aussi court ne protège pas la passphrase stockée sur l'appareil. Un PIN enregistré par une ancienne version est effacé automatiquement.
 
 ### Configurer les Passkeys
 
@@ -709,7 +708,6 @@ Vous pouvez enregistrer des Passkeys sur plusieurs appareils (téléphone, table
 | Scénario | Résultat |
 |---|---|
 | Je change de téléphone | Enregistrez une nouvelle Passkey. Utilisez la passphrase pour la première connexion. |
-| J'oublie mon PIN | Ressaisissez votre passphrase. Vous pourrez définir un nouveau PIN ensuite. |
 | J'oublie ma passphrase mais j'ai le PDF | Utilisez la passphrase du PDF imprimé pour récupérer l'accès. |
 | J'oublie ma passphrase ET je perds le PDF | **Données définitivement perdues.** C'est le compromis sécurité : pas de porte dérobée admin. |
 | Mon NAS est volé | Le voleur a des blobs chiffrés — inutilisables sans votre passphrase. |
