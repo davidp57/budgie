@@ -117,6 +117,8 @@ async function enablePrfUnlock(): Promise<void> {
     const { options } = await auth.webauthnAuthBegin(auth.username ?? undefined)
     const { prfOutput } = await getPasskey(options, true)
     if (!prfOutput) {
+      // Same as on the unlock screen: no PRF here, stop offering it
+      prfStorage.dismissOffer()
       passkeyError.value = 'This passkey cannot unlock encryption on this device.'
       return
     }
@@ -477,6 +479,11 @@ async function confirmReset(): Promise<void> {
           </div>
           <p v-else-if="auth.sessionPassphrase" class="text-base-content/50 text-sm">
             Register a passkey above to unlock your encryption with it.
+          </p>
+          <!-- After a page reload the app stays unlocked but the passphrase is gone -->
+          <p v-else-if="auth.isEncrypted" class="text-base-content/50 text-sm">
+            No passkey unlock set up. Sign out and unlock with your passphrase to enable it on this
+            device.
           </p>
           <p v-else class="text-base-content/50 text-sm">
             Passkey unlock applies to accounts with encryption enabled.
