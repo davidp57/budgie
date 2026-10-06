@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.payee import PayeeCreate, PayeeRead, PayeeUpdate
+from budgie.services.ownership import ForeignReferenceError
 from budgie.services.payee import (
     create_payee,
     delete_payee,
@@ -53,7 +54,12 @@ async def create_payee_endpoint(
     Returns:
         Created payee data.
     """
-    payee = await create_payee(db, schema, current_user.id, session_key=session_key)
+    try:
+        payee = await create_payee(db, schema, current_user.id, session_key=session_key)
+    except ForeignReferenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     return PayeeRead.model_validate(payee)
 
 
@@ -114,7 +120,12 @@ async def update_payee_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Payee not found"
         )
-    updated = await update_payee(db, payee, schema, session_key=session_key)
+    try:
+        updated = await update_payee(db, payee, schema, session_key=session_key)
+    except ForeignReferenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     return PayeeRead.model_validate(updated)
 
 

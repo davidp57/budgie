@@ -37,7 +37,7 @@ from budgie.api import (
     users,
     webauthn,
 )
-from budgie.config import BASE_DIR, settings
+from budgie.config import BASE_DIR, check_secret_key, settings
 from budgie.limiter import limiter
 
 logger = logging.getLogger(__name__)
@@ -62,12 +62,15 @@ def _run_migrations() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler.
 
-    Runs Alembic migrations and creates required directories on startup.
+    Checks the JWT signing key, then runs Alembic migrations and creates
+    required directories on startup.
 
     Args:
         app: The FastAPI application instance.
     """
     logger.info("Budgie v%s starting", __version__)
+    # Refuse to serve with a publicly known JWT signing key
+    check_secret_key(settings.secret_key)
     # Create data/ before migrations — SQLite cannot create parent directories itself
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     # Apply any pending database migrations before accepting traffic

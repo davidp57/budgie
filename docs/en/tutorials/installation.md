@@ -48,7 +48,7 @@ SECRET_KEY=paste-your-random-key-here
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080,http://192.168.1.50:8080
 ```
 
-> ⚠️ **Never** leave `SECRET_KEY` as the default value in production.
+> ⚠️ Budgie **will not start** until `SECRET_KEY` holds a random value of at least 32 characters.
 
 ### Step 3 — Build and start
 

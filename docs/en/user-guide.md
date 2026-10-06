@@ -104,7 +104,7 @@ All configuration is done via the `.env` file at the project root (copied from `
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Required** — JWT signing key (see details below) |
+| `SECRET_KEY` | *(none)* | **Required** — JWT signing key; the server refuses to start without a valid one (see details below) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLite database URL (set automatically in Docker) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Allowed origins (see details below) |
 | `BUDGIE_PORT` | `8080` | External Docker container port |
@@ -115,8 +115,8 @@ All configuration is done via the `.env` file at the project root (copied from `
 This key is used to **sign and verify authentication tokens** (JWT). Every time a user logs in, the server creates a token signed with this key. If an attacker knows the key, they can forge valid tokens and access any account.
 
 **Rules:**
-- **Never** use the default value in production
 - Use a **random string of at least 32 characters** (64 hex characters recommended)
+- The server **refuses to start** if the key is missing, shorter than 32 characters, or still set to a placeholder value from the repository (`.env.example`, defaults) — the startup log tells you so
 - **Never share** the key or commit it to a repository
 - If you suspect the key has been compromised, **change it immediately** — all existing sessions will be invalidated (users must log in again)
 
@@ -170,7 +170,7 @@ CORS (Cross-Origin Resource Sharing) controls **which websites are allowed to ca
 | `PORT` | `8000` | Internal server port |
 | `DEBUG` | `false` | FastAPI debug mode |
 
-> ⚠️ **Important**: Always change `SECRET_KEY` before first production use. A weak key compromises JWT authentication.
+> ⚠️ **Important**: Set `SECRET_KEY` before the first start — the server will not start without a valid key.
 
 ---
 

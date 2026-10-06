@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
 from budgie.models.account import Account
-from budgie.models.category import Category
+from budgie.models.category import Category, CategoryGroup
 from budgie.models.category_rule import CategoryRule
 from budgie.models.envelope import Envelope
 from budgie.models.transaction import Transaction
@@ -37,6 +37,7 @@ from budgie.schemas.reconciliation import (
     RuleMatchRead,
     SuggestionRead,
 )
+from budgie.services.categorizer import regex_matches
 from budgie.services.crypto import decrypt_str, encrypt_str
 
 # ---------------------------------------------------------------------------
@@ -109,6 +110,30 @@ def _extract_rule_pattern(memo: str) -> str | None:
     return text if len(text) >= 3 else None
 
 
+async def _owned_category_names(
+    db: AsyncSession, user_id: int, category_ids: set[int]
+) -> dict[int, str]:
+    """Return ``{id: name}`` for the categories in *category_ids* owned by *user_id*.
+
+    A category reference pointing at another user's category is left out, so
+    its name can never reach this user's response.
+
+    Args:
+        db: Async database session.
+        user_id: Authenticated user.
+        category_ids: Category IDs referenced by transactions or rules.
+
+    Returns:
+        Mapping of category ID to name, restricted to the user's own categories.
+    """
+    result = await db.execute(
+        select(Category)
+        .join(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(Category.id.in_(category_ids), CategoryGroup.user_id == user_id)
+    )
+    return {c.id: c.name for c in result.scalars().all()}
+
+
 def _is_bank(tx: Transaction) -> bool:
     """Return True when *tx* was imported from a bank (has import_hash)."""
     return tx.import_hash is not None
@@ -130,7 +155,7 @@ def _matches_rule(rule: CategoryRule, tx: Transaction) -> bool:
     elif rule.match_type == "exact":
         text_match = rule.pattern.lower() == value.lower()
     elif rule.match_type == "regex":
-        text_match = re.search(rule.pattern, value, re.IGNORECASE) is not None
+        text_match = regex_matches(rule.pattern, value)
     else:
         return False
     if not text_match:
@@ -273,14 +298,17 @@ async def get_view(
     cat_ids = {tx.category_id for tx in expense_list if tx.category_id is not None}
     cat_names: dict[int, str] = {}
     if cat_ids:
-        cat_result = await db.execute(select(Category).where(Category.id.in_(cat_ids)))
-        cat_names = {c.id: c.name for c in cat_result.scalars().all()}
+        cat_names = await _owned_category_names(db, user_id, cat_ids)
 
     # Collect envelope names for expenses with direct envelope_id
     env_ids = {tx.envelope_id for tx in expense_list if tx.envelope_id is not None}
     env_names: dict[int, str] = {}
     if env_ids:
-        env_result = await db.execute(select(Envelope).where(Envelope.id.in_(env_ids)))
+        env_result = await db.execute(
+            select(Envelope).where(
+                Envelope.id.in_(env_ids), Envelope.user_id == user_id
+            )
+        )
         env_names = {e.id: e.name for e in env_result.scalars().all()}
 
     # Build confirmed links: expense.reconciled_with_id → bank tx
@@ -369,8 +397,7 @@ async def _build_rule_matches(
 
     # Pre-load names for all categories referenced by rules
     rule_cat_ids = {r.category_id for r in rules}
-    cat_result = await db.execute(select(Category).where(Category.id.in_(rule_cat_ids)))
-    cat_names: dict[int, str] = {c.id: c.name for c in cat_result.scalars().all()}
+    cat_names = await _owned_category_names(db, user_id, rule_cat_ids)
 
     result: list[RuleMatchRead] = []
     for bank in unlinked_banks:

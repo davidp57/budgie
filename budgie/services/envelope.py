@@ -168,10 +168,19 @@ async def _set_categories(
         )
         return
 
+    # Keep only categories that exist AND belong to the user (via CategoryGroup).
+    # Filter first: the deletions below must never touch another user's links.
+    cats_result = await db.execute(
+        select(Category.id)
+        .join(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(Category.id.in_(category_ids), CategoryGroup.user_id == user_id)
+    )
+    valid_ids = {row[0] for row in cats_result.all()}
+
     # Remove these categories from any other envelope
     await db.execute(
         envelope_categories.delete().where(
-            envelope_categories.c.category_id.in_(category_ids),
+            envelope_categories.c.category_id.in_(valid_ids),
             envelope_categories.c.envelope_id != envelope.id,
         )
     )
@@ -179,7 +188,7 @@ async def _set_categories(
     await db.execute(
         envelope_categories.delete().where(
             envelope_categories.c.envelope_id == envelope.id,
-            envelope_categories.c.category_id.notin_(category_ids),
+            envelope_categories.c.category_id.notin_(valid_ids),
         )
     )
     # Load existing links to avoid duplicate inserts
@@ -189,14 +198,6 @@ async def _set_categories(
         )
     )
     existing_ids = {row[0] for row in existing_result.all()}
-
-    # Verify categories exist AND belong to the user (via CategoryGroup)
-    cats_result = await db.execute(
-        select(Category.id)
-        .join(CategoryGroup, Category.group_id == CategoryGroup.id)
-        .where(Category.id.in_(category_ids), CategoryGroup.user_id == user_id)
-    )
-    valid_ids = {row[0] for row in cats_result.all()}
 
     new_links = [
         {"envelope_id": envelope.id, "category_id": cid}

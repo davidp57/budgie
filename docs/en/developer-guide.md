@@ -850,7 +850,7 @@ All settings loaded by `budgie/config.py` (Pydantic `BaseSettings`) from environ
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | SQLAlchemy async DB URL |
-| `SECRET_KEY` | `change-me-in-production` | JWT HMAC signing key — **must change** |
+| `SECRET_KEY` | *(placeholder, rejected)* | JWT HMAC signing key — startup fails unless it is set to ≥ 32 characters (`check_secret_key`) |
 | `ALGORITHM` | `HS256` | JWT algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Token lifetime (24 h) |
 | `UPLOAD_DIR` | `data/uploads` | Temp directory for uploaded files |

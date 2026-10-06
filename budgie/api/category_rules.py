@@ -15,6 +15,7 @@ from budgie.services.category_rule import (
     get_rules,
     update_rule,
 )
+from budgie.services.ownership import ForeignReferenceError
 
 router = APIRouter(prefix="/api/category-rules", tags=["category-rules"])
 
@@ -52,8 +53,14 @@ async def create_rule_endpoint(
 
     Returns:
         Created CategoryRule data.
+
+    Raises:
+        HTTPException: 404 if the category does not belong to the user.
     """
-    rule = await create_rule(db, schema, current_user.id)
+    try:
+        rule = await create_rule(db, schema, current_user.id)
+    except ForeignReferenceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return CategoryRuleRead.model_validate(rule)
 
 
@@ -101,12 +108,20 @@ async def update_rule_endpoint(
         Updated CategoryRule data.
 
     Raises:
-        HTTPException: 404 if the rule does not exist or belongs to another user.
+        HTTPException: 404 if the rule or the new category does not exist or
+            belongs to another user; 422 if the merged rule is invalid.
     """
     rule = await get_rule(db, rule_id, current_user.id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Rule not found")
-    updated = await update_rule(db, rule, schema)
+    try:
+        updated = await update_rule(db, rule, schema)
+    except ForeignReferenceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     return CategoryRuleRead.model_validate(updated)
 
 

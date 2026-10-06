@@ -104,7 +104,7 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `SECRET_KEY` | `change-me-to-a-random-string` | **Obligatoire** — Clé de signature JWT (voir détails ci-dessous) |
+| `SECRET_KEY` | *(aucune)* | **Obligatoire** — Clé de signature JWT ; le serveur refuse de démarrer sans clé valide (voir détails ci-dessous) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/budgie.db` | URL de la base SQLite (en Docker, défini automatiquement) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Origines autorisées (voir détails ci-dessous) |
 | `BUDGIE_PORT` | `8080` | Port externe du conteneur Docker |
@@ -115,8 +115,8 @@ Toute la configuration se fait via le fichier `.env` à la racine du projet (cop
 Cette clé est utilisée pour **signer et vérifier les tokens d'authentification** (JWT). À chaque connexion, le serveur crée un token signé avec cette clé. Si un attaquant connaît la clé, il peut forger des tokens valides et accéder à n'importe quel compte.
 
 **Règles :**
-- **Ne jamais** utiliser la valeur par défaut en production
 - Utiliser une **chaîne aléatoire d'au moins 32 caractères** (64 caractères hexadécimaux recommandés)
+- Le serveur **refuse de démarrer** si la clé est absente, fait moins de 32 caractères ou reprend une valeur d'exemple du dépôt (`.env.example`, valeurs par défaut) — le journal de démarrage l'indique
 - **Ne jamais partager** la clé ni la commiter dans un dépôt
 - En cas de suspicion de compromission, **changez-la immédiatement** — toutes les sessions en cours seront invalidées (les utilisateurs devront se reconnecter)
 
@@ -170,7 +170,7 @@ CORS (Cross-Origin Resource Sharing) contrôle **quels sites web sont autorisés
 | `PORT` | `8000` | Port interne du serveur |
 | `DEBUG` | `false` | Mode debug FastAPI |
 
-> ⚠️ **Important** : Changez toujours `SECRET_KEY` avant la première utilisation en production. Une clé faible compromet l'authentification JWT.
+> ⚠️ **Important** : Définissez `SECRET_KEY` avant le premier démarrage — le serveur ne démarre pas sans clé valide.
 
 ---
 

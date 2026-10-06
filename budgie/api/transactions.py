@@ -17,6 +17,7 @@ from budgie.schemas.transaction import (
     TransactionUpdate,
 )
 from budgie.services.crypto import decrypt_str
+from budgie.services.ownership import ForeignReferenceError
 from budgie.services.transaction import (
     count_unassigned_expenses,
     create_transaction,
@@ -192,6 +193,10 @@ async def create_transaction_endpoint(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
         ) from exc
+    except ForeignReferenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     return TransactionRead.model_validate(txn)
 
 
@@ -276,7 +281,14 @@ async def update_transaction_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found"
         )
-    updated = await update_transaction(db, txn, schema, session_key=session_key)
+    try:
+        updated = await update_transaction(
+            db, txn, schema, current_user.id, session_key=session_key
+        )
+    except ForeignReferenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
     return TransactionRead.model_validate(updated)
 
 

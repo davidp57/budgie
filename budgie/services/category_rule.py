@@ -4,7 +4,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.models.category_rule import CategoryRule
-from budgie.schemas.category_rule import CategoryRuleCreate, CategoryRuleUpdate
+from budgie.schemas.category_rule import (
+    CategoryRuleCreate,
+    CategoryRuleUpdate,
+    check_rule_pattern,
+)
+from budgie.services.ownership import ensure_references_owned
+
+# Columns that are NOT NULL in the database: an explicit ``null`` in a partial
+# update must be rejected rather than written.
+_REQUIRED_FIELDS = (
+    "pattern",
+    "match_field",
+    "match_type",
+    "category_id",
+    "priority",
+    "transaction_type",
+)
 
 
 async def get_rules(db: AsyncSession, user_id: int) -> list[CategoryRule]:
@@ -56,7 +72,11 @@ async def create_rule(
 
     Returns:
         Newly created CategoryRule instance.
+
+    Raises:
+        ForeignReferenceError: If the category does not belong to the user.
     """
+    await ensure_references_owned(db, user_id, category_id=schema.category_id)
     rule = CategoryRule(
         user_id=user_id,
         pattern=schema.pattern,
@@ -86,8 +106,35 @@ async def update_rule(
 
     Returns:
         Updated CategoryRule instance.
+
+    Raises:
+        ValueError: If the merged rule is invalid (null required field,
+            bad or ReDoS-prone regex, inverted amount range).
+        ForeignReferenceError: If the new category does not belong to the
+            rule's owner.
     """
-    for field, value in schema.model_dump(exclude_unset=True).items():
+    changes = schema.model_dump(exclude_unset=True)
+    for field in _REQUIRED_FIELDS:
+        if field in changes and changes[field] is None:
+            raise ValueError(f"{field} cannot be null")
+
+    # Validate the rule as it will be stored, not just the submitted fields:
+    # a partial update may switch an existing pattern to regex, or change the
+    # pattern of a rule that already is one.
+    pattern = changes.get("pattern", rule.pattern)
+    match_type = changes.get("match_type", rule.match_type)
+    check_rule_pattern(pattern, match_type)
+    min_amount = changes.get("min_amount", rule.min_amount)
+    max_amount = changes.get("max_amount", rule.max_amount)
+    if min_amount is not None and max_amount is not None and min_amount > max_amount:
+        raise ValueError("min_amount must be <= max_amount")
+
+    if "category_id" in changes:
+        await ensure_references_owned(
+            db, rule.user_id, category_id=changes["category_id"]
+        )
+
+    for field, value in changes.items():
         setattr(rule, field, value)
     await db.commit()
     await db.refresh(rule)
