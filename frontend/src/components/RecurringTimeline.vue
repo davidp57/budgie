@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * RecurringTimeline — one line per service over the last two years.
+ * RecurringTimeline — one line per service over the last two years, sorted
+ * by name.
  *
  * Each line runs from its first to its last debit; its successive prices are
  * stretches of the same line. A line that probably continues another one
@@ -42,11 +43,13 @@ const linkingId = ref<string | null>(null)
 
 const start = computed(() => monthsBefore(WINDOW_MONTHS, props.today))
 
-// Most recent first: what still runs on top, what stopped long ago at the bottom
+// Alphabetical, so that one service under two labels ("Tesla Lu", "Tesla
+// Motors Lux") sits on two neighbouring rows; most recent first within a name.
 const rows = computed(() =>
   [...props.lines].sort(
     (a, b) =>
-      (b.last_date ?? '').localeCompare(a.last_date ?? '') || b.monthly_cost - a.monthly_cost,
+      a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }) ||
+      (b.last_date ?? '').localeCompare(a.last_date ?? ''),
   ),
 )
 

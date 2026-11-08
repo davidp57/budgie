@@ -454,6 +454,7 @@ Une hausse n'est signalée qu'à son deuxième prélèvement au nouveau montant 
 ### Historique
 
 Une frise sur deux ans : une ligne par service, de son premier à son dernier prélèvement, ses tarifs successifs sur la même ligne.
+Les lignes sont classées par ordre alphabétique : un même service passé sous un autre libellé (« Tesla Lu » et « Tesla Motors Lux ») se retrouve sur deux lignes voisines.
 On y voit ce qui s'est arrêté, quand, et ce qui a pris le relais.
 
 - Quand la banque ou le commerçant a renommé un prélèvement, **relier à…** réunit les deux lignes : la plus récente absorbe l'autre, et ses prélèvements comptent pour elle.
