@@ -430,9 +430,11 @@ Open it from the **Abonnements** card of the home page (on a phone) or the **Abo
 - Only imported transactions count: a manually entered expense is never proposed.
 - The situation is the one of the **last imported statement**: a payment "runs" when it was debited less than one and a half of its period before the most recent imported debit. The page shows that date when it is in the past.
 
+The page has two tabs: **Historique** (history), opened by default, and **En ce moment** (now). The total at the top applies to both, and every correction can be made from either.
+
 ### En ce moment (now)
 
-The tab opens on the answer, with nothing to classify first:
+The tab gives the answer, with nothing to classify first:
 
 - at the top, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth), and how many were counted without confirmation;
 - **Abonnements en cours** (running subscriptions): every running service, sorted by cost; those found automatically are marked **à confirmer** (to confirm);
@@ -461,6 +463,8 @@ It shows what stopped, when, and what took over.
 
 - When the bank or the merchant renamed a debit, **relier à…** (link to…) joins the two lines: the more recent one absorbs the other, whose debits then count for it.
 - Budgie itself suggests the lines that follow each other at the **exact same amount** ("Probablement la suite de…", **Relier** button); it never suggests two different amounts, which are nearly always a coincidence.
+- Each line carries its status (subscription, to confirm, not a subscription, cancelled on…, ignored), its alerts, and a **⋯** menu with every correction of "En ce moment": **✓ Abonnement**, **Pas un abonnement**, **Résilié…** or **Annuler la résiliation**, **Renommer…**, **Catégorie…**, **Accepter le nouveau prix**, **Libellés reliés…**, **Ignorer**, **Retirer le classement**.
+- A solid bar is a confirmed subscription, a light one a subscription found automatically, a grey one a stopped or cancelled payment; ignored lines stay, faded, with **Reproposer** in their menu.
 
 ### Starting over
 

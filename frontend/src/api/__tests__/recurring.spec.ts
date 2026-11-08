@@ -8,6 +8,7 @@ import {
   monthsBefore,
   needsAttention,
   periodLabel,
+  renameKind,
   timelinePercent,
 } from '../recurring'
 import type { RecurringLine, RecurringPayment } from '../types'
@@ -110,5 +111,10 @@ describe('recurring helpers', () => {
   it('goes back a number of months, clamped to the end of a short month', () => {
     expect(monthsBefore(24, '2026-11-08')).toBe('2024-11-08')
     expect(monthsBefore(3, '2026-05-31')).toBe('2026-02-28')
+  })
+
+  it('renames a detected line without turning "probably not" into a subscription', () => {
+    expect(renameKind(line())).toBe('subscription')
+    expect(renameKind(line({ likely_other: true }))).toBe('other')
   })
 })

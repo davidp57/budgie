@@ -1,4 +1,5 @@
 import client from './client'
+import { formatAmount } from './types'
 import type {
   RecurringBoard,
   RecurringKind,
@@ -102,6 +103,41 @@ export function needsAttention(payment: RecurringPayment): boolean {
   if (payment.kind !== 'subscription') return false
   if (payment.status === 'cancelled') return payment.debits_after_cancellation.length > 0
   return payment.status === 'probably_ended' || payment.price_changed
+}
+
+/** One correction on a service line, from either tab of the page. */
+export type LineAction =
+  | { type: 'kind'; kind: RecurringKind }
+  | { type: 'rename'; name: string }
+  | { type: 'cancel'; date: string | null }
+  | { type: 'forget' }
+  | { type: 'acceptPrice' }
+  | { type: 'category'; categoryId: number | null }
+  | { type: 'detach'; aliasId: number }
+
+/**
+ * How a detected line is classified when it is only renamed: a line that is
+ * probably not a subscription (transfer, 100 €/month or more) must not enter
+ * the subscriptions total because it got a name.
+ */
+export function renameKind(line: RecurringLine): RecurringKind {
+  return line.likely_other ? 'other' : 'subscription'
+}
+
+/** What needs a look on a classified line: stopped, debited after cancellation, new price. */
+export function attentionLines(payment: RecurringPayment): string[] {
+  const result: string[] = []
+  if (payment.debits_after_cancellation.length > 0) {
+    const dates = payment.debits_after_cancellation.map(formatDay).join(', ')
+    result.push(`Encore prélevé après la résiliation : ${dates}`)
+  }
+  if (payment.price_changed && payment.status !== 'cancelled') {
+    result.push(`Nouveau prix : ${formatAmount(payment.current_amount)}`)
+  }
+  if (payment.status === 'probably_ended' && payment.last_date) {
+    result.push(`Plus prélevé depuis le ${formatDay(payment.last_date)} : terminé ?`)
+  }
+  return result
 }
 
 /** Where a line goes on the "now" view. */

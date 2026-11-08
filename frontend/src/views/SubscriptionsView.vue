@@ -13,6 +13,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   acceptRecurringPrice,
+  attentionLines,
   classifyLine,
   detachRecurring,
   forgetRecurring,
@@ -22,10 +23,11 @@ import {
   linkLines,
   localToday,
   periodLabel,
+  renameKind,
   resetRecurring,
   updateRecurring,
 } from '@/api/recurring'
-import type { LineGroup } from '@/api/recurring'
+import type { LineAction, LineGroup } from '@/api/recurring'
 import { listCategoryGroups } from '@/api/categories'
 import type { CategoryGroupWithCategories, RecurringBoard, RecurringLine } from '@/api/types'
 import { formatAmount } from '@/api/types'
@@ -36,7 +38,8 @@ const board = ref<RecurringBoard | null>(null)
 const groups = ref<CategoryGroupWithCategories[]>([])
 const loading = ref(true)
 const busy = ref(false)
-const tab = ref<'now' | 'history'>('now')
+// The timeline is the main view (David, 2026-11-08)
+const tab = ref<'now' | 'history'>('history')
 const today = localToday()
 
 // Inline edits
@@ -56,9 +59,8 @@ const running = computed(() => inGroup('subscription'))
 const others = computed(() => inGroup('other'))
 const stopped = computed(() => inGroup('stopped'))
 const ignored = computed(() => inGroup('ignored'))
-const timelineLines = computed(() =>
-  lines.value.filter((l) => l.payment?.kind !== 'dismissed' && l.segments.length > 0),
-)
+// Ignored lines stay on the timeline, faded, so that they can be proposed again
+const timelineLines = computed(() => lines.value.filter((l) => l.segments.length > 0))
 const classifiedCount = computed(() => lines.value.filter((l) => l.payment).length)
 
 async function load(): Promise<void> {
@@ -86,27 +88,57 @@ async function run(action: () => Promise<RecurringBoard | void>): Promise<void> 
   }
 }
 
-function confirmSubscription(line: RecurringLine): Promise<void> {
+/** Run one correction on a line, from either tab. */
+function perform(line: RecurringLine, action: LineAction): Promise<void> {
   const p = line.payment
-  return run(() =>
-    p ? updateRecurring(p.id, { kind: 'subscription' }) : classifyLine(line, 'subscription'),
-  )
+  switch (action.type) {
+    case 'kind':
+      return run(() =>
+        p ? updateRecurring(p.id, { kind: action.kind }) : classifyLine(line, action.kind),
+      )
+    case 'rename':
+      return run(() =>
+        p
+          ? updateRecurring(p.id, { name: action.name })
+          : classifyLine(line, renameKind(line), action.name),
+      )
+    case 'cancel':
+      if (p) return run(() => updateRecurring(p.id, { cancelled_at: action.date }))
+      if (!action.date) return Promise.resolve()
+      return run(() => classifyLine(line, 'subscription', line.name, action.date))
+    case 'forget':
+      return p ? run(() => forgetRecurring(p.id)) : Promise.resolve()
+    case 'acceptPrice':
+      return p ? run(() => acceptRecurringPrice(p.id)) : Promise.resolve()
+    case 'category':
+      return p
+        ? run(() => updateRecurring(p.id, { category_id: action.categoryId }))
+        : Promise.resolve()
+    case 'detach':
+      return p ? run(() => detachRecurring(p.id, action.aliasId)) : Promise.resolve()
+  }
+}
+
+function performOn(lineId: string, action: LineAction): Promise<void> {
+  const line = lines.value.find((l) => l.id === lineId)
+  return line ? perform(line, action) : Promise.resolve()
+}
+
+function confirmSubscription(line: RecurringLine): Promise<void> {
+  return perform(line, { type: 'kind', kind: 'subscription' })
 }
 
 function notSubscription(line: RecurringLine): Promise<void> {
-  const p = line.payment
-  return run(() => (p ? updateRecurring(p.id, { kind: 'other' }) : classifyLine(line, 'other')))
+  return perform(line, { type: 'kind', kind: 'other' })
 }
 
 function ignore(line: RecurringLine): Promise<void> {
-  return run(() => classifyLine(line, 'dismissed'))
+  return perform(line, { type: 'kind', kind: 'dismissed' })
 }
 
 function forget(line: RecurringLine): Promise<void> {
-  const p = line.payment
-  if (!p) return Promise.resolve()
   detailsId.value = null
-  return run(() => forgetRecurring(p.id))
+  return perform(line, { type: 'forget' })
 }
 
 function startRename(line: RecurringLine): void {
@@ -119,9 +151,7 @@ async function saveRename(line: RecurringLine): Promise<void> {
   if (renamingId.value !== line.id) return
   const name = renameValue.value.trim()
   renamingId.value = null
-  if (!name || name === line.name) return
-  const p = line.payment
-  await run(() => (p ? updateRecurring(p.id, { name }) : classifyLine(line, 'subscription', name)))
+  if (name && name !== line.name) await perform(line, { type: 'rename', name })
 }
 
 function startCancel(line: RecurringLine): void {
@@ -132,38 +162,24 @@ function startCancel(line: RecurringLine): void {
 async function confirmCancel(line: RecurringLine): Promise<void> {
   const date = cancelDate.value
   cancellingId.value = null
-  if (!date) return
-  const p = line.payment
-  await run(() =>
-    p
-      ? updateRecurring(p.id, { cancelled_at: date })
-      : classifyLine(line, 'subscription', line.name, date),
-  )
+  if (date) await perform(line, { type: 'cancel', date })
 }
 
 function onCategoryChange(line: RecurringLine, event: Event): void {
-  const p = line.payment
-  if (!p) return
   const value = (event.target as HTMLSelectElement).value
-  void run(() => updateRecurring(p.id, { category_id: value ? Number(value) : null }))
+  void perform(line, { type: 'category', categoryId: value ? Number(value) : null })
 }
 
 function acceptPrice(line: RecurringLine): Promise<void> {
-  const p = line.payment
-  if (!p) return Promise.resolve()
-  return run(() => acceptRecurringPrice(p.id))
+  return perform(line, { type: 'acceptPrice' })
 }
 
 function uncancel(line: RecurringLine): Promise<void> {
-  const p = line.payment
-  if (!p) return Promise.resolve()
-  return run(() => updateRecurring(p.id, { cancelled_at: null }))
+  return perform(line, { type: 'cancel', date: null })
 }
 
 function detach(line: RecurringLine, aliasId: number): Promise<void> {
-  const p = line.payment
-  if (!p) return Promise.resolve()
-  return run(() => detachRecurring(p.id, aliasId))
+  return perform(line, { type: 'detach', aliasId })
 }
 
 function link(earlierId: string, laterId: string): Promise<void> {
@@ -179,20 +195,7 @@ async function reset(): Promise<void> {
 }
 
 function attentionText(line: RecurringLine): string[] {
-  const p = line.payment
-  if (!p) return []
-  const result: string[] = []
-  if (p.debits_after_cancellation.length > 0) {
-    const dates = p.debits_after_cancellation.map(formatDay).join(', ')
-    result.push(`Encore prélevé après la résiliation : ${dates}`)
-  }
-  if (p.price_changed && p.status !== 'cancelled') {
-    result.push(`Nouveau prix : ${formatAmount(p.current_amount)}`)
-  }
-  if (p.status === 'probably_ended' && p.last_date) {
-    result.push(`Plus prélevé depuis le ${formatDay(p.last_date)} : terminé ?`)
-  }
-  return result
+  return line.payment ? attentionLines(line.payment) : []
 }
 
 onMounted(load)
@@ -232,9 +235,6 @@ onMounted(load)
 
       <!-- Tabs -->
       <div role="tablist" class="tabs tabs-box mb-4 w-fit">
-        <button role="tab" class="tab" :class="{ 'tab-active': tab === 'now' }" @click="tab = 'now'">
-          En ce moment
-        </button>
         <button
           role="tab"
           class="tab"
@@ -246,6 +246,15 @@ onMounted(load)
           <span v-if="board.suggestions.length > 0" class="badge badge-warning badge-xs ml-1">
             {{ board.suggestions.length }}
           </span>
+        </button>
+        <button
+          role="tab"
+          class="tab"
+          :class="{ 'tab-active': tab === 'now' }"
+          data-test="tab-now"
+          @click="tab = 'now'"
+        >
+          En ce moment
         </button>
       </div>
 
@@ -457,8 +466,11 @@ onMounted(load)
           :lines="timelineLines"
           :suggestions="board.suggestions"
           :today="board.as_of"
+          :cancel-default="today"
+          :groups="groups"
           :busy="busy"
           @link="link"
+          @action="performOn"
         />
       </template>
 

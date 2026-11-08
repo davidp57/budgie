@@ -35,7 +35,9 @@ describe('RecurringTimeline', () => {
       line('t1', 'Tesla Lu', '2025-01-10', '2026-11-01'),
     ]
     const wrapper = mount(RecurringTimeline, {
-      props: { lines, suggestions: [], today: '2026-11-08', busy: false },
+      props: { lines, suggestions: [], today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [], busy: false },
     })
     const names = wrapper
       .findAll('[data-test=timeline-row]')
@@ -49,6 +51,8 @@ describe('RecurringTimeline', () => {
         lines: [line('a', 'Same', '2024-01-10', '2024-06-10'), line('b', 'Same', '2025-01-10', '2026-11-01')],
         suggestions: [],
         today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [],
         busy: false,
       },
     })
@@ -64,6 +68,8 @@ describe('RecurringTimeline', () => {
         lines: [old, recent],
         suggestions: [{ earlier_id: 'a', later_id: 'b' }],
         today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [],
         busy: false,
       },
     })
@@ -76,7 +82,9 @@ describe('RecurringTimeline', () => {
 
   it('links by hand with the line that ends first as the earlier one', async () => {
     const wrapper = mount(RecurringTimeline, {
-      props: { lines: [old, recent], suggestions: [], today: '2026-11-08', busy: false },
+      props: { lines: [old, recent], suggestions: [], today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [], busy: false },
     })
     // Start from the older row ("Relier à…"), pick the recent line
     const oldRow = wrapper.findAll('[data-test=timeline-row]').find((r) => r.find('p').text() === 'Oldname')!
@@ -84,5 +92,21 @@ describe('RecurringTimeline', () => {
     await oldRow.find('select').setValue('b')
     await oldRow.findAll('button').find((b) => b.text() === 'Confirmer')!.trigger('click')
     expect(wrapper.emitted('link')![0]).toEqual(['a', 'b'])
+  })
+
+  it('passes a line action up with the id of its line', async () => {
+    const wrapper = mount(RecurringTimeline, {
+      props: {
+        lines: [old, recent],
+        suggestions: [],
+        today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [],
+        busy: false,
+      },
+    })
+    const row = wrapper.findAll('[data-test=timeline-row]').find((r) => r.text().includes('Newname'))!
+    await row.findAll('[data-test=menu-item]').find((b) => b.text() === '✓ Abonnement')!.trigger('click')
+    expect(wrapper.emitted('action')![0]).toEqual(['b', { type: 'kind', kind: 'subscription' }])
   })
 })

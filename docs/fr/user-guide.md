@@ -428,9 +428,11 @@ On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone)
 - Seules les transactions importées comptent : une dépense saisie à la main n'est jamais proposée.
 - La situation est celle du **dernier relevé importé** : un paiement « tourne » s'il a été prélevé moins d'une fois et demie son rythme avant le dernier prélèvement importé. La page indique cette date quand elle est passée.
 
+La page a deux onglets : **Historique**, qui s'ouvre par défaut, et **En ce moment**. Le total en tête de page vaut pour les deux, et toutes les corrections se font depuis l'un comme depuis l'autre.
+
 ### En ce moment
 
-L'onglet s'ouvre sur la réponse, sans rien avoir à classer :
+L'onglet donne la réponse, sans rien avoir à classer :
 
 - en haut, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième), et combien ont été comptés sans confirmation ;
 - **Abonnements en cours** : chaque service qui tourne, trié par coût ; ceux repérés automatiquement portent **à confirmer** ;
@@ -459,6 +461,8 @@ On y voit ce qui s'est arrêté, quand, et ce qui a pris le relais.
 
 - Quand la banque ou le commerçant a renommé un prélèvement, **relier à…** réunit les deux lignes : la plus récente absorbe l'autre, et ses prélèvements comptent pour elle.
 - Budgie suggère lui-même les lignes qui se suivent au **même montant exact** (« Probablement la suite de… », bouton **Relier**) ; il ne suggère jamais deux montants différents, car c'est presque toujours une coïncidence.
+- Chaque ligne porte son statut (abonnement, à confirmer, pas un abonnement, résilié le…, ignoré), ses alertes, et un menu **⋯** avec toutes les corrections de « En ce moment » : **✓ Abonnement**, **Pas un abonnement**, **Résilié…** ou **Annuler la résiliation**, **Renommer…**, **Catégorie…**, **Accepter le nouveau prix**, **Libellés reliés…**, **Ignorer**, **Retirer le classement**.
+- Une barre pleine est un abonnement confirmé, une barre claire un abonnement repéré automatiquement, une barre grise un paiement arrêté ou résilié ; les lignes ignorées restent, estompées, avec **Reproposer** dans leur menu.
 
 ### Repartir de zéro
 
