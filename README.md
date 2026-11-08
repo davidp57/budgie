@@ -18,6 +18,7 @@
 | 💰 | Envelope budgeting with optional rollover | Budget par enveloppes avec report optionnel |
 | 🔮 | Virtual transactions (planned purchases) | Transactions virtuelles (achats planifiés) |
 | ⚡ | Quick expense entry with presets | Saisie rapide avec préréglages |
+| 🔁 | Subscriptions found in your statements, with their cost | Abonnements repérés dans les relevés, avec leur coût |
 | 🌓 | Dark / light theme | Thème sombre / clair |
 | 📱 | Mobile-first PWA | PWA mobile-first |
 | 🐳 | Docker self-hosted (Synology NAS) | Docker auto-hébergé (NAS Synology) |

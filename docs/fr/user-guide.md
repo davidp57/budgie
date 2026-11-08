@@ -16,11 +16,12 @@
 10. [Le budget (enveloppes)](#10-le-budget-enveloppes)
 11. [Transactions virtuelles (prévisions)](#11-transactions-virtuelles-prévisions)
 12. [Dépense rapide (QuickExpense)](#12-dépense-rapide-quickexpense)
-13. [Thème et installation mobile (PWA)](#13-thème-et-installation-mobile-pwa)
-14. [Déploiement Docker](#14-déploiement-docker)
-15. [Sauvegardes et mises à jour](#15-sauvegardes-et-mises-à-jour)
-16. [FAQ / Dépannage](#16-faq--dépannage)
-17. [Sécurité & Chiffrement](#17-sécurité--chiffrement)
+13. [Abonnements](#13-abonnements)
+14. [Thème et installation mobile (PWA)](#14-thème-et-installation-mobile-pwa)
+15. [Déploiement Docker](#15-déploiement-docker)
+16. [Sauvegardes et mises à jour](#16-sauvegardes-et-mises-à-jour)
+17. [FAQ / Dépannage](#17-faq--dépannage)
+18. [Sécurité & Chiffrement](#18-sécurité--chiffrement)
 
 ---
 
@@ -39,6 +40,7 @@ Elle suit la méthode du **budget par enveloppes** : chaque centime de revenu es
 | 💰 Budget par enveloppes | Enveloppes avec report optionnel du solde non dépensé |
 | 🔮 Transactions virtuelles | Planifiez des achats futurs et voyez leur impact immédiat |
 | ⚡ Dépense rapide | Saisie rapide avec préréglages et suggestions par géolocalisation |
+| 🔁 Abonnements | Repérage des paiements récurrents, coût mensuel et annuel, suivi des résiliations |
 | 🌓 Thème sombre / clair | Bascule auto ou manuelle |
 | 📱 PWA mobile | Ajout à l'écran d'accueil, plein écran |
 | 🐳 Self-hosted | Docker / Docker Compose, idéal pour NAS Synology |
@@ -412,7 +414,48 @@ Si vous autorisez l'accès à votre position (nécessite HTTPS), Budgie interrog
 
 ---
 
-## 13. Thème et installation mobile (PWA)
+## 13. Abonnements
+
+Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements et suivre leurs résiliations.
+
+On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone) ou par l'entrée **Abonnements** du menu (sur ordinateur).
+
+### Ce que Budgie repère
+
+- Les débits importés d'un même libellé bancaire (les dates et numéros de carte du libellé ne comptent pas), d'un montant stable à 10 % près, qui reviennent chaque mois, chaque trimestre ou chaque année.
+- Il faut au moins trois prélèvements pour un rythme mensuel ou trimestriel, deux pour un rythme annuel ; une série de moins de quatre prélèvements doit répéter exactement le même montant.
+- Deux abonnements de prix différents chez un même commerçant donnent deux propositions.
+- Seules les transactions importées comptent : une dépense saisie à la main n'est jamais proposée.
+
+### Classer une proposition
+
+Chaque proposition de la rubrique **À classer** attend ton verdict :
+
+| Bouton | Effet |
+|---|---|
+| **Abonnement** | Entre dans le total des abonnements |
+| **Autre paiement récurrent** | Impôts, épargne, assurance… : suivi, mais hors du total |
+| **Ignorer** | N'est plus proposé (rubrique **Ignorés**, bouton **Reproposer** pour revenir en arrière) |
+
+Les nouveaux relevés importés sont rattachés tout seuls aux paiements déjà classés.
+
+### Ce que coûtent tes abonnements
+
+En haut de la page, le total des abonnements actifs ramené au mois, et le même total sur l'année : un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième.
+Un abonnement se renomme en cliquant sur son nom, et peut recevoir une catégorie.
+
+### Résiliations et alertes
+
+- **Résilié…** enregistre la date de résiliation : l'abonnement sort du total.
+- La rubrique **À vérifier** signale :
+  - un abonnement encore prélevé après sa résiliation, avec les dates ;
+  - un abonnement qui n'a plus été prélevé depuis plus d'une fois et demie son rythme (**terminé ?**) ;
+  - un changement de prix, avec l'ancien et le nouveau montant (**Accepter le nouveau prix** le confirme).
+- Un nouveau montant chez un commerçant qui ne porte qu'un abonnement, au moment habituel du prélèvement, est compté comme un changement de prix ; chez un commerçant qui en porte plusieurs, il devient une nouvelle proposition.
+
+---
+
+## 14. Thème et installation mobile (PWA)
 
 ### Thème sombre / clair
 
@@ -426,7 +469,7 @@ Sur mobile (Android / iOS), ouvrez Budgie dans votre navigateur et utilisez **Aj
 
 ---
 
-## 14. Déploiement Docker
+## 15. Déploiement Docker
 
 ### Déploiement sur Synology NAS (SSH)
 
@@ -571,7 +614,7 @@ docker compose restart
 
 ---
 
-## 15. Sauvegardes et mises à jour
+## 16. Sauvegardes et mises à jour
 
 ### Sauvegardes automatiques
 
@@ -610,7 +653,7 @@ Les migrations de base de données s'exécutent **automatiquement** au démarrag
 
 ---
 
-## 16. FAQ / Dépannage
+## 17. FAQ / Dépannage
 
 | Problème | Solution |
 |---|---|
@@ -645,7 +688,7 @@ docker exec budgie /bin/bash /app/scripts/backup.sh /app/data/backups
 
 ---
 
-## 17. Sécurité & Chiffrement
+## 18. Sécurité & Chiffrement
 
 ### Qu'est-ce qui est chiffré ?
 

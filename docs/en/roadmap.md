@@ -83,6 +83,7 @@ The current transaction list view has become less useful since reconciliation co
 
 ### Recurring Transactions
 
+- [x] **Find subscriptions** — recurring payments detected in imported statements, classified by the user, monthly and yearly cost, cancellations and alerts (debit after cancellation, stopped subscription, price increase)
 - [ ] Define recurring transaction templates (rent, subscriptions, etc.)
 - [ ] Auto-generate virtual transactions from recurring schedules
 - [ ] Notifications for upcoming recurring transactions
