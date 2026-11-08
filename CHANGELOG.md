@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Release publishing** — merging a new version into `main` now builds and pushes the Docker image (`latest` and `X.Y.Z`), creates the `vX.Y.Z` tag and the GitHub release from `RELEASE_NOTES.md`; tags are no longer pushed by hand, and `develop-latest` images are built on demand (Actions → CI-Docker → Run workflow)
+- **Release publishing** — merging a new version into `main` now builds and pushes the Docker image (`latest` and `X.Y.Z`), creates the `vX.Y.Z` tag and the GitHub release from `RELEASE_NOTES.md`; tags are no longer pushed by hand. Every merge into `develop` builds and pushes `develop-latest` and `develop-<short sha>`
 - **Default branch is `develop`** — planned work is tracked as GitHub issues (lots and tickets, overview in #43); `AGENTS.md` holds the instructions for coding agents
 - **`SECRET_KEY` is now mandatory** — the server refuses to start when `SECRET_KEY` is missing, shorter than 32 characters, or still set to a placeholder shipped with the repository; set it in `.env` before upgrading (`openssl rand -hex 32`). Changing it signs every user out once
 - **Import deduplication per account** — a bank line already imported into one account no longer prevents importing the same line into another account (database migration `a3b4c5d6e7f8`)

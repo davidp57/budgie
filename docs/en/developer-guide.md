@@ -790,7 +790,7 @@ Located in `.github/workflows/docker.yml`.
 
 | Property | Value |
 |---|---|
-| Trigger | Push to `main` (a release merge) + workflow_dispatch (manual) |
+| Trigger | Push to `main` (a release merge) or `develop` + workflow_dispatch (manual) |
 | Registry | GitHub Container Registry (GHCR) |
 | Image | `ghcr.io/davidp57/budgie` |
 
@@ -802,7 +802,11 @@ Located in `.github/workflows/docker.yml`.
 4. Smoke test: starts the container and verifies `curl /api/health`
 5. Creates the tag `vX.Y.Z` and the GitHub release with `RELEASE_NOTES.md` (a pre-release while the version is `0.x`)
 
+**On a push to `develop`** (any merge), it builds, smoke-tests and pushes `develop-latest` and `develop-<short sha>` (to roll back to a given merge), without tag nor release.
+
 **Run by hand** on a branch, it only builds and pushes `<branch>-latest` (`latest` for `main`), without tag nor release.
+
+Runs of one branch are queued in push order, so a later merge is never overwritten by an earlier run that finishes last.
 
 ### Releasing
 
@@ -810,7 +814,7 @@ Releases follow the `/release` skill (`.claude/skills/release/SKILL.md`): versio
 `tests/test_changelog.py` checks that `[Unreleased]` is open, that the version has its changelog entry and that the release notes are about it.
 
 ```bash
-# A develop image, by hand (Actions → CI-Docker → Run workflow → branch develop)
+# Rebuild the develop image by hand (Actions → CI-Docker → Run workflow → branch develop)
 gh workflow run docker.yml --ref develop
 ```
 

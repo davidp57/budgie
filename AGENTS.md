@@ -26,6 +26,7 @@ Le détail est dans [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.m
   À cette fusion, `.github/workflows/docker.yml` construit et pousse l'image (`latest` et `X.Y.Z`), crée le tag `vX.Y.Z` et la release GitHub ; une fusion sans changement de version ne publie rien.
   `tests/test_changelog.py` garde `[Unreleased]`, l'entrée de la version et le titre des notes.
 - La CI (`ci.yml`) tourne sur chaque PR et sur les poussées vers `develop` et `main`.
+- Chaque fusion dans `develop` publie l'image `develop-latest` (et `develop-<sha>`), que l'instance de développement du VPS (budgie-dev.zipsoft.fr, conteneur `budgie-develop`) tire pour se mettre à jour ; la production (budgie.zipsoft.fr, conteneur `budgie`) tourne sur `latest`.
 
 ## Démarche par défaut
 
