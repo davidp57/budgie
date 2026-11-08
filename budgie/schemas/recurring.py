@@ -49,6 +49,7 @@ class RecurringPaymentCreate(BaseModel):
         amount: Reference amount per period, in positive centimes.
         period: Billing rhythm.
         kind: Subscription, other recurring payment, or dismissed.
+        cancelled_at: Cancellation date, when declared at classification.
     """
 
     key: str = Field(..., min_length=1, max_length=200)
@@ -56,6 +57,7 @@ class RecurringPaymentCreate(BaseModel):
     amount: int = Field(..., gt=0)
     period: Period
     kind: RecurringKind
+    cancelled_at: datetime.date | None = None
 
 
 class RecurringPaymentUpdate(BaseModel):
@@ -171,3 +173,123 @@ class RecurringOverview(BaseModel):
     monthly_total: int
     yearly_total: int
     attention_count: int
+
+
+class PriceSegmentRead(BaseModel):
+    """A stretch of time billed at one price.
+
+    Attributes:
+        start: Date of the first debit at this price.
+        end: Date of the last debit at this price.
+        amount: Amount per period, in centimes.
+        count: Number of debits in the stretch.
+    """
+
+    start: datetime.date
+    end: datetime.date
+    amount: int
+    count: int
+
+
+class RecurringLineRef(BaseModel):
+    """Points at a service line: a classified payment, or a detected one.
+
+    Attributes:
+        payment_id: The classified payment, for a classified line.
+        key: Normalized label, for a line not classified yet.
+        amount: Current amount, for a line not classified yet.
+        period: Billing rhythm, for a line not classified yet.
+    """
+
+    payment_id: int | None = None
+    key: str | None = Field(None, min_length=1, max_length=200)
+    amount: int | None = Field(None, gt=0)
+    period: Period | None = None
+
+
+class RecurringLine(BaseModel):
+    """One service, as a person sees it: one line however its price changed.
+
+    Attributes:
+        id: Stable identifier of the line in this board.
+        ref: How to point at the line in a link request.
+        payment: The classified payment, when the line is classified.
+        name: Display name (the payment's, or derived from the label).
+        key: Normalized label of the latest debits.
+        label: Latest raw bank label, when the line is not classified.
+        period: Current billing rhythm.
+        amount: Current amount per period, in centimes.
+        monthly_cost: Current amount brought back to one month, in centimes.
+        first_date: Date of the first debit.
+        last_date: Date of the most recent debit.
+        running: Debited within the last one and a half periods.
+        likely_other: Not classified, and probably not a subscription (a
+            transfer, or 100 €/month or more).
+        segments: Stretches of one price, oldest first.
+    """
+
+    id: str
+    ref: RecurringLineRef
+    payment: RecurringPaymentRead | None
+    name: str
+    key: str
+    label: str | None
+    period: Period
+    amount: int
+    monthly_cost: int
+    first_date: datetime.date | None
+    last_date: datetime.date | None
+    running: bool
+    likely_other: bool
+    segments: list[PriceSegmentRead]
+
+
+class RecurringLinkSuggestion(BaseModel):
+    """Two lines probably the same service under a new label.
+
+    Attributes:
+        earlier_id: The line that stopped.
+        later_id: The line that started right after, at the exact same amount.
+    """
+
+    earlier_id: str
+    later_id: str
+
+
+class RecurringBoard(BaseModel):
+    """Every service line, what runs now, and what it costs.
+
+    Attributes:
+        as_of: Reference date of "running" and of the statuses: the date of
+            the most recent imported debit (today when there is none), so that
+            statements imported weeks ago do not make everything look stopped.
+        lines: Every line (dismissed ones included), most expensive first.
+        monthly_total: Monthly cost of the running lines that are
+            subscriptions, classified or not (unclassified lines that are
+            probably not subscriptions left out), in centimes.
+        yearly_total: ``monthly_total`` times twelve, in centimes.
+        estimated_count: Running lines counted in the total without having
+            been confirmed as subscriptions.
+        attention_count: Classified subscriptions that need a look.
+        suggestions: Probable renames, at the exact same amount.
+    """
+
+    as_of: datetime.date
+    lines: list[RecurringLine]
+    monthly_total: int
+    yearly_total: int
+    estimated_count: int
+    attention_count: int
+    suggestions: list[RecurringLinkSuggestion]
+
+
+class RecurringLink(BaseModel):
+    """Link two service lines: the later one absorbs the earlier one.
+
+    Attributes:
+        earlier: The line to absorb.
+        later: The line that stays (classified as a subscription if needed).
+    """
+
+    earlier: RecurringLineRef
+    later: RecurringLineRef

@@ -482,6 +482,9 @@ Documentation interactive disponible à `http://localhost:8000/docs` (Swagger UI
 | `POST` | `/api/recurring/{id}/merge` | `{other_id}` — le paiement absorbe les libellés d'un autre, qui est supprimé |
 | `DELETE` | `/api/recurring/{id}/aliases/{alias_id}` | Détache un libellé rattaché : ses débits redeviennent une proposition |
 | `POST` | `/api/recurring/{id}/accept-price` | Prend le dernier montant prélevé comme nouvelle référence du libellé (principal ou rattaché) qui l'a prélevé |
+| `GET` | `/api/recurring/board` | Chaque ligne de service (classée ou non) avec ses tarifs, `running`, `likely_other`, les totaux, `as_of` (date du dernier débit importé) et les suggestions de lien |
+| `POST` | `/api/recurring/link` | Références de lignes `{earlier, later}` — la plus récente absorbe l'autre (classée abonnement s'il le faut) |
+| `DELETE` | `/api/recurring` | Oublie tous les classements de l'utilisateur ; les transactions importées restent |
 
 Les débits ne sont pas liés à un paiement : ils sont retrouvés à chaque lecture par libellé bancaire normalisé (`match_key`, plus les libellés rattachés au paiement dans `recurring_payment_aliases`) et montant, après déchiffrement (`services/recurring_detection.py` porte les seuils en constantes nommées).
 Seules les transactions importées (`import_hash` renseigné) comptent, pour qu'une dépense saisie et pointée avec une ligne bancaire ne compte pas deux fois.

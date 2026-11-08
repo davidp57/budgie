@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
   defaultName,
-  filterSince,
   formatDay,
+  formatMonth,
+  lineGroup,
   localToday,
+  monthsBefore,
   needsAttention,
   periodLabel,
-  sinceDate,
+  timelinePercent,
 } from '../recurring'
-import type { RecurringCandidate, RecurringPayment } from '../types'
+import type { RecurringLine, RecurringPayment } from '../types'
 
 function payment(overrides: Partial<RecurringPayment> = {}): RecurringPayment {
   return {
@@ -32,6 +34,26 @@ function payment(overrides: Partial<RecurringPayment> = {}): RecurringPayment {
   }
 }
 
+function line(overrides: Partial<RecurringLine> = {}): RecurringLine {
+  return {
+    id: 'sSTREAMFLIX|1399|2026-01-01',
+    ref: { payment_id: null, key: 'STREAMFLIX', amount: 1399, period: 'monthly' },
+    payment: null,
+    name: 'Streamflix',
+    key: 'STREAMFLIX',
+    label: 'CARTE STREAMFLIX',
+    period: 'monthly',
+    amount: 1399,
+    monthly_cost: 1399,
+    first_date: '2026-01-01',
+    last_date: '2026-11-01',
+    running: true,
+    likely_other: false,
+    segments: [],
+    ...overrides,
+  }
+}
+
 describe('recurring helpers', () => {
   it('labels each period in French', () => {
     expect(periodLabel('monthly')).toBe('mensuel')
@@ -43,8 +65,9 @@ describe('recurring helpers', () => {
     expect(defaultName('STREAMFLIX COM')).toBe('Streamflix Com')
   })
 
-  it('formats an ISO day the French way', () => {
+  it('formats days and months the French way', () => {
     expect(formatDay('2026-02-05')).toBe('05/02/2026')
+    expect(formatMonth('2026-02-05')).toBe('févr. 2026')
   })
 
   it('flags subscriptions that need a look, and only those', () => {
@@ -66,28 +89,26 @@ describe('recurring helpers', () => {
     expect(localToday(new Date(2026, 0, 1, 0, 30))).toBe('2026-01-01')
   })
 
-  it('computes the start of a period, clamped to the end of a short month', () => {
-    expect(sinceDate(3, '2026-11-08')).toBe('2026-08-08')
-    expect(sinceDate(12, '2026-01-15')).toBe('2025-01-15')
-    expect(sinceDate(3, '2026-05-31')).toBe('2026-02-28')
-    expect(sinceDate(0, '2026-11-08')).toBeNull()
+  it('sorts lines into the groups of the "now" view', () => {
+    expect(lineGroup(line())).toBe('subscription')
+    expect(lineGroup(line({ likely_other: true }))).toBe('other')
+    expect(lineGroup(line({ running: false }))).toBe('stopped')
+    expect(lineGroup(line({ payment: payment({ kind: 'other' }) }))).toBe('other')
+    expect(lineGroup(line({ payment: payment({ kind: 'dismissed' }) }))).toBe('ignored')
+    expect(lineGroup(line({ payment: payment({ price_changed: true }) }))).toBe('check')
+    // A classified subscription is never moved to "other" by the heuristic
+    expect(lineGroup(line({ likely_other: true, payment: payment() }))).toBe('subscription')
   })
 
-  it('hides candidates last debited before the period, and counts them', () => {
-    const candidate = (last_date: string): RecurringCandidate => ({
-      key: last_date,
-      label: last_date,
-      amount: 999,
-      period: 'monthly',
-      monthly_cost: 999,
-      occurrences: 4,
-      first_date: '2024-01-01',
-      last_date,
-    })
-    const all = [candidate('2026-11-01'), candidate('2026-08-08'), candidate('2025-12-01')]
-    const { visible, hidden } = filterSince(all, 3, '2026-11-08')
-    expect(visible.map((c) => c.last_date)).toEqual(['2026-11-01', '2026-08-08'])
-    expect(hidden).toBe(1)
-    expect(filterSince(all, 0, '2026-11-08').hidden).toBe(0)
+  it('places dates on a timeline, clamped to the window', () => {
+    expect(timelinePercent('2026-01-01', '2026-01-01', '2026-12-31')).toBe(0)
+    expect(timelinePercent('2026-12-31', '2026-01-01', '2026-12-31')).toBe(100)
+    expect(timelinePercent('2025-06-01', '2026-01-01', '2026-12-31')).toBe(0)
+    expect(Math.round(timelinePercent('2026-07-02', '2026-01-01', '2026-12-31'))).toBe(50)
+  })
+
+  it('goes back a number of months, clamped to the end of a short month', () => {
+    expect(monthsBefore(24, '2026-11-08')).toBe('2024-11-08')
+    expect(monthsBefore(3, '2026-05-31')).toBe('2026-02-28')
   })
 })

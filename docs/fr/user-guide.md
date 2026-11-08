@@ -416,7 +416,7 @@ Si vous autorisez l'accès à votre position (nécessite HTTPS), Budgie interrog
 
 ## 13. Abonnements
 
-Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements et suivre leurs résiliations.
+Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements en ce moment, d'où ils viennent, et suivre leurs résiliations.
 
 On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone) ou par l'entrée **Abonnements** du menu (sur ordinateur).
 
@@ -424,42 +424,45 @@ On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone)
 
 - Les débits importés d'un même libellé bancaire (les dates et numéros de carte du libellé ne comptent pas), d'un montant stable à 10 % près, qui reviennent chaque mois, chaque trimestre ou chaque année.
 - Il faut au moins trois prélèvements pour un rythme mensuel ou trimestriel, deux pour un rythme annuel ; une série de moins de quatre prélèvements doit répéter exactement le même montant.
-- Deux abonnements de prix différents chez un même commerçant donnent deux propositions.
+- Un même libellé dont le prix a changé reste **un seul service**, avec ses tarifs successifs ; deux formules prélevées en même temps chez un même commerçant restent deux services.
 - Seules les transactions importées comptent : une dépense saisie à la main n'est jamais proposée.
+- La situation est celle du **dernier relevé importé** : un paiement « tourne » s'il a été prélevé moins d'une fois et demie son rythme avant le dernier prélèvement importé. La page indique cette date quand elle est passée.
 
-### Classer une proposition
+### En ce moment
 
-Chaque proposition de la rubrique **À classer** attend ton verdict :
+L'onglet s'ouvre sur la réponse, sans rien avoir à classer :
+
+- en haut, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième), et combien ont été comptés sans confirmation ;
+- **Abonnements en cours** : chaque service qui tourne, trié par coût ; ceux repérés automatiquement portent **à confirmer** ;
+- **Probablement pas des abonnements** (replié) : les virements et les paiements de 100 €/mois ou plus (impôts, épargne, assurance…), hors du total ;
+- **Arrêtés** (replié) : ce qui n'est plus prélevé ;
+- **Ignorés** (replié) : ce que tu as écarté, avec **Reproposer**.
+
+Sur chaque ligne, les corrections :
 
 | Bouton | Effet |
 |---|---|
-| **Abonnement** | Entre dans le total des abonnements |
-| **Autre paiement récurrent** | Impôts, épargne, assurance… : suivi, mais hors du total |
-| **Ignorer** | N'est plus proposé (rubrique **Ignorés**, bouton **Reproposer** pour revenir en arrière) |
+| **✓ Confirmer** | C'est bien un abonnement : il reste dans le total, même si un jour il dépasse 100 €/mois |
+| **Pas un abonnement** | Passe dans « Probablement pas des abonnements », hors du total |
+| **Résilié…** | Enregistre la date de résiliation : l'abonnement sort du total |
+| Clic sur le nom | Renomme |
+| **Plus…** | Catégorie, libellés reliés (avec **✕** pour en détacher un), **Retirer le classement** |
 
-Les nouveaux relevés importés sont rattachés tout seuls aux paiements déjà classés.
+La rubrique **À vérifier** signale un abonnement encore prélevé après sa résiliation, un abonnement qui n'est plus prélevé (**terminé ?**), ou un nouveau prix (**Accepter le nouveau prix** le confirme).
+Une hausse n'est signalée qu'à son deuxième prélèvement au nouveau montant : un achat ponctuel chez le même commerçant n'est pas pris pour une hausse.
 
-### Ce que coûtent tes abonnements
+### Historique
 
-En haut de la page, le total des abonnements actifs ramené au mois, et le même total sur l'année : un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième.
-Un abonnement se renomme en cliquant sur son nom, et peut recevoir une catégorie.
+Une frise sur deux ans : une ligne par service, de son premier à son dernier prélèvement, ses tarifs successifs sur la même ligne.
+On y voit ce qui s'est arrêté, quand, et ce qui a pris le relais.
 
-### Résiliations et alertes
+- Quand la banque ou le commerçant a renommé un prélèvement, **relier à…** réunit les deux lignes : la plus récente absorbe l'autre, et ses prélèvements comptent pour elle.
+- Budgie suggère lui-même les lignes qui se suivent au **même montant exact** (« Probablement la suite de… », bouton **Relier**) ; il ne suggère jamais deux montants différents, car c'est presque toujours une coïncidence.
 
-- **Résilié…** enregistre la date de résiliation : l'abonnement sort du total.
-- La rubrique **À vérifier** signale :
-  - un abonnement encore prélevé après sa résiliation, avec les dates ;
-  - un abonnement qui n'a plus été prélevé depuis plus d'une fois et demie son rythme (**terminé ?**) ;
-  - un changement de prix, avec l'ancien et le nouveau montant (**Accepter le nouveau prix** le confirme).
-- Un nouveau montant chez un commerçant qui ne porte qu'un abonnement, au moment habituel du prélèvement, est compté comme un changement de prix ; chez un commerçant qui en porte plusieurs, il devient une nouvelle proposition.
+### Repartir de zéro
 
-### Trier un long historique, et les libellés qui changent
-
-- Le sélecteur **Dernier prélèvement** de la rubrique **À classer** n'affiche que les propositions prélevées depuis 3 mois (par défaut), 6 mois, 1 an, 2 ans, ou toutes ; une ligne dit combien sont masquées. On traite ainsi un long historique morceau par morceau, en commençant par le plus récent. Le filtre ne change ni la détection ni les totaux.
-- Un changement de **montant** sous un même libellé n'a rien à faire : en classant la série la plus récente, les anciens tarifs s'y rattachent tout seuls.
-- Quand c'est le **libellé** qui a changé (la banque ou le commerçant a renommé le prélèvement), **C'est le même que…** sur la proposition la rattache à un paiement déjà classé : ses prélèvements comptent alors pour lui (dernier prélèvement, statut, montant), et la proposition disparaît. Si le prix a changé en même temps que le libellé, ce n'est pas signalé comme une hausse : chaque libellé garde son propre montant de référence.
-- **Fusionner avec…** sur un paiement classé lui fait absorber un autre paiement classé, qui disparaît ; le premier garde son nom, sa catégorie et sa résiliation.
-- Les libellés rattachés s'affichent sous le paiement (**Aussi prélevé sous**) ; la croix **✕** en détache un, qui redevient une proposition.
+**Réinitialiser les classements…**, en bas de la page, efface après confirmation tout ce que tu as classé (abonnements confirmés, « pas un abonnement », ignorés, libellés reliés, résiliations).
+Les transactions importées ne sont pas touchées : la page repart de la détection seule.
 
 ---
 

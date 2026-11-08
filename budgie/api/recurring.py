@@ -5,7 +5,9 @@ from fastapi import APIRouter, HTTPException, Response, status
 from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.recurring import (
     RecurringAliasCreate,
+    RecurringBoard,
     RecurringCandidateRead,
+    RecurringLink,
     RecurringMerge,
     RecurringOverview,
     RecurringPaymentCreate,
@@ -15,12 +17,15 @@ from budgie.services.ownership import ForeignReferenceError
 from budgie.services.recurring import (
     accept_price,
     add_alias,
-    create_payment,
+    classify_line,
     delete_payment,
+    get_board,
     get_candidates,
     get_overview,
+    link_lines,
     merge_payments,
     remove_alias,
+    reset_payments,
     update_payment,
 )
 
@@ -85,7 +90,7 @@ async def classify(
     Returns:
         The updated overview.
     """
-    await create_payment(db, schema, current_user.id, session_key=session_key)
+    await classify_line(db, schema, current_user.id, session_key=session_key)
     return await get_overview(db, current_user.id, session_key=session_key)
 
 
@@ -262,3 +267,68 @@ async def accept_new_price(
     if not await accept_price(db, payment_id, current_user.id, session_key=session_key):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return await get_overview(db, current_user.id, session_key=session_key)
+
+
+@router.get("/board", response_model=RecurringBoard)
+async def board(
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringBoard:
+    """Every service line, classified or not, and what runs now.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The board.
+    """
+    return await get_board(db, current_user.id, session_key=session_key)
+
+
+@router.post("/link", response_model=RecurringBoard)
+async def link(
+    schema: RecurringLink,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringBoard:
+    """Make the later line absorb the earlier one (a renamed debit).
+
+    Args:
+        schema: The two lines.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key.
+
+    Returns:
+        The updated board.
+
+    Raises:
+        HTTPException: 404 if a line is not the user's or is incomplete.
+    """
+    if not await link_lines(db, schema, current_user.id, session_key=session_key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return await get_board(db, current_user.id, session_key=session_key)
+
+
+@router.delete("", response_model=RecurringBoard)
+async def reset(
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringBoard:
+    """Forget every classification; imported transactions stay.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The board, as detected from the transactions alone.
+    """
+    await reset_payments(db, current_user.id)
+    return await get_board(db, current_user.id, session_key=session_key)

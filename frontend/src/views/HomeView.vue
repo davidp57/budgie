@@ -12,10 +12,10 @@ import { useBudgetStore } from '@/stores/budget'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { useAppVersion } from '@/composables/useAppVersion'
 import { listAccounts } from '@/api/accounts'
-import { getRecurringOverview } from '@/api/recurring'
+import { getRecurringBoard } from '@/api/recurring'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
-import type { Account, EnvelopeLine, RecurringOverview } from '@/api/types'
+import type { Account, EnvelopeLine, RecurringBoard } from '@/api/types'
 import { formatAmount } from '@/api/types'
 
 const router = useRouter()
@@ -26,10 +26,8 @@ const appVersion = useAppVersion()
 const drawerForExpense = ref<EnvelopeLine | null>(null)
 const showQuickExpense = ref(false)
 const defaultAccount = ref<Account | null>(null)
-const recurring = ref<RecurringOverview | null>(null)
-const hasSubscriptions = computed(
-  () => recurring.value?.payments.some((p) => p.kind === 'subscription') ?? false,
-)
+const recurring = ref<RecurringBoard | null>(null)
+const hasSubscriptions = computed(() => (recurring.value?.monthly_total ?? 0) > 0)
 
 function onDrawerTap(line: EnvelopeLine): void {
   drawerForExpense.value = line
@@ -96,7 +94,7 @@ onMounted(async () => {
   }
   await unassigned.refresh()
   try {
-    recurring.value = await getRecurringOverview()
+    recurring.value = await getRecurringBoard()
   } catch {
     // Errors are shown by the client interceptor; the card stays hidden
   }

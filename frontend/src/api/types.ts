@@ -408,6 +408,57 @@ export interface RecurringOverview {
   attention_count: number
 }
 
+/** A stretch of time billed at one price. */
+export interface PriceSegment {
+  start: string
+  end: string
+  amount: number
+  count: number
+}
+
+/** Points at a service line: a classified payment, or a detected one. */
+export interface RecurringLineRef {
+  payment_id: number | null
+  key: string | null
+  amount: number | null
+  period: RecurringPeriod | null
+}
+
+/** One service as a person sees it, whatever its successive prices. */
+export interface RecurringLine {
+  id: string
+  ref: RecurringLineRef
+  payment: RecurringPayment | null
+  name: string
+  key: string
+  label: string | null
+  period: RecurringPeriod
+  amount: number
+  monthly_cost: number
+  first_date: string | null
+  last_date: string | null
+  running: boolean
+  likely_other: boolean
+  segments: PriceSegment[]
+}
+
+export interface RecurringLinkSuggestion {
+  earlier_id: string
+  later_id: string
+}
+
+/** Every service line, what runs now and what it costs. */
+export interface RecurringBoard {
+  /** Date of the most recent imported debit: "running" is judged as of it. */
+  as_of: string
+  lines: RecurringLine[]
+  monthly_total: number
+  yearly_total: number
+  estimated_count: number
+  attention_count: number
+  suggestions: RecurringLinkSuggestion[]
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Format centimes to display string (e.g. 10050 → "100,50 €") */
