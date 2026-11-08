@@ -418,50 +418,53 @@ If you allow location access (requires HTTPS), Budgie queries nearby shops via O
 
 ## 13. Subscriptions
 
-Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost and follow their cancellations.
+Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost now, where they come from, and follow their cancellations.
 
-Open it from the **Subscriptions** card of the home page (on a phone) or the **Abonnements** entry of the menu (on a computer).
+Open it from the **Abonnements** card of the home page (on a phone) or the **Abonnements** entry of the menu (on a computer).
 
 ### What Budgie finds
 
 - Imported debits sharing one bank label (dates and card numbers in the label do not count), with an amount stable within 10 %, coming back every month, quarter or year.
 - A monthly or quarterly payment needs at least three debits, a yearly one two; a series of fewer than four debits must repeat the exact same amount.
-- Two subscriptions of different prices at the same merchant give two proposals.
+- One label whose price changed stays **one service**, with its successive prices; two formulas billed at the same time by one merchant stay two services.
 - Only imported transactions count: a manually entered expense is never proposed.
+- The situation is the one of the **last imported statement**: a payment "runs" when it was debited less than one and a half of its period before the most recent imported debit. The page shows that date when it is in the past.
 
-### Classifying a proposal
+### En ce moment (now)
 
-Each proposal under **À classer** (to classify) waits for your verdict:
+The tab opens on the answer, with nothing to classify first:
+
+- at the top, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth), and how many were counted without confirmation;
+- **Abonnements en cours** (running subscriptions): every running service, sorted by cost; those found automatically are marked **à confirmer** (to confirm);
+- **Probablement pas des abonnements** (folded): transfers and payments of 100 €/month or more (taxes, savings, insurance…), left out of the total;
+- **Arrêtés** (folded): what is no longer debited;
+- **Ignorés** (folded): what you dismissed, with **Reproposer** (propose again).
+
+On each line, the corrections:
 
 | Button | Effect |
 |---|---|
-| **Abonnement** (subscription) | Counted in the subscriptions total |
-| **Autre paiement récurrent** (other recurring payment) | Taxes, savings, insurance…: followed, but left out of the total |
-| **Ignorer** (ignore) | No longer proposed (listed under **Ignorés**, **Reproposer** brings it back) |
+| **✓ Confirmer** | It is a subscription: it stays in the total, even if it someday goes over 100 €/month |
+| **Pas un abonnement** | Moves to "probably not subscriptions", out of the total |
+| **Résilié…** | Records the cancellation date: the subscription leaves the total |
+| Click on the name | Renames |
+| **Plus…** | Category, linked labels (**✕** detaches one), **Retirer le classement** (remove the classification) |
 
-Newly imported statements are attached to the payments already classified, with no extra step.
+**À vérifier** (to check) reports a subscription still debited after its cancellation, a subscription no longer debited (**terminé ?**), or a new price (**Accepter le nouveau prix** confirms it).
+A price increase is reported from its second debit at the new amount: a one-off purchase at the same merchant is not taken for one.
 
-### What your subscriptions cost
+### Historique (history)
 
-At the top of the page, the total of the active subscriptions per month, and the same total per year: a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth.
-Click a subscription's name to rename it; it can also get a category.
+A two-year timeline: one line per service, from its first to its last debit, with its successive prices on the same line.
+It shows what stopped, when, and what took over.
 
-### Cancellations and alerts
+- When the bank or the merchant renamed a debit, **relier à…** (link to…) joins the two lines: the more recent one absorbs the other, whose debits then count for it.
+- Budgie itself suggests the lines that follow each other at the **exact same amount** ("Probablement la suite de…", **Relier** button); it never suggests two different amounts, which are nearly always a coincidence.
 
-- **Résilié…** (cancelled) records the cancellation date: the subscription leaves the total.
-- The **À vérifier** (to check) list reports:
-  - a subscription still debited after its cancellation, with the dates;
-  - a subscription not debited for more than one and a half of its period (**terminé ?**, ended?);
-  - a price change, with the old and new amounts (**Accepter le nouveau prix** confirms it).
-- A new amount at a merchant carrying a single subscription, at the usual debit time, counts as a price change; at a merchant carrying several, it becomes a new proposal.
+### Starting over
 
-### Working through a long history, and labels that change
-
-- The **Dernier prélèvement** (last debit) selector of **À classer** only shows the proposals debited within 3 months (default), 6 months, 1 year, 2 years, or all of them; a line says how many are hidden. This lets you work through a long history piece by piece, starting with the most recent. The filter changes neither the detection nor the totals.
-- A change of **amount** under the same label needs nothing: once the most recent series is classified, the older prices attach to it by themselves.
-- When the **label** changed (the bank or the merchant renamed the debit), **C'est le même que…** (same as…) on the proposal attaches it to a payment already classified: its debits then count for that payment (last debit, status, amount), and the proposal disappears. If the price changed together with the label, it is not reported as a price change: each label keeps its own reference amount.
-- **Fusionner avec…** (merge with…) on a classified payment makes it absorb another classified payment, which disappears; the first keeps its name, category and cancellation.
-- Merged labels are listed under the payment (**Aussi prélevé sous**, also debited as); the **✕** detaches one, which becomes a proposal again.
+**Réinitialiser les classements…** at the bottom of the page erases, after confirmation, everything you classified (confirmed subscriptions, "not a subscription", ignored, linked labels, cancellations).
+Imported transactions are not touched: the page starts again from the detection alone.
 
 ---
 
