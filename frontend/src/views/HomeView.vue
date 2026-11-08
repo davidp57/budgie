@@ -12,9 +12,10 @@ import { useBudgetStore } from '@/stores/budget'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { useAppVersion } from '@/composables/useAppVersion'
 import { listAccounts } from '@/api/accounts'
+import { getRecurringOverview } from '@/api/recurring'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
-import type { Account, EnvelopeLine } from '@/api/types'
+import type { Account, EnvelopeLine, RecurringOverview } from '@/api/types'
 import { formatAmount } from '@/api/types'
 
 const router = useRouter()
@@ -25,6 +26,10 @@ const appVersion = useAppVersion()
 const drawerForExpense = ref<EnvelopeLine | null>(null)
 const showQuickExpense = ref(false)
 const defaultAccount = ref<Account | null>(null)
+const recurring = ref<RecurringOverview | null>(null)
+const hasSubscriptions = computed(
+  () => recurring.value?.payments.some((p) => p.kind === 'subscription') ?? false,
+)
 
 function onDrawerTap(line: EnvelopeLine): void {
   drawerForExpense.value = line
@@ -90,6 +95,11 @@ onMounted(async () => {
     // 401 errors are handled by the client interceptor (redirect to login)
   }
   await unassigned.refresh()
+  try {
+    recurring.value = await getRecurringOverview()
+  } catch {
+    // Errors are shown by the client interceptor; the card stays hidden
+  }
 })
 </script>
 
@@ -118,6 +128,27 @@ onMounted(async () => {
       {{ budgetStore.envelopeLines.length }} tiroir{{ budgetStore.envelopeLines.length > 1 ? 's' : '' }}
       · disponible {{ formatAmount(totalAvailable) }}
     </p>
+
+    <!-- Subscriptions card -->
+    <button
+      v-if="recurring"
+      class="w-full flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100 px-4 py-3 mb-5 text-left"
+      data-test="subscriptions-card"
+      @click="router.push({ name: 'abonnements' })"
+    >
+      <span class="text-xl">🔁</span>
+      <span class="flex-1 text-sm font-semibold">
+        <template v-if="hasSubscriptions">
+          Abonnements · <span class="tabular-nums">{{ formatAmount(recurring.monthly_total) }}</span>/mois
+        </template>
+        <template v-else>Repérer mes abonnements</template>
+      </span>
+      <span
+        v-if="recurring.attention_count > 0"
+        class="badge badge-warning badge-sm"
+      >{{ recurring.attention_count }} à vérifier</span>
+      <span class="text-base-content/40">→</span>
+    </button>
 
     <!-- Loading skeleton -->
     <div v-if="budgetStore.loading" class="flex flex-col gap-4">

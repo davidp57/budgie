@@ -42,6 +42,11 @@ const router = createRouter({
       component: () => import('@/views/ReconciliationView.vue'),
     },
     {
+      path: '/abonnements',
+      name: 'abonnements',
+      component: () => import('@/views/SubscriptionsView.vue'),
+    },
+    {
       path: '/import',
       name: 'import',
       component: () => import('@/views/ImportView.vue'),
