@@ -416,7 +416,7 @@ Si vous autorisez l'accès à votre position (nécessite HTTPS), Budgie interrog
 
 ## 13. Abonnements
 
-Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements en ce moment, d'où ils viennent, et suivre leurs résiliations.
+Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements, d'où ils viennent, et suivre leurs résiliations.
 
 On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone) ou par l'entrée **Abonnements** du menu (sur ordinateur).
 
@@ -428,45 +428,45 @@ On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone)
 - Seules les transactions importées comptent : une dépense saisie à la main n'est jamais proposée.
 - La situation est celle du **dernier relevé importé** : un paiement « tourne » s'il a été prélevé moins d'une fois et demie son rythme avant le dernier prélèvement importé. La page indique cette date quand elle est passée.
 
-La page a deux onglets : **Historique**, qui s'ouvre par défaut, et **En ce moment**. Le total en tête de page vaut pour les deux, et toutes les corrections se font depuis l'un comme depuis l'autre.
+### Le total
 
-### En ce moment
+En haut de la page, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième).
+Il compte d'emblée les paiements repérés automatiquement, sans rien avoir à classer ; ceux qui n'ont pas été confirmés portent **à confirmer** dans la liste.
+Les virements et les paiements de 100 €/mois ou plus (impôts, épargne, assurance…) n'y entrent pas.
 
-L'onglet donne la réponse, sans rien avoir à classer :
+### La liste
 
-- en haut, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième), et combien ont été comptés sans confirmation ;
-- **Abonnements en cours** : chaque service qui tourne, trié par coût ; ceux repérés automatiquement portent **à confirmer** ;
-- **Probablement pas des abonnements** (replié) : les virements et les paiements de 100 €/mois ou plus (impôts, épargne, assurance…), hors du total ;
-- **Arrêtés** (replié) : ce qui n'est plus prélevé ;
-- **Ignorés** (replié) : ce que tu as écarté, avec **Reproposer**.
+Une frise sur deux ans : une ligne par service, de son premier à son dernier prélèvement, ses tarifs successifs sur la même ligne, classées par ordre alphabétique (un même service passé sous un autre libellé, comme « Tesla Lu » et « Tesla Motors Lux », se retrouve sur la ligne voisine).
+Une barre pleine est un abonnement confirmé, une barre claire un abonnement repéré automatiquement, une barre grise un paiement arrêté ou résilié.
 
-Sur chaque ligne, les corrections :
+Chaque ligne porte son statut (abonnement, à confirmer, pas un abonnement, résilié le…, ignoré), ses alertes, et ses corrections :
 
 | Bouton | Effet |
 |---|---|
-| **✓ Confirmer** | C'est bien un abonnement : il reste dans le total, même si un jour il dépasse 100 €/mois |
-| **Pas un abonnement** | Passe dans « Probablement pas des abonnements », hors du total |
-| **Résilié…** | Enregistre la date de résiliation : l'abonnement sort du total |
-| Clic sur le nom | Renomme |
-| **Plus…** | Catégorie, libellés reliés (avec **✕** pour en détacher un), **Retirer le classement** |
+| **✓ Abonnement** | C'est un abonnement : il compte dans le total |
+| **Pas un abonnement** | La ligne passe dans la sous-liste **Pas des abonnements**, hors du total |
+| **Résilié…** / **Annuler la résiliation** | Enregistre ou retire la date de résiliation ; un abonnement résilié sort du total |
+| **Renommer…** | Donne un nom à la ligne |
+| **Accepter le nouveau prix** | Après une hausse, prend le nouveau montant comme référence |
+| **⋯** | Catégorie, libellés reliés (avec **✕** pour en détacher un), **Ignorer**, **Retirer le classement** |
 
-La rubrique **À vérifier** signale un abonnement encore prélevé après sa résiliation, un abonnement qui n'est plus prélevé (**terminé ?**), ou un nouveau prix (**Accepter le nouveau prix** le confirme).
+Les alertes signalent un abonnement encore prélevé après sa résiliation, un abonnement qui n'est plus prélevé (**terminé ?**), ou un nouveau prix.
 Une hausse n'est signalée qu'à son deuxième prélèvement au nouveau montant : un achat ponctuel chez le même commerçant n'est pas pris pour une hausse.
 
-### Historique
+Sous la liste, deux sous-listes repliées, qui se déplient d'un clic :
 
-Une frise sur deux ans : une ligne par service, de son premier à son dernier prélèvement, ses tarifs successifs sur la même ligne.
-Les lignes sont classées par ordre alphabétique : un même service passé sous un autre libellé (« Tesla Lu » et « Tesla Motors Lux ») se retrouve sur deux lignes voisines.
-On y voit ce qui s'est arrêté, quand, et ce qui a pris le relais.
+- **Pas des abonnements** : ce que tu as marqué ainsi, et ce que Budgie juge probablement hors abonnements (virements, 100 €/mois ou plus) ; **✓ Abonnement** fait remonter une ligne ;
+- **Ignorées** : ce que tu as écarté, avec **Reproposer**.
+
+### Libellés qui changent
 
 - Quand la banque ou le commerçant a renommé un prélèvement, **relier à…** réunit les deux lignes : la plus récente absorbe l'autre, et ses prélèvements comptent pour elle.
-- Budgie suggère lui-même les lignes qui se suivent au **même montant exact** (« Probablement la suite de… », bouton **Relier**) ; il ne suggère jamais deux montants différents, car c'est presque toujours une coïncidence.
-- Chaque ligne porte son statut (abonnement, à confirmer, pas un abonnement, résilié le…, ignoré), ses alertes, et un menu **⋯** avec toutes les corrections de « En ce moment » : **✓ Abonnement**, **Pas un abonnement**, **Résilié…** ou **Annuler la résiliation**, **Renommer…**, **Catégorie…**, **Accepter le nouveau prix**, **Libellés reliés…**, **Ignorer**, **Retirer le classement**.
-- Une barre pleine est un abonnement confirmé, une barre claire un abonnement repéré automatiquement, une barre grise un paiement arrêté ou résilié ; les lignes ignorées restent, estompées, avec **Reproposer** dans leur menu.
+- Budgie suggère lui-même les lignes qui se suivent au **même montant exact** (« Probablement la suite de… ») ; il ne suggère jamais deux montants différents, car c'est presque toujours une coïncidence.
+- **Relier** accepte la suggestion ; **Non** la refuse, et elle ne revient plus.
 
 ### Repartir de zéro
 
-**Réinitialiser les classements…**, en bas de la page, efface après confirmation tout ce que tu as classé (abonnements confirmés, « pas un abonnement », ignorés, libellés reliés, résiliations).
+**Réinitialiser les classements…**, en bas de la page, efface après confirmation tout ce que tu as classé (abonnements confirmés, « pas un abonnement », ignorés, libellés reliés, résiliations, suggestions refusées).
 Les transactions importées ne sont pas touchées : la page repart de la détection seule.
 
 ---
