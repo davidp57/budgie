@@ -71,7 +71,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ steps.context.outputs.branch == 'main' }}
             type=raw,value=${{ steps.context.outputs.version }},enable=${{ steps.context.outputs.release == 'true' }}
-            type=raw,value=${{ steps.context.outputs.branch }}-latest,enable=${{ steps.context.outputs.branch != 'main' }}
+            type=ref,event=branch,suffix=-latest,enable=${{ steps.context.outputs.branch != 'main' }}
 
       - name: Build and push
         if: steps.context.outputs.build == 'true'
