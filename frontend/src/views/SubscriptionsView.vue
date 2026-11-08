@@ -6,17 +6,27 @@
  * payment, or ignored); subscriptions show their monthly and yearly cost,
  * and those that need a look (stopped, debited after cancellation, new
  * price) are listed first.
+ *
+ * The candidates can be narrowed to the recent ones, to work through a long
+ * history piece by piece, and a candidate or a payment can be merged into
+ * another payment when the bank or the merchant renamed the debit.
  */
 
 import { computed, onMounted, ref } from 'vue'
 import {
+  SINCE_CHOICES,
+  acceptRecurringPrice,
+  attachRecurring,
   classifyRecurring,
   defaultName,
+  detachRecurring,
+  filterSince,
   forgetRecurring,
   formatDay,
   getRecurringOverview,
   listRecurringCandidates,
   localToday,
+  mergeRecurring,
   needsAttention,
   periodLabel,
   updateRecurring,
@@ -31,6 +41,8 @@ import type {
   RecurringPayment,
 } from '@/api/types'
 import { formatAmount } from '@/api/types'
+import RecurringLabels from '@/components/RecurringLabels.vue'
+import RecurringPicker from '@/components/RecurringPicker.vue'
 
 const overview = ref<RecurringOverview | null>(null)
 const candidates = ref<RecurringCandidate[]>([])
@@ -43,6 +55,11 @@ const renamingId = ref<number | null>(null)
 const renameValue = ref('')
 const cancellingId = ref<number | null>(null)
 const cancelDate = ref('')
+const mergingCandidate = ref<string | null>(null)
+const mergingPaymentId = ref<number | null>(null)
+
+// Candidates last debited within this many months (0 = all)
+const sinceMonths = ref(3)
 
 const payments = computed(() => overview.value?.payments ?? [])
 const subscriptions = computed(() => payments.value.filter((p) => p.kind === 'subscription'))
@@ -59,6 +76,15 @@ const activeCount = computed(
 const others = computed(() => payments.value.filter((p) => p.kind === 'other'))
 const dismissed = computed(() => payments.value.filter((p) => p.kind === 'dismissed'))
 const nothingYet = computed(() => payments.value.length === 0 && candidates.value.length === 0)
+const shownCandidates = computed(() =>
+  filterSince(candidates.value, sinceMonths.value, localToday()),
+)
+// Payments a label can be merged into: everything classified but ignored
+const mergeTargets = computed(() => payments.value.filter((p) => p.kind !== 'dismissed'))
+
+function candidateId(c: RecurringCandidate): string {
+  return `${c.key}-${c.amount}`
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -101,6 +127,28 @@ function update(payment: RecurringPayment, payload: RecurringUpdate): Promise<vo
 
 function forget(payment: RecurringPayment): Promise<void> {
   return run(() => forgetRecurring(payment.id))
+}
+
+function attach(candidate: RecurringCandidate, paymentId: number): Promise<void> {
+  mergingCandidate.value = null
+  return run(() => attachRecurring(paymentId, candidate))
+}
+
+function merge(payment: RecurringPayment, otherId: number): Promise<void> {
+  mergingPaymentId.value = null
+  return run(() => mergeRecurring(payment.id, otherId))
+}
+
+function acceptPrice(payment: RecurringPayment): Promise<void> {
+  return run(() => acceptRecurringPrice(payment.id))
+}
+
+function detach(payment: RecurringPayment, aliasId: number): Promise<void> {
+  return run(() => detachRecurring(payment.id, aliasId))
+}
+
+function othersThan(payment: RecurringPayment): RecurringPayment[] {
+  return mergeTargets.value.filter((p) => p.id !== payment.id)
 }
 
 function startRename(payment: RecurringPayment): void {
@@ -199,12 +247,13 @@ onMounted(load)
               <span class="text-sm tabular-nums">{{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}</span>
             </div>
             <p v-for="line in attentionText(p)" :key="line" class="text-sm mt-1">{{ line }}</p>
+            <RecurringLabels :payment="p" :busy="busy" @detach="(id) => detach(p, id)" />
             <div class="flex flex-wrap gap-2 mt-2">
               <button
                 v-if="p.price_changed"
                 class="btn btn-xs"
                 :disabled="busy"
-                @click="update(p, { amount: p.current_amount })"
+                @click="acceptPrice(p)"
               >Accepter le nouveau prix</button>
               <button
                 v-if="p.status === 'probably_ended'"
@@ -218,7 +267,21 @@ onMounted(load)
                 :disabled="busy"
                 @click="update(p, { cancelled_at: null })"
               >Annuler la résiliation</button>
+              <button
+                v-if="othersThan(p).length > 0"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="mergingPaymentId = p.id"
+              >Fusionner avec…</button>
             </div>
+            <RecurringPicker
+              v-if="mergingPaymentId === p.id"
+              :payments="othersThan(p)"
+              :prompt="`${p.name} absorbe :`"
+              :busy="busy"
+              @choose="(id) => merge(p, id)"
+              @cancel="mergingPaymentId = null"
+            />
             <div v-if="cancellingId === p.id" class="flex items-center gap-2 mt-2">
               <input v-model="cancelDate" type="date" class="input input-xs input-bordered" />
               <button class="btn btn-xs btn-primary" :disabled="busy" @click="confirmCancel(p)">Confirmer</button>
@@ -254,6 +317,7 @@ onMounted(load)
               {{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}
               <template v-if="p.last_date"> · dernier prélèvement le {{ formatDay(p.last_date) }}</template>
             </p>
+            <RecurringLabels :payment="p" :busy="busy" @detach="(id) => detach(p, id)" />
             <div class="flex flex-wrap items-center gap-2 mt-1">
               <select
                 class="select select-xs select-bordered max-w-48"
@@ -268,7 +332,21 @@ onMounted(load)
               </select>
               <button class="btn btn-xs" :disabled="busy" @click="startCancel(p)">Résilié…</button>
               <button class="btn btn-xs btn-ghost" :disabled="busy" @click="update(p, { kind: 'other' })">Pas un abonnement</button>
+              <button
+                v-if="othersThan(p).length > 0"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="mergingPaymentId = p.id"
+              >Fusionner avec…</button>
             </div>
+            <RecurringPicker
+              v-if="mergingPaymentId === p.id"
+              :payments="othersThan(p)"
+              :prompt="`${p.name} absorbe :`"
+              :busy="busy"
+              @choose="(id) => merge(p, id)"
+              @cancel="mergingPaymentId = null"
+            />
             <div v-if="cancellingId === p.id" class="flex items-center gap-2 mt-1">
               <span class="text-xs">Résilié le</span>
               <input v-model="cancelDate" type="date" class="input input-xs input-bordered" />
@@ -281,14 +359,34 @@ onMounted(load)
 
       <!-- Candidates -->
       <section v-if="candidates.length > 0" class="mb-6">
-        <h2 class="font-semibold mb-1">À classer</h2>
+        <div class="flex flex-wrap items-center gap-2 mb-1">
+          <h2 class="font-semibold flex-1">À classer</h2>
+          <label class="flex items-center gap-2 text-xs">
+            Dernier prélèvement
+            <select v-model.number="sinceMonths" class="select select-xs select-bordered" data-test="since-filter">
+              <option v-for="s in SINCE_CHOICES" :key="s.months" :value="s.months">
+                {{ s.months === 0 ? 'tout' : `depuis ${s.label}` }}
+              </option>
+            </select>
+          </label>
+        </div>
         <p class="text-xs text-base-content/60 mb-2">
           Paiements qui reviennent à intervalle régulier dans tes relevés. Dis à Budgie ce que c'est.
+          Si un libellé a changé, « C'est le même que… » le rattache à un abonnement déjà classé.
+        </p>
+        <p
+          v-if="shownCandidates.hidden > 0"
+          class="text-xs text-base-content/60 mb-2"
+          data-test="hidden-count"
+        >
+          {{ shownCandidates.hidden }} proposition{{ shownCandidates.hidden > 1 ? 's' : '' }}
+          plus ancienne{{ shownCandidates.hidden > 1 ? 's' : '' }} masquée{{ shownCandidates.hidden > 1 ? 's' : '' }} :
+          élargis la période pour {{ shownCandidates.hidden > 1 ? 'les' : 'la' }} voir.
         </p>
         <div class="flex flex-col gap-2">
           <div
-            v-for="c in candidates"
-            :key="`${c.key}-${c.amount}`"
+            v-for="c in shownCandidates.visible"
+            :key="candidateId(c)"
             class="rounded-xl border border-base-300 bg-base-100 p-3"
             data-test="candidate"
           >
@@ -303,7 +401,21 @@ onMounted(load)
               <button class="btn btn-xs btn-primary" :disabled="busy" @click="classify(c, 'subscription')">Abonnement</button>
               <button class="btn btn-xs" :disabled="busy" @click="classify(c, 'other')">Autre paiement récurrent</button>
               <button class="btn btn-xs btn-ghost" :disabled="busy" @click="classify(c, 'dismissed')">Ignorer</button>
+              <button
+                v-if="mergeTargets.length > 0"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="mergingCandidate = candidateId(c)"
+              >C'est le même que…</button>
             </div>
+            <RecurringPicker
+              v-if="mergingCandidate === candidateId(c)"
+              :payments="mergeTargets"
+              prompt="Même paiement que :"
+              :busy="busy"
+              @choose="(id) => attach(c, id)"
+              @cancel="mergingCandidate = null"
+            />
           </div>
         </div>
       </section>
@@ -312,16 +424,33 @@ onMounted(load)
       <details v-if="stopped.length > 0" class="mb-4">
         <summary class="font-semibold cursor-pointer">Résiliés ou terminés ({{ stopped.length }})</summary>
         <div class="flex flex-col gap-1 mt-2">
-          <div v-for="p in stopped" :key="p.id" class="flex items-center gap-2 text-sm px-1">
-            <span class="flex-1">{{ p.name }}</span>
-            <span class="text-base-content/60 tabular-nums">{{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}</span>
-            <span v-if="p.cancelled_at" class="text-xs text-base-content/50">résilié le {{ formatDay(p.cancelled_at) }}</span>
-            <button
-              v-if="p.cancelled_at"
-              class="btn btn-xs btn-ghost"
-              :disabled="busy"
-              @click="update(p, { cancelled_at: null })"
-            >Annuler la résiliation</button>
+          <div v-for="p in stopped" :key="p.id" class="text-sm px-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="flex-1">{{ p.name }}</span>
+              <span class="text-base-content/60 tabular-nums">{{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}</span>
+              <span v-if="p.cancelled_at" class="text-xs text-base-content/50">résilié le {{ formatDay(p.cancelled_at) }}</span>
+              <button
+                v-if="p.cancelled_at"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="update(p, { cancelled_at: null })"
+              >Annuler la résiliation</button>
+              <button
+                v-if="othersThan(p).length > 0"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="mergingPaymentId = p.id"
+              >Fusionner avec…</button>
+            </div>
+            <RecurringLabels :payment="p" :busy="busy" @detach="(id) => detach(p, id)" />
+            <RecurringPicker
+              v-if="mergingPaymentId === p.id"
+              :payments="othersThan(p)"
+              :prompt="`${p.name} absorbe :`"
+              :busy="busy"
+              @choose="(id) => merge(p, id)"
+              @cancel="mergingPaymentId = null"
+            />
           </div>
         </div>
       </details>
@@ -331,10 +460,27 @@ onMounted(load)
         <summary class="font-semibold cursor-pointer">Autres paiements récurrents ({{ others.length }})</summary>
         <p class="text-xs text-base-content/60 mt-1">Impôts, épargne, assurances… : hors du total des abonnements.</p>
         <div class="flex flex-col gap-1 mt-2">
-          <div v-for="p in others" :key="p.id" class="flex items-center gap-2 text-sm px-1">
-            <span class="flex-1">{{ p.name }}</span>
-            <span class="text-base-content/60 tabular-nums">{{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}</span>
-            <button class="btn btn-xs btn-ghost" :disabled="busy" @click="update(p, { kind: 'subscription' })">C'est un abonnement</button>
+          <div v-for="p in others" :key="p.id" class="text-sm px-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="flex-1">{{ p.name }}</span>
+              <span class="text-base-content/60 tabular-nums">{{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}</span>
+              <button class="btn btn-xs btn-ghost" :disabled="busy" @click="update(p, { kind: 'subscription' })">C'est un abonnement</button>
+              <button
+                v-if="othersThan(p).length > 0"
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                @click="mergingPaymentId = p.id"
+              >Fusionner avec…</button>
+            </div>
+            <RecurringLabels :payment="p" :busy="busy" @detach="(id) => detach(p, id)" />
+            <RecurringPicker
+              v-if="mergingPaymentId === p.id"
+              :payments="othersThan(p)"
+              :prompt="`${p.name} absorbe :`"
+              :busy="busy"
+              @choose="(id) => merge(p, id)"
+              @cancel="mergingPaymentId = null"
+            />
           </div>
         </div>
       </details>

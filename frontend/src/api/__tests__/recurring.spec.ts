@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { defaultName, formatDay, localToday, needsAttention, periodLabel } from '../recurring'
-import type { RecurringPayment } from '../types'
+import {
+  defaultName,
+  filterSince,
+  formatDay,
+  localToday,
+  needsAttention,
+  periodLabel,
+  sinceDate,
+} from '../recurring'
+import type { RecurringCandidate, RecurringPayment } from '../types'
 
 function payment(overrides: Partial<RecurringPayment> = {}): RecurringPayment {
   return {
@@ -19,6 +27,7 @@ function payment(overrides: Partial<RecurringPayment> = {}): RecurringPayment {
     status: 'active',
     price_changed: false,
     debits_after_cancellation: [],
+    aliases: [],
     ...overrides,
   }
 }
@@ -55,5 +64,30 @@ describe('recurring helpers', () => {
 
   it('gives today in local time, not UTC', () => {
     expect(localToday(new Date(2026, 0, 1, 0, 30))).toBe('2026-01-01')
+  })
+
+  it('computes the start of a period, clamped to the end of a short month', () => {
+    expect(sinceDate(3, '2026-11-08')).toBe('2026-08-08')
+    expect(sinceDate(12, '2026-01-15')).toBe('2025-01-15')
+    expect(sinceDate(3, '2026-05-31')).toBe('2026-02-28')
+    expect(sinceDate(0, '2026-11-08')).toBeNull()
+  })
+
+  it('hides candidates last debited before the period, and counts them', () => {
+    const candidate = (last_date: string): RecurringCandidate => ({
+      key: last_date,
+      label: last_date,
+      amount: 999,
+      period: 'monthly',
+      monthly_cost: 999,
+      occurrences: 4,
+      first_date: '2024-01-01',
+      last_date,
+    })
+    const all = [candidate('2026-11-01'), candidate('2026-08-08'), candidate('2025-12-01')]
+    const { visible, hidden } = filterSince(all, 3, '2026-11-08')
+    expect(visible.map((c) => c.last_date)).toEqual(['2026-11-01', '2026-08-08'])
+    expect(hidden).toBe(1)
+    expect(filterSince(all, 0, '2026-11-08').hidden).toBe(0)
   })
 })
