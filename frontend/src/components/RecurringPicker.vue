@@ -1,33 +1,35 @@
 <script setup lang="ts">
 /**
- * RecurringPicker — choose a classified payment, then confirm.
+ * RecurringPicker — choose one item in a list, then confirm.
  *
- * Used for "same as…" on a candidate and "merge with…" on a payment.
+ * Used to pick the line to link with ("Relier à…").
  */
 
 import { computed, ref } from 'vue'
-import type { RecurringPayment } from '@/api/types'
-import { formatAmount } from '@/api/types'
-import { periodLabel } from '@/api/recurring'
+
+export interface PickerOption {
+  id: string
+  label: string
+}
 
 const props = defineProps<{
-  /** Payments the user can pick from. */
-  payments: RecurringPayment[]
-  /** Text before the select ("Même paiement que :", "<name> absorbe :"). */
+  /** Items the user can pick from. */
+  options: PickerOption[]
+  /** Text before the select ("Même service que :"). */
   prompt: string
   busy: boolean
 }>()
 
 const emit = defineEmits<{
-  choose: [paymentId: number]
+  choose: [id: string]
   cancel: []
 }>()
 
-const selected = ref<number | ''>('')
+const selected = ref('')
 
 // Alphabetical, so that a name is easy to find in a long list
 const sorted = computed(() =>
-  [...props.payments].sort((a, b) => a.name.localeCompare(b.name, 'fr')),
+  [...props.options].sort((a, b) => a.label.localeCompare(b.label, 'fr')),
 )
 
 function confirm(): void {
@@ -40,9 +42,7 @@ function confirm(): void {
     <span class="text-xs">{{ prompt }}</span>
     <select v-model="selected" class="select select-xs select-bordered max-w-64">
       <option value="" disabled>Choisir…</option>
-      <option v-for="p in sorted" :key="p.id" :value="p.id">
-        {{ p.name }} — {{ formatAmount(p.current_amount) }} · {{ periodLabel(p.period) }}
-      </option>
+      <option v-for="o in sorted" :key="o.id" :value="o.id">{{ o.label }}</option>
     </select>
     <button class="btn btn-xs btn-primary" :disabled="busy || selected === ''" @click="confirm">
       Confirmer

@@ -1,90 +1,76 @@
 import client from './client'
 import type {
-  RecurringCandidate,
+  RecurringBoard,
   RecurringKind,
-  RecurringOverview,
+  RecurringLine,
+  RecurringLineRef,
   RecurringPayment,
   RecurringPeriod,
 } from './types'
 
-/** Recurring debits found in the imported transactions, not classified yet. */
-export async function listRecurringCandidates(): Promise<RecurringCandidate[]> {
-  const { data } = await client.get<RecurringCandidate[]>('/api/recurring/candidates')
+/** Every service line, classified or not, and what runs now. */
+export async function getRecurringBoard(): Promise<RecurringBoard> {
+  const { data } = await client.get<RecurringBoard>('/api/recurring/board')
   return data
 }
 
-/** Classified payments and the cost of the active subscriptions. */
-export async function getRecurringOverview(): Promise<RecurringOverview> {
-  const { data } = await client.get<RecurringOverview>('/api/recurring')
-  return data
-}
-
-/** Record the user's verdict on a candidate. */
-export async function classifyRecurring(
-  candidate: RecurringCandidate,
+/**
+ * Classify a line not classified yet (subscription, other, or ignored),
+ * optionally declaring it cancelled on a date.
+ */
+export async function classifyLine(
+  line: RecurringLine,
   kind: RecurringKind,
-  name: string,
-): Promise<RecurringOverview> {
-  const { data } = await client.post<RecurringOverview>('/api/recurring', {
-    key: candidate.key,
+  name: string = line.name,
+  cancelledAt: string | null = null,
+): Promise<void> {
+  await client.post('/api/recurring', {
+    key: line.ref.key,
+    amount: line.ref.amount,
+    period: line.ref.period,
     name,
-    amount: candidate.amount,
-    period: candidate.period,
     kind,
+    cancelled_at: cancelledAt,
   })
-  return data
 }
 
 export type RecurringUpdate = Partial<
   Pick<RecurringPayment, 'name' | 'kind' | 'amount' | 'category_id' | 'cancelled_at'>
 >
 
-/** Rename, reclassify, categorize, cancel or accept a new price. */
-export async function updateRecurring(
-  id: number,
-  payload: RecurringUpdate,
-): Promise<RecurringOverview> {
-  const { data } = await client.patch<RecurringOverview>(`/api/recurring/${id}`, payload)
-  return data
-}
-
-/** Merge a candidate's label into a classified payment ("same as…"). */
-export async function attachRecurring(
-  id: number,
-  candidate: RecurringCandidate,
-): Promise<RecurringOverview> {
-  const { data } = await client.post<RecurringOverview>(`/api/recurring/${id}/aliases`, {
-    key: candidate.key,
-    amount: candidate.amount,
-  })
-  return data
-}
-
-/** Merge another classified payment into this one, which absorbs its labels. */
-export async function mergeRecurring(id: number, otherId: number): Promise<RecurringOverview> {
-  const { data } = await client.post<RecurringOverview>(`/api/recurring/${id}/merge`, {
-    other_id: otherId,
-  })
-  return data
+/** Rename, reclassify, categorize or cancel a classified payment. */
+export async function updateRecurring(id: number, payload: RecurringUpdate): Promise<void> {
+  await client.patch(`/api/recurring/${id}`, payload)
 }
 
 /** Take the latest debited amount as the new price of the label that billed it. */
-export async function acceptRecurringPrice(id: number): Promise<RecurringOverview> {
-  const { data } = await client.post<RecurringOverview>(`/api/recurring/${id}/accept-price`)
-  return data
+export async function acceptRecurringPrice(id: number): Promise<void> {
+  await client.post(`/api/recurring/${id}/accept-price`)
 }
 
-/** Detach a merged label: its debits become a candidate again. */
-export async function detachRecurring(id: number, aliasId: number): Promise<RecurringOverview> {
-  const { data } = await client.delete<RecurringOverview>(
-    `/api/recurring/${id}/aliases/${aliasId}`,
-  )
-  return data
+/** Detach a merged label: its debits become a line of their own again. */
+export async function detachRecurring(id: number, aliasId: number): Promise<void> {
+  await client.delete(`/api/recurring/${id}/aliases/${aliasId}`)
 }
 
-/** Forget a classification: its debits become a candidate again. */
+/** Forget a classification: the line goes back to "detected". */
 export async function forgetRecurring(id: number): Promise<void> {
   await client.delete(`/api/recurring/${id}`)
+}
+
+/** One service, two labels: the later line absorbs the earlier one. */
+export async function linkLines(
+  earlier: RecurringLineRef,
+  later: RecurringLineRef,
+): Promise<RecurringBoard> {
+  const { data } = await client.post<RecurringBoard>('/api/recurring/link', { earlier, later })
+  return data
+}
+
+/** Forget every classification; imported transactions stay. */
+export async function resetRecurring(): Promise<RecurringBoard> {
+  const { data } = await client.delete<RecurringBoard>('/api/recurring')
+  return data
 }
 
 const PERIOD_LABELS: Record<RecurringPeriod, string> = {
@@ -98,10 +84,7 @@ export function periodLabel(period: RecurringPeriod): string {
   return PERIOD_LABELS[period]
 }
 
-/**
- * Readable default name for a candidate: its normalized key in title case
- * ("STREAMFLIX COM" → "Streamflix Com").
- */
+/** Readable name of a normalized key ("STREAMFLIX COM" → "Streamflix Com"). */
 export function defaultName(key: string): string {
   return key
     .toLowerCase()
@@ -121,21 +104,33 @@ export function needsAttention(payment: RecurringPayment): boolean {
   return payment.status === 'probably_ended' || payment.price_changed
 }
 
-/** Choices of the "last debit" filter of the candidates, in months (0 = all). */
-export const SINCE_CHOICES: { months: number; label: string }[] = [
-  { months: 3, label: '3 mois' },
-  { months: 6, label: '6 mois' },
-  { months: 12, label: '1 an' },
-  { months: 24, label: '2 ans' },
-  { months: 0, label: 'tout' },
-]
+/** Where a line goes on the "now" view. */
+export type LineGroup = 'check' | 'subscription' | 'other' | 'stopped' | 'ignored'
+
+/** Sort a line into a group of the "now" view. */
+export function lineGroup(line: RecurringLine): LineGroup {
+  const p = line.payment
+  if (p?.kind === 'dismissed') return 'ignored'
+  if (p && needsAttention(p)) return 'check'
+  if (!line.running) return 'stopped'
+  if (p?.kind === 'other' || (!p && line.likely_other)) return 'other'
+  return 'subscription'
+}
 
 /**
- * ISO date `months` months before `today` (YYYY-MM-DD), or null for "all".
- * The day is clamped to the end of a shorter month (31 May − 3 months = 28/29 Feb).
+ * Position of a date on a timeline running from `start` to `end`, in percent.
+ * Dates outside the window are clamped to its edges.
  */
-export function sinceDate(months: number, today: string): string | null {
-  if (months <= 0) return null
+export function timelinePercent(date: string, start: string, end: string): number {
+  const t = Date.parse(date)
+  const s = Date.parse(start)
+  const e = Date.parse(end)
+  if (e <= s) return 0
+  return Math.min(100, Math.max(0, ((t - s) / (e - s)) * 100))
+}
+
+/** ISO date `months` months before `today` (YYYY-MM-DD), day clamped to the month's end. */
+export function monthsBefore(months: number, today: string): string {
   const [y = 0, m = 1, d = 1] = today.split('-').map(Number)
   const total = y * 12 + (m - 1) - months
   const year = Math.floor(total / 12)
@@ -143,17 +138,6 @@ export function sinceDate(months: number, today: string): string | null {
   const lastDay = new Date(year, month, 0).getDate()
   const day = Math.min(d, lastDay)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-/** Candidates whose last debit falls within the chosen period, and how many are hidden. */
-export function filterSince(
-  candidates: RecurringCandidate[],
-  months: number,
-  today: string,
-): { visible: RecurringCandidate[]; hidden: number } {
-  const since = sinceDate(months, today)
-  const visible = since ? candidates.filter((c) => c.last_date >= since) : candidates
-  return { visible, hidden: candidates.length - visible.length }
 }
 
 /** Today's date in the browser's time zone, as YYYY-MM-DD. */
@@ -167,4 +151,15 @@ export function localToday(now: Date = new Date()): string {
 export function formatDay(iso: string): string {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
+}
+
+const MONTHS = [
+  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+]
+
+/** Format an ISO date as a short French month ("févr. 2026"). */
+export function formatMonth(iso: string): string {
+  const [y = '2000', m = '01'] = iso.split('-')
+  return `${MONTHS[Number(m) - 1]} ${y}`
 }
