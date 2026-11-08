@@ -64,3 +64,41 @@ class RecurringPayment(Base):
     # Relationships
     user: Mapped[User] = relationship(back_populates="recurring_payments")
     category: Mapped[Category | None] = relationship()
+    aliases: Mapped[list[RecurringPaymentAlias]] = relationship(
+        back_populates="payment",
+        cascade="all, delete-orphan",
+        order_by="RecurringPaymentAlias.id",
+    )
+
+
+class RecurringPaymentAlias(Base):
+    """A bank label merged into a classified recurring payment.
+
+    When the bank or the merchant renames a debit, the debits under the other
+    label are the same payment: each alias makes the tracking count them for
+    the payment it belongs to.
+
+    Attributes:
+        id: Primary key.
+        payment_id: The payment this label is merged into.
+        match_key: Normalized bank label of the debits (encrypted at rest).
+        amount: Reference amount under this label, in positive integer centimes.
+        created_at: Timestamp of record creation.
+    """
+
+    __tablename__ = "recurring_payment_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("recurring_payments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    match_key: Mapped[str] = mapped_column(Text, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    payment: Mapped[RecurringPayment] = relationship(back_populates="aliases")
