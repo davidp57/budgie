@@ -16,7 +16,7 @@ import statistics
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Period(enum.StrEnum):
@@ -275,19 +275,25 @@ class PaymentStatus(enum.StrEnum):
 
 @dataclass(frozen=True)
 class TrackedPayment:
-    """A payment the user has classified, as the tracking sees it.
+    """One label of a payment the user has classified, as the tracking sees it.
+
+    A payment carries its main label, plus one alias per label merged into it
+    (after the bank or the merchant renamed the debit): each comes as its own
+    ``TrackedPayment`` with the same ``id``.
 
     Attributes:
         id: Primary key of the payment.
-        key: Normalized label the payment was classified under.
-        amount: Reference amount, in positive integer centimes.
-        period: Billing rhythm.
+        key: Normalized label.
+        amount: Reference amount of this label, in positive integer centimes.
+        period: Billing rhythm of the payment.
+        alias_id: Id of the merged label, or None for the payment's main label.
     """
 
     id: int
     key: str
     amount: int
     period: Period
+    alias_id: int | None = None
 
 
 @dataclass
@@ -298,10 +304,17 @@ class PaymentTrack:
         dates: Dates of the debits attributed to the payment, oldest first.
         current_amount: Amount of the most recent attributed debit, or the
             reference amount when none was attributed.
+        last_reference: Reference amount of the label that billed the most
+            recent debit (a price change is measured against it), or None
+            when no debit was attributed.
+        last_alias_id: Merged label that billed the most recent debit, or
+            None when it was the main label (or no debit was attributed).
     """
 
     dates: list[datetime.date]
     current_amount: int
+    last_reference: int | None = None
+    last_alias_id: int | None = None
 
     @property
     def last_date(self) -> datetime.date | None:
@@ -309,38 +322,44 @@ class PaymentTrack:
         return self.dates[-1] if self.dates else None
 
 
+@dataclass
+class _Entry:
+    """Attribution state of one label of a payment."""
+
+    label: TrackedPayment
+    # Price the label is billed at: its reference amount, then the amount of
+    # each confirmed price change.  Never the amount of any single debit, so
+    # that a run of purchases cannot drift the tolerance step by step.
+    price: int
+    hits: list[BankDebit] = field(default_factory=list)
+
+
 def track_payments(
     debits: Iterable[BankDebit], payments: Iterable[TrackedPayment]
 ) -> tuple[dict[int, PaymentTrack], list[BankDebit]]:
     """Attribute debits to the payments the user has classified.
 
-    Under a key that carries a single classified payment, a debit outside the
-    amount tolerance that falls one period after the previous attributed debit
-    is a price change: it is attributed, and its amount becomes the current
-    one; earlier debits at an older price are attributed the same way, walking
-    back from the first attributed debit.  Under a key with several payments,
-    a debit goes to the payment of the nearest amount within tolerance.  Every
-    other debit is left unattributed, to be searched for new candidates.
+    Each label of a payment (main or merged) is followed on its own.  Under a
+    key that carries a single label, a debit outside the amount tolerance that
+    falls one period after the previous attributed debit is a price change: it
+    is attributed, and its amount becomes the current one; earlier debits at
+    an older price are attributed the same way, walking back from the first
+    attributed debit.  Under a key with several labels, a debit goes to the
+    label of the nearest amount within tolerance.  Every other debit is left
+    unattributed, to be searched for new candidates.
 
     Args:
         debits: Bank debits, in any order.
-        payments: Classified payments.
+        payments: Labels of the classified payments, main and merged.
 
     Returns:
-        The track of each payment by id, and the unattributed debits.
+        The track of each payment by id, the debits of all its labels
+        together, and the unattributed debits.
     """
-    by_key: dict[str, list[TrackedPayment]] = defaultdict(list)
-    for payment in payments:
-        by_key[payment.key].append(payment)
-    tracks = {
-        p.id: PaymentTrack(dates=[], current_amount=p.amount)
-        for group in by_key.values()
-        for p in group
-    }
-    # Price each payment is billed at: the reference amount, then the amount
-    # of each confirmed price change.  Never the amount of any single debit,
-    # so that a run of purchases cannot drift the tolerance step by step.
-    prices = {pid: track.current_amount for pid, track in tracks.items()}
+    labels = list(payments)
+    by_key: dict[str, list[_Entry]] = defaultdict(list)
+    for label in labels:
+        by_key[label.key].append(_Entry(label=label, price=label.amount))
     by_debit_key: dict[str, list[BankDebit]] = defaultdict(list)
     for debit in debits:
         by_debit_key[normalize_label(debit.label)].append(debit)
@@ -348,19 +367,43 @@ def track_payments(
     unattributed: list[BankDebit] = []
     for key, key_debits in by_debit_key.items():
         key_debits.sort(key=lambda d: d.date)
-        candidates = by_key.get(key)
-        if not candidates:
+        entries = by_key.get(key)
+        if not entries:
             unattributed.extend(key_debits)
             continue
         for debit in key_debits:
-            target = _attribute(debit, candidates, tracks, prices, key_debits)
-            if target is None:
+            entry = _attribute(debit, entries, key_debits)
+            if entry is None:
                 unattributed.append(debit)
-                continue
-            track = tracks[target]
-            track.dates.append(debit.date)
-            track.current_amount = debit.amount
-    return tracks, _extend_backwards(unattributed, by_key, tracks, by_debit_key)
+            else:
+                entry.hits.append(debit)
+    remaining = _extend_backwards(unattributed, by_key, by_debit_key)
+
+    reference = {lab.id: lab.amount for lab in reversed(labels) if lab.alias_id is None}
+    hits_by_payment: dict[int, list[tuple[BankDebit, TrackedPayment]]] = defaultdict(
+        list
+    )
+    for entries in by_key.values():
+        for entry in entries:
+            hits_by_payment[entry.label.id].extend((h, entry.label) for h in entry.hits)
+    tracks: dict[int, PaymentTrack] = {}
+    for label in labels:
+        if label.id in tracks:
+            continue
+        hits = sorted(hits_by_payment[label.id], key=lambda h: h[0].date)
+        if hits:
+            last_debit, last_label = hits[-1]
+            tracks[label.id] = PaymentTrack(
+                dates=[debit.date for debit, _ in hits],
+                current_amount=last_debit.amount,
+                last_reference=last_label.amount,
+                last_alias_id=last_label.alias_id,
+            )
+        else:
+            tracks[label.id] = PaymentTrack(
+                dates=[], current_amount=reference.get(label.id, label.amount)
+            )
+    return tracks, remaining
 
 
 def _confirmed_elsewhere(
@@ -393,11 +436,10 @@ def _regular_debit_in_window(
 
 def _extend_backwards(
     unattributed: list[BankDebit],
-    by_key: dict[str, list[TrackedPayment]],
-    tracks: dict[int, PaymentTrack],
+    by_key: dict[str, list[_Entry]],
     by_debit_key: dict[str, list[BankDebit]],
 ) -> list[BankDebit]:
-    """Attribute the older debits of a single payment billed at an earlier price.
+    """Attribute the older debits of a single label billed at an earlier price.
 
     Once the user accepts a new price, the reference amount no longer matches
     the debits made before the change, and the forward pass has no earlier
@@ -409,74 +451,73 @@ def _extend_backwards(
     Returns:
         The debits that are still unattributed, oldest first.
     """
-    amount_on: dict[tuple[str, datetime.date], int] = {
-        (key, d.date): d.amount for key, group in by_debit_key.items() for d in group
-    }
-    anchors: dict[int, int] = {}
     remaining: list[BankDebit] = []
     for debit in sorted(unattributed, key=lambda d: d.date, reverse=True):
         key = normalize_label(debit.label)
-        candidates = by_key.get(key)
-        if candidates is not None and len(candidates) == 1:
-            payment = candidates[0]
-            track = tracks[payment.id]
-            first = track.dates[0] if track.dates else None
-            if first is not None and interval_matches(
-                (first - debit.date).days, payment.period
+        entries = by_key.get(key)
+        hit_entries = [e for e in entries or [] if e.hits]
+        if entries and _one_payment(entries) and hit_entries:
+            entry = min(hit_entries, key=lambda e: e.hits[0].date)
+            first = entry.hits[0]
+            period = entry.label.period
+            if interval_matches((first.date - debit.date).days, period) and (
+                amount_matches(debit.amount, first.amount)
+                or _confirmed_elsewhere(debit, by_debit_key[key], period, later=False)
             ):
-                anchor = anchors.get(payment.id, amount_on.get((key, first), 0))
-                if amount_matches(debit.amount, anchor) or _confirmed_elsewhere(
-                    debit, by_debit_key[key], payment.period, later=False
-                ):
-                    track.dates.insert(0, debit.date)
-                    anchors[payment.id] = debit.amount
-                    continue
+                entry.hits.insert(0, debit)
+                continue
         remaining.append(debit)
     remaining.reverse()
     return remaining
 
 
 def _attribute(
-    debit: BankDebit,
-    candidates: list[TrackedPayment],
-    tracks: dict[int, PaymentTrack],
-    prices: dict[int, int],
-    key_debits: list[BankDebit],
-) -> int | None:
-    """Return the id of the payment a debit belongs to, or None.
+    debit: BankDebit, entries: list[_Entry], key_debits: list[BankDebit]
+) -> _Entry | None:
+    """Return the label entry a debit belongs to, or None.
 
-    Under a single payment, a debit outside the price tolerance is a price
-    change only when it falls one period after the last attributed debit, no
-    debit at the current price fills that period, and a second debit of the
-    new amount follows one period later.  A one-off purchase at the same
+    A debit within the tolerance of a label goes to the nearest one.  When
+    every label under the key belongs to one payment, a debit outside the
+    tolerance is a price change of the label that billed last, only when it
+    falls one period after the last attributed debit, no debit at the current
+    price fills that period, and a second debit of the new amount follows one
+    period later.  A one-off purchase at the same
     merchant is left alone; a new price is followed from its second debit on.
     """
-    if len(candidates) == 1:
-        payment = candidates[0]
-        price = prices[payment.id]
-        if amount_matches(debit.amount, price) or amount_matches(
-            debit.amount, payment.amount
-        ):
-            return payment.id
-        last = tracks[payment.id].last_date
-        if (
-            last is not None
-            and interval_matches((debit.date - last).days, payment.period)
-            and not _regular_debit_in_window(last, price, key_debits, payment.period)
-            and _confirmed_elsewhere(debit, key_debits, payment.period, later=True)
-        ):
-            prices[payment.id] = debit.amount
-            return payment.id
-        return None
     matching = [
-        p
-        for p in candidates
-        if amount_matches(debit.amount, prices[p.id])
-        or amount_matches(debit.amount, p.amount)
+        e
+        for e in entries
+        if amount_matches(debit.amount, e.price)
+        or amount_matches(debit.amount, e.label.amount)
     ]
-    if not matching:
+    if matching:
+        return min(
+            matching,
+            key=lambda e: min(
+                abs(debit.amount - e.price), abs(debit.amount - e.label.amount)
+            ),
+        )
+    if not _one_payment(entries):
         return None
-    return min(matching, key=lambda p: abs(debit.amount - p.amount)).id
+    hit_entries = [e for e in entries if e.hits]
+    if not hit_entries:
+        return None
+    latest = max(hit_entries, key=lambda e: e.hits[-1].date)
+    last = latest.hits[-1].date
+    period = latest.label.period
+    if (
+        interval_matches((debit.date - last).days, period)
+        and not _regular_debit_in_window(last, latest.price, key_debits, period)
+        and _confirmed_elsewhere(debit, key_debits, period, later=True)
+    ):
+        latest.price = debit.amount
+        return latest
+    return None
+
+
+def _one_payment(entries: list[_Entry]) -> bool:
+    """Tell whether every label under a key belongs to the same payment."""
+    return len({e.label.id for e in entries}) == 1
 
 
 def payment_status(

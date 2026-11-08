@@ -313,3 +313,83 @@ def test_the_tolerance_does_not_follow_an_isolated_debit() -> None:
     tracks, rest = track_payments(debits, [_payment(1, "SHOP", 5000)])
     assert [d.amount for d in rest] == [5900]
     assert len(tracks[1].dates) == 3
+
+
+# ---------------------------------------------------------------------------
+# Payments carrying several labels (merged after a label change)
+# ---------------------------------------------------------------------------
+
+
+def _alias(pid: int, key: str, amount: int, alias_id: int = 99) -> TrackedPayment:
+    return TrackedPayment(
+        id=pid, key=key, amount=amount, period=Period.MONTHLY, alias_id=alias_id
+    )
+
+
+def test_a_payment_follows_the_debits_of_every_label() -> None:
+    old = _monthly("PRLV SEPA OLDNAME", 999, 4, start=datetime.date(2025, 1, 5))
+    new = _monthly("PRLV SEPA NEWNAME", 999, 3, start=datetime.date(2025, 5, 5))
+    tracks, rest = track_payments(
+        old + new, [_payment(1, "NEWNAME", 999), _alias(1, "OLDNAME", 999)]
+    )
+    assert rest == []
+    assert tracks[1].dates == sorted(d.date for d in old + new)
+    assert tracks[1].last_date == new[-1].date
+
+
+def test_the_current_amount_is_the_latest_debit_across_labels() -> None:
+    old = _monthly("OLDNAME", 1299, 4, start=datetime.date(2025, 6, 5))
+    new = _monthly("NEWNAME", 999, 3, start=datetime.date(2025, 1, 5))
+    tracks, _ = track_payments(
+        old + new, [_payment(1, "NEWNAME", 999), _alias(1, "OLDNAME", 1299)]
+    )
+    assert tracks[1].current_amount == 1299
+
+
+def test_an_alias_under_the_same_label_keeps_two_amounts_apart() -> None:
+    debits = _monthly("APPSTORE", 299, 4) + _monthly("APPSTORE", 999, 4)
+    tracks, rest = track_payments(
+        debits, [_payment(1, "APPSTORE", 999), _alias(1, "APPSTORE", 299)]
+    )
+    assert rest == []
+    assert len(tracks[1].dates) == 8
+
+
+def test_an_alias_does_not_catch_another_payments_debits() -> None:
+    debits = _monthly("STREAMFLIX", 1399, 4) + _monthly("MUSIC", 999, 4)
+    tracks, rest = track_payments(
+        debits,
+        [
+            _payment(1, "STREAMFLIX", 1399),
+            _payment(2, "GYM", 2990),
+            _alias(2, "MUSIC", 999),
+        ],
+    )
+    assert len(tracks[1].dates) == 4
+    assert len(tracks[2].dates) == 4
+    assert rest == []
+
+
+def test_two_labels_of_one_payment_under_one_key_still_follow_a_price_change() -> None:
+    debits = (
+        _monthly("APPSTORE", 999, 3, start=datetime.date(2025, 1, 5))
+        + _monthly("APPSTORE", 1199, 3, start=datetime.date(2025, 4, 5))
+        + _monthly("APPSTORE", 1299, 3, start=datetime.date(2025, 7, 4))
+    )
+    tracks, rest = track_payments(
+        debits, [_payment(1, "APPSTORE", 999), _alias(1, "APPSTORE", 1199)]
+    )
+    assert rest == []
+    assert len(tracks[1].dates) == 9
+    assert tracks[1].current_amount == 1299
+
+
+def test_the_track_tells_which_label_billed_last() -> None:
+    old = _monthly("OLDNAME", 999, 4, start=datetime.date(2025, 1, 5))
+    new = _monthly("NEWNAME", 1299, 3, start=datetime.date(2025, 5, 5))
+    tracks, _ = track_payments(
+        old + new, [_payment(1, "OLDNAME", 999), _alias(1, "NEWNAME", 1299, 7)]
+    )
+    assert tracks[1].current_amount == 1299
+    assert tracks[1].last_reference == 1299
+    assert tracks[1].last_alias_id == 7
