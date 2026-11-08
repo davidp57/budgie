@@ -3,13 +3,21 @@ name: CI-Docker
 # A merge into main publishes a release when the version of pyproject.toml has
 # no tag yet: image `latest` + `X.Y.Z`, tag `vX.Y.Z`, GitHub release with
 # RELEASE_NOTES.md. A merge without a version change publishes nothing.
+# A merge into develop builds and pushes `develop-latest` and `develop-<sha>`
+# (to roll back), without tag nor release.
 # Run by hand (workflow_dispatch) on a branch, it only builds and pushes
 # `<branch>-latest` (`latest` for main), without tag nor release.
 
 "on":
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
+
+# One publication at a time per branch, in push order: a later merge never
+# gets its image overwritten by an earlier run that finishes last.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -35,7 +43,7 @@ jobs:
           BRANCH="${GITHUB_REF#refs/heads/}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$BRANCH" == "main" ]]; then
             if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
               echo "Tag v$VERSION already exists: nothing to publish."
               echo "build=false" >> "$GITHUB_OUTPUT"
@@ -72,6 +80,7 @@ jobs:
             type=raw,value=latest,enable=${{ steps.context.outputs.branch == 'main' }}
             type=raw,value=${{ steps.context.outputs.version }},enable=${{ steps.context.outputs.release == 'true' }}
             type=ref,event=branch,suffix=-latest,enable=${{ steps.context.outputs.branch != 'main' }}
+            type=sha,prefix=develop-,enable=${{ steps.context.outputs.branch == 'develop' }}
 
       - name: Build and push
         if: steps.context.outputs.build == 'true'

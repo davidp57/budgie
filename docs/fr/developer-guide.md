@@ -790,7 +790,7 @@ Situé dans `.github/workflows/docker.yml`.
 
 | Propriété | Valeur |
 |---|---|
-| Déclencheur | Push sur `main` (fusion de release) + workflow_dispatch (manuel) |
+| Déclencheur | Push sur `main` (fusion de release) ou `develop` + workflow_dispatch (manuel) |
 | Registry | GitHub Container Registry (GHCR) |
 | Image | `ghcr.io/davidp57/budgie` |
 
@@ -802,7 +802,11 @@ Situé dans `.github/workflows/docker.yml`.
 4. Smoke test : démarre le conteneur et vérifie `curl /api/health`
 5. Crée le tag `vX.Y.Z` et la release GitHub avec `RELEASE_NOTES.md` (pré-release tant que la version est en `0.x`)
 
+**Sur un push vers `develop`** (toute fusion), il construit, teste et pousse `develop-latest` et `develop-<sha court>` (pour revenir à une fusion donnée), sans tag ni release.
+
 **Lancé à la main** sur une branche, il construit et pousse seulement `<branche>-latest` (`latest` pour `main`), sans tag ni release.
+
+Les exécutions d'une même branche passent dans l'ordre des push : une fusion plus récente n'est jamais écrasée par une exécution plus ancienne qui finirait après elle.
 
 ### Sortir une version
 
@@ -810,7 +814,7 @@ Une release suit le skill `/release` (`.claude/skills/release/SKILL.md`) : versi
 `tests/test_changelog.py` vérifie que `[Unreleased]` est ouvert, que la version a son entrée dans le changelog et que les notes de version parlent d'elle.
 
 ```bash
-# Une image develop, à la main (Actions → CI-Docker → Run workflow → branche develop)
+# Reconstruire l'image develop à la main (Actions → CI-Docker → Run workflow → branche develop)
 gh workflow run docker.yml --ref develop
 ```
 
