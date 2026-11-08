@@ -68,7 +68,7 @@ budgie/
 │   │   ├── category_rule.py
 │   │   ├── envelope.py
 │   │   ├── payee.py
-│   │   ├── recurring_payment.py   # Classified recurring debits (subscriptions)
+│   │   ├── recurring_payment.py   # Classified recurring debits (subscriptions) and their merged labels
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── schemas/                   # Pydantic request/response schemas
@@ -478,8 +478,12 @@ Interactive documentation available at `http://localhost:8000/docs` (Swagger UI)
 | `POST` | `/api/recurring` | `{key, name, amount, period, kind}` — `kind`: `subscription`, `other`, `dismissed` |
 | `PATCH` | `/api/recurring/{id}` | `name`, `kind`, `amount`, `category_id`, `cancelled_at` (send `null` to clear) |
 | `DELETE` | `/api/recurring/{id}` | Forget the verdict: the debits become a candidate again |
+| `POST` | `/api/recurring/{id}/aliases` | `{key, amount}` — merge a candidate's label into the payment |
+| `POST` | `/api/recurring/{id}/merge` | `{other_id}` — the payment absorbs the labels of another one, which is deleted |
+| `DELETE` | `/api/recurring/{id}/aliases/{alias_id}` | Detach a merged label: its debits become a candidate again |
+| `POST` | `/api/recurring/{id}/accept-price` | Take the latest debited amount as the new reference of the label (main or merged) that billed it |
 
-Debits are not linked to a payment: they are matched at each read by normalized bank label (`match_key`) and amount, after decryption (`services/recurring_detection.py` holds the thresholds as named constants).
+Debits are not linked to a payment: they are matched at each read by normalized bank label (`match_key`, plus the labels merged into the payment in `recurring_payment_aliases`) and amount, after decryption (`services/recurring_detection.py` holds the thresholds as named constants).
 Only imported transactions (`import_hash` set) count, so that a manual expense reconciled with a bank line is not counted twice.
 
 ### Users
