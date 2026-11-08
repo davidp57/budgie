@@ -17,10 +17,16 @@ from budgie.models.account import Account
 from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
 from budgie.models.transaction import Transaction
 from budgie.schemas.recurring import (
+    PriceSegmentRead,
     RecurringAliasCreate,
     RecurringAliasRead,
+    RecurringBoard,
     RecurringCandidateRead,
     RecurringKind,
+    RecurringLine,
+    RecurringLineRef,
+    RecurringLink,
+    RecurringLinkSuggestion,
     RecurringOverview,
     RecurringPaymentCreate,
     RecurringPaymentRead,
@@ -30,16 +36,22 @@ from budgie.services.crypto import decrypt_str, encrypt_str
 from budgie.services.ownership import ensure_references_owned
 from budgie.services.recurring_detection import (
     BankDebit,
+    LineSpan,
     PaymentStatus,
     PaymentTrack,
     Period,
+    SeriesChain,
     TrackedPayment,
     amount_matches,
+    chain_series,
     debits_after_cancellation,
     detect_series,
+    is_running,
     monthly_cost,
     normalize_label,
     payment_status,
+    price_segments,
+    suggest_links,
     track_payments,
 )
 
@@ -271,6 +283,7 @@ async def create_payment(
         amount=schema.amount,
         period=schema.period.value,
         kind=schema.kind.value,
+        cancelled_at=schema.cancelled_at,
     )
     db.add(payment)
     await db.commit()
@@ -540,3 +553,349 @@ async def accept_price(
         alias.amount = track.current_amount
     await db.commit()
     return True
+
+
+#: An unclassified line costing this much per month is probably not a
+#: subscription (taxes, savings, rent, insurance), in centimes.
+LIKELY_OTHER_MONTHLY_COST = 10_000
+
+#: Label prefixes of transfers, which are never subscriptions.
+_TRANSFER_PREFIXES = ("VIR ", "VIREMENT")
+
+
+def display_name(key: str) -> str:
+    """Readable default name of a normalized key ("STREAM FLIX" -> "Stream Flix")."""
+    return " ".join(w.capitalize() for w in key.split())
+
+
+def _likely_other(chain: SeriesChain) -> bool:
+    label = chain.latest.label.strip().upper()
+    return chain.latest.monthly_cost >= LIKELY_OTHER_MONTHLY_COST or label.startswith(
+        _TRANSFER_PREFIXES
+    )
+
+
+def _segments(dates: list[datetime.date], amounts: list[int]) -> list[PriceSegmentRead]:
+    return [
+        PriceSegmentRead(start=s.start, end=s.end, amount=s.amount, count=s.count)
+        for s in price_segments(list(zip(dates, amounts, strict=True)))
+    ]
+
+
+def _payment_line(
+    read: RecurringPaymentRead, track: PaymentTrack, today: datetime.date
+) -> RecurringLine:
+    return RecurringLine(
+        id=f"p{read.id}",
+        ref=RecurringLineRef(payment_id=read.id),
+        payment=read,
+        name=read.name,
+        key=read.key,
+        label=None,
+        period=read.period,
+        amount=read.current_amount,
+        monthly_cost=read.monthly_cost,
+        first_date=track.dates[0] if track.dates else None,
+        last_date=read.last_date,
+        running=read.status is PaymentStatus.ACTIVE
+        and read.last_date is not None
+        and is_running(read.last_date, read.period, today),
+        likely_other=False,
+        segments=_segments(track.dates, track.amounts),
+    )
+
+
+def _chain_line(chain: SeriesChain, today: datetime.date) -> RecurringLine:
+    hits = chain.hits
+    return RecurringLine(
+        id=f"s{chain.key}|{chain.amount}|{chain.first_date.isoformat()}",
+        ref=RecurringLineRef(key=chain.key, amount=chain.amount, period=chain.period),
+        payment=None,
+        name=display_name(chain.key),
+        key=chain.key,
+        label=chain.latest.label,
+        period=chain.period,
+        amount=chain.amount,
+        monthly_cost=chain.latest.monthly_cost,
+        first_date=chain.first_date,
+        last_date=chain.last_date,
+        running=is_running(chain.last_date, chain.period, today),
+        likely_other=_likely_other(chain),
+        segments=_segments([h.date for h in hits], [h.amount for h in hits]),
+    )
+
+
+def _counts_in_total(line: RecurringLine) -> bool:
+    if not line.running:
+        return False
+    if line.payment is None:
+        return not line.likely_other
+    return line.payment.kind is RecurringKind.SUBSCRIPTION
+
+
+async def get_board(
+    db: AsyncSession,
+    user_id: int,
+    session_key: bytes | None = None,
+    today: datetime.date | None = None,
+) -> RecurringBoard:
+    """Return every service line, classified or not, and what runs now.
+
+    A line not classified yet is a chain of detected series of one label;
+    the total counts it as a subscription unless it is probably something
+    else, so that the answer comes before any classification.  "Running" and
+    the statuses are judged as of the most recent imported debit: the board
+    describes the situation of the last statement imported.
+
+    Args:
+        db: Async database session.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for decryption, or None.
+        today: Date used when no debit was imported (defaults to today).
+
+    Returns:
+        The board.
+    """
+    debits = await _bank_debits(db, user_id, session_key)
+    as_of = max((d.date for d in debits), default=today or datetime.date.today())
+    today = as_of
+    payments = await _payments(db, user_id, session_key)
+    tracks, unattributed = track_payments(debits, _tracked(payments))
+
+    lines = [
+        _payment_line(_read(p, tracks[p.id], today), tracks[p.id], today)
+        for p in payments
+    ]
+    lines += [_chain_line(c, today) for c in chain_series(detect_series(unattributed))]
+    lines.sort(key=lambda line: (-line.monthly_cost, line.name.lower()))
+
+    in_total = [line for line in lines if _counts_in_total(line)]
+    monthly_total = sum(line.monthly_cost for line in in_total)
+    visible = [
+        line
+        for line in lines
+        if line.segments
+        and (line.payment is None or line.payment.kind is not RecurringKind.DISMISSED)
+    ]
+    spans = [
+        LineSpan(
+            id=line.id,
+            key=line.key,
+            first_date=line.segments[0].start,
+            last_date=line.segments[-1].end,
+            first_amount=line.segments[0].amount,
+            last_amount=line.segments[-1].amount,
+            period=line.period,
+        )
+        for line in visible
+    ]
+    return RecurringBoard(
+        as_of=as_of,
+        lines=lines,
+        monthly_total=monthly_total,
+        yearly_total=monthly_total * MONTHS_PER_YEAR,
+        estimated_count=sum(line.payment is None for line in in_total),
+        attention_count=sum(
+            line.payment is not None and _needs_attention(line.payment)
+            for line in lines
+        ),
+        suggestions=[
+            RecurringLinkSuggestion(earlier_id=a, later_id=b)
+            for a, b in suggest_links(spans)
+        ],
+    )
+
+
+async def _chain_of(
+    db: AsyncSession,
+    ref: RecurringLineRef,
+    user_id: int,
+    session_key: bytes | None,
+) -> SeriesChain | None:
+    """Find the detected line a reference points at, as the board shows it."""
+    if ref.key is None or ref.amount is None or ref.period is None:
+        return None
+    key = normalize_label(ref.key)
+    debits = await _bank_debits(db, user_id, session_key)
+    payments = await _payments(db, user_id, session_key)
+    _, unattributed = track_payments(debits, _tracked(payments))
+    for chain in chain_series(detect_series(unattributed)):
+        if (
+            chain.key == key
+            and chain.amount == ref.amount
+            and chain.period == ref.period
+        ):
+            return chain
+    return None
+
+
+async def _attach_chain(
+    db: AsyncSession,
+    payment_id: int,
+    chain: SeriesChain,
+    user_id: int,
+    session_key: bytes | None,
+    *,
+    include_latest: bool,
+) -> None:
+    """Merge every price of a detected line into a payment.
+
+    Each price becomes a merged label, so that the tracking finds every debit
+    of the line, even across a missing month or a change of rhythm.
+    """
+    series = chain.series if include_latest else chain.series[:-1]
+    for s in series:
+        await add_alias(
+            db,
+            payment_id,
+            RecurringAliasCreate(key=chain.key, amount=s.amount),
+            user_id,
+            session_key=session_key,
+        )
+
+
+async def classify_line(
+    db: AsyncSession,
+    schema: RecurringPaymentCreate,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> int:
+    """Classify a detected line, with every price it was billed at.
+
+    The payment takes the line's current price; its earlier prices become
+    merged labels, so that the whole history stays on the one line.
+
+    Args:
+        db: Async database session.
+        schema: The verdict on the line (its current price and rhythm).
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key, or None.
+
+    Returns:
+        ID of the new payment.
+    """
+    chain = await _chain_of(
+        db,
+        RecurringLineRef(key=schema.key, amount=schema.amount, period=schema.period),
+        user_id,
+        session_key,
+    )
+    payment_id = await create_payment(db, schema, user_id, session_key=session_key)
+    if chain is not None:
+        await _attach_chain(
+            db, payment_id, chain, user_id, session_key, include_latest=False
+        )
+    return payment_id
+
+
+async def _payment_for(
+    db: AsyncSession,
+    ref: RecurringLineRef,
+    user_id: int,
+    session_key: bytes | None,
+) -> int | None:
+    """Return the payment of a line, classifying it as a subscription if needed."""
+    if ref.payment_id is not None:
+        owned = await _owned(db, ref.payment_id, user_id)
+        return owned.id if owned is not None else None
+    if ref.key is None or ref.amount is None or ref.period is None:
+        return None
+    return await classify_line(
+        db,
+        RecurringPaymentCreate(
+            key=ref.key,
+            name=display_name(normalize_label(ref.key)),
+            amount=ref.amount,
+            period=ref.period,
+            kind=RecurringKind.SUBSCRIPTION,
+        ),
+        user_id,
+        session_key=session_key,
+    )
+
+
+async def link_lines(
+    db: AsyncSession,
+    link: RecurringLink,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> bool:
+    """Join two lines that are one service under two labels.
+
+    A classified line keeps its classification (name, kind, category,
+    cancellation): when only the earlier line is classified, the later
+    line's labels are merged into it.  Otherwise the later line absorbs the
+    earlier one, being classified as a subscription first when it was not.
+    A detected line brings every price it was billed at.
+
+    Args:
+        db: Async database session.
+        link: The two lines.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key, or None.
+
+    Returns:
+        False when a referenced payment is not the user's, a reference is
+        incomplete or matches no line, or both lines are the same payment.
+    """
+    earlier, later = link.earlier, link.later
+    if earlier.payment_id is not None and earlier.payment_id == later.payment_id:
+        return False
+
+    if earlier.payment_id is not None and later.payment_id is None:
+        if await _owned(db, earlier.payment_id, user_id) is None:
+            return False
+        later_chain = await _chain_of(db, later, user_id, session_key)
+        if later_chain is None:
+            return False
+        await _attach_chain(
+            db,
+            earlier.payment_id,
+            later_chain,
+            user_id,
+            session_key,
+            include_latest=True,
+        )
+        return True
+
+    earlier_chain: SeriesChain | None = None
+    if earlier.payment_id is not None:
+        if await _owned(db, earlier.payment_id, user_id) is None:
+            return False
+    else:
+        earlier_chain = await _chain_of(db, earlier, user_id, session_key)
+        if earlier_chain is None:
+            return False
+    target = await _payment_for(db, later, user_id, session_key)
+    if target is None:
+        return False
+    if earlier_chain is not None:
+        await _attach_chain(
+            db, target, earlier_chain, user_id, session_key, include_latest=True
+        )
+        return True
+    if earlier.payment_id is None:
+        return False
+    return await merge_payments(
+        db, target, earlier.payment_id, user_id, session_key=session_key
+    )
+
+
+async def reset_payments(db: AsyncSession, user_id: int) -> int:
+    """Forget every classification of the user; imported transactions stay.
+
+    Args:
+        db: Async database session.
+        user_id: Owner user ID.
+
+    Returns:
+        Number of classified payments removed (their merged labels go too).
+    """
+    result = await db.execute(
+        select(RecurringPayment).where(RecurringPayment.user_id == user_id)
+    )
+    payments = list(result.scalars().all())
+    for payment in payments:
+        await db.delete(payment)
+    await db.commit()
+    return len(payments)
