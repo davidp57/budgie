@@ -6,7 +6,11 @@ import datetime
 import os
 
 from budgie.models.account import Account
-from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
+from budgie.models.recurring_payment import (
+    RecurringLinkRefusal,
+    RecurringPayment,
+    RecurringPaymentAlias,
+)
 from budgie.models.transaction import Transaction
 from budgie.models.user import User
 from budgie.schemas.recurring import (
@@ -148,3 +152,29 @@ async def test_merged_labels_are_encrypted_at_rest(db_session: AsyncSession) -> 
     overview = await svc.get_overview(db_session, user_id, session_key=KEY)
     [payment] = overview.payments
     assert sorted(a.key for a in payment.aliases) == ["OLDSTREAM", "THIRDNAME"]
+
+
+async def test_refused_links_are_encrypted_at_rest(db_session: AsyncSession) -> None:
+    user_id = await _account_with_debits(db_session, KEY)
+    await svc.refuse_link(
+        db_session, "OLDSTREAM", "STREAMFLIX", user_id, session_key=KEY
+    )
+    db_session.expire_all()
+    stored = (await db_session.execute(select(RecurringLinkRefusal))).scalar_one()
+    assert "OLDSTREAM" not in stored.earlier_key
+    assert "STREAMFLIX" not in stored.later_key
+    refusals = await svc._refusals(db_session, user_id, KEY)
+    assert refusals == {("OLDSTREAM", "STREAMFLIX")}
+
+
+async def test_setting_up_encryption_encrypts_refused_links(
+    db_session: AsyncSession,
+) -> None:
+    user_id = await _account_with_debits(db_session, None)
+    await svc.refuse_link(
+        db_session, "OLDSTREAM", "STREAMFLIX", user_id, session_key=None
+    )
+    await encrypt_user_data(db_session, user_id, KEY)
+    db_session.expire_all()
+    stored = (await db_session.execute(select(RecurringLinkRefusal))).scalar_one()
+    assert "OLDSTREAM" not in stored.earlier_key

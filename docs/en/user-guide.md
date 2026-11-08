@@ -418,7 +418,7 @@ If you allow location access (requires HTTPS), Budgie queries nearby shops via O
 
 ## 13. Subscriptions
 
-Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost now, where they come from, and follow their cancellations.
+Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost, where they come from, and follow their cancellations.
 
 Open it from the **Abonnements** card of the home page (on a phone) or the **Abonnements** entry of the menu (on a computer).
 
@@ -430,45 +430,45 @@ Open it from the **Abonnements** card of the home page (on a phone) or the **Abo
 - Only imported transactions count: a manually entered expense is never proposed.
 - The situation is the one of the **last imported statement**: a payment "runs" when it was debited less than one and a half of its period before the most recent imported debit. The page shows that date when it is in the past.
 
-The page has two tabs: **Historique** (history), opened by default, and **En ce moment** (now). The total at the top applies to both, and every correction can be made from either.
+### The total
 
-### En ce moment (now)
+At the top of the page, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth).
+It counts the payments found automatically from the start, with nothing to classify; those not confirmed are marked **à confirmer** (to confirm) in the list.
+Transfers and payments of 100 €/month or more (taxes, savings, insurance…) are left out.
 
-The tab gives the answer, with nothing to classify first:
+### The list
 
-- at the top, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth), and how many were counted without confirmation;
-- **Abonnements en cours** (running subscriptions): every running service, sorted by cost; those found automatically are marked **à confirmer** (to confirm);
-- **Probablement pas des abonnements** (folded): transfers and payments of 100 €/month or more (taxes, savings, insurance…), left out of the total;
-- **Arrêtés** (folded): what is no longer debited;
-- **Ignorés** (folded): what you dismissed, with **Reproposer** (propose again).
+A two-year timeline: one line per service, from its first to its last debit, with its successive prices on the same line, sorted alphabetically (one service that moved to another label, like "Tesla Lu" and "Tesla Motors Lux", sits on the next line).
+A solid bar is a confirmed subscription, a light one a subscription found automatically, a grey one a stopped or cancelled payment.
 
-On each line, the corrections:
+Each line carries its status (subscription, to confirm, not a subscription, cancelled on…, ignored), its alerts, and its corrections:
 
 | Button | Effect |
 |---|---|
-| **✓ Confirmer** | It is a subscription: it stays in the total, even if it someday goes over 100 €/month |
-| **Pas un abonnement** | Moves to "probably not subscriptions", out of the total |
-| **Résilié…** | Records the cancellation date: the subscription leaves the total |
-| Click on the name | Renames |
-| **Plus…** | Category, linked labels (**✕** detaches one), **Retirer le classement** (remove the classification) |
+| **✓ Abonnement** | It is a subscription: it counts in the total |
+| **Pas un abonnement** (not a subscription) | The line moves to the **Pas des abonnements** section, out of the total |
+| **Résilié…** / **Annuler la résiliation** | Records or removes the cancellation date; a cancelled subscription leaves the total |
+| **Renommer…** | Names the line |
+| **Accepter le nouveau prix** | After a price increase, takes the new amount as the reference |
+| **⋯** | Category, linked labels (**✕** detaches one), **Ignorer** (ignore), **Retirer le classement** (remove the classification) |
 
-**À vérifier** (to check) reports a subscription still debited after its cancellation, a subscription no longer debited (**terminé ?**), or a new price (**Accepter le nouveau prix** confirms it).
+Alerts report a subscription still debited after its cancellation, a subscription no longer debited (**terminé ?**, ended?), or a new price.
 A price increase is reported from its second debit at the new amount: a one-off purchase at the same merchant is not taken for one.
 
-### Historique (history)
+Below the list, two folded sections, opened with a click:
 
-A two-year timeline: one line per service, from its first to its last debit, with its successive prices on the same line.
-Lines are sorted alphabetically: one service that moved to another label ("Tesla Lu" and "Tesla Motors Lux") shows up on two neighbouring lines.
-It shows what stopped, when, and what took over.
+- **Pas des abonnements** (not subscriptions): what you marked so, and what Budgie deems probably not subscriptions (transfers, 100 €/month or more); **✓ Abonnement** brings a line back up;
+- **Ignorées** (ignored): what you dismissed, with **Reproposer** (propose again).
+
+### Labels that change
 
 - When the bank or the merchant renamed a debit, **relier à…** (link to…) joins the two lines: the more recent one absorbs the other, whose debits then count for it.
-- Budgie itself suggests the lines that follow each other at the **exact same amount** ("Probablement la suite de…", **Relier** button); it never suggests two different amounts, which are nearly always a coincidence.
-- Each line carries its status (subscription, to confirm, not a subscription, cancelled on…, ignored), its alerts, and a **⋯** menu with every correction of "En ce moment": **✓ Abonnement**, **Pas un abonnement**, **Résilié…** or **Annuler la résiliation**, **Renommer…**, **Catégorie…**, **Accepter le nouveau prix**, **Libellés reliés…**, **Ignorer**, **Retirer le classement**.
-- A solid bar is a confirmed subscription, a light one a subscription found automatically, a grey one a stopped or cancelled payment; ignored lines stay, faded, with **Reproposer** in their menu.
+- Budgie itself suggests the lines that follow each other at the **exact same amount** ("Probablement la suite de…"); it never suggests two different amounts, which are nearly always a coincidence.
+- **Relier** accepts the suggestion; **Non** refuses it, and it does not come back.
 
 ### Starting over
 
-**Réinitialiser les classements…** at the bottom of the page erases, after confirmation, everything you classified (confirmed subscriptions, "not a subscription", ignored, linked labels, cancellations).
+**Réinitialiser les classements…** at the bottom of the page erases, after confirmation, everything you classified (confirmed subscriptions, "not a subscription", ignored, linked labels, cancellations, refused suggestions).
 Imported transactions are not touched: the page starts again from the detection alone.
 
 ---

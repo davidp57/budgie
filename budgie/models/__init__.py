@@ -10,7 +10,11 @@ from budgie.models.category import Category, CategoryGroup
 from budgie.models.category_rule import CategoryRule
 from budgie.models.envelope import Envelope, envelope_categories
 from budgie.models.payee import Payee
-from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
+from budgie.models.recurring_payment import (
+    RecurringLinkRefusal,
+    RecurringPayment,
+    RecurringPaymentAlias,
+)
 from budgie.models.transaction import SplitTransaction, Transaction
 from budgie.models.user import User
 from budgie.models.webauthn import WebAuthnCredential
@@ -23,6 +27,7 @@ __all__ = [
     "CategoryRule",
     "Envelope",
     "Payee",
+    "RecurringLinkRefusal",
     "RecurringPayment",
     "RecurringPaymentAlias",
     "SplitTransaction",

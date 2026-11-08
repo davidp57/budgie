@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.models.account import Account
 from budgie.models.payee import Payee
-from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
+from budgie.models.recurring_payment import (
+    RecurringLinkRefusal,
+    RecurringPayment,
+    RecurringPaymentAlias,
+)
 from budgie.models.transaction import Transaction
 from budgie.models.user import User
 from budgie.services.crypto import InvalidKeyError, decrypt_field, encrypt_field
@@ -38,6 +42,7 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
     - ``Payee.name`` (all payees belonging to the user)
     - ``RecurringPayment.name`` and ``RecurringPayment.match_key``
     - ``RecurringPaymentAlias.match_key``
+    - ``RecurringLinkRefusal.earlier_key`` and ``RecurringLinkRefusal.later_key``
 
     Args:
         db: Async database session (must be open and active).
@@ -90,6 +95,18 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
             # Already encrypted — skip.
         except InvalidKeyError:
             alias.match_key = encrypt_field(alias.match_key, key)
+
+    refusal_result = await db.execute(
+        select(RecurringLinkRefusal).where(RecurringLinkRefusal.user_id == user_id)
+    )
+    for refusal in refusal_result.scalars().all():
+        for field in ("earlier_key", "later_key"):
+            value = getattr(refusal, field)
+            try:
+                decrypt_field(value, key)
+                # Already encrypted — skip.
+            except InvalidKeyError:
+                setattr(refusal, field, encrypt_field(value, key))
 
     # ── Mark migration as done ────────────────────────────────────────────────
     user_result = await db.execute(select(User).where(User.id == user_id))

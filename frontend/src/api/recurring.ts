@@ -68,6 +68,15 @@ export async function linkLines(
   return data
 }
 
+/** Say no to a link suggestion between two lines; it is not made again. */
+export async function refuseLink(earlierKey: string, laterKey: string): Promise<RecurringBoard> {
+  const { data } = await client.post<RecurringBoard>('/api/recurring/link/refuse', {
+    earlier_key: earlierKey,
+    later_key: laterKey,
+  })
+  return data
+}
+
 /** Forget every classification; imported transactions stay. */
 export async function resetRecurring(): Promise<RecurringBoard> {
   const { data } = await client.delete<RecurringBoard>('/api/recurring')
@@ -140,17 +149,31 @@ export function attentionLines(payment: RecurringPayment): string[] {
   return result
 }
 
-/** Where a line goes on the "now" view. */
-export type LineGroup = 'check' | 'subscription' | 'other' | 'stopped' | 'ignored'
+/** Where a line goes on the timeline: the main list, or a folded section below. */
+export type TimelineSection = 'main' | 'other' | 'ignored'
 
-/** Sort a line into a group of the "now" view. */
-export function lineGroup(line: RecurringLine): LineGroup {
+/**
+ * Sort a line into a section of the timeline: what is not a subscription
+ * (classified so, or probably so and not confirmed) and what was ignored go
+ * to folded sections below the main list.
+ */
+export function timelineSection(line: RecurringLine): TimelineSection {
   const p = line.payment
   if (p?.kind === 'dismissed') return 'ignored'
-  if (p && needsAttention(p)) return 'check'
-  if (!line.running) return 'stopped'
   if (p?.kind === 'other' || (!p && line.likely_other)) return 'other'
-  return 'subscription'
+  return 'main'
+}
+
+/**
+ * True when a line counts in the subscriptions total, as the server counts it:
+ * a running line that is a confirmed subscription (not cancelled, not
+ * stopped), or detected and not probably something else.
+ */
+export function countsInTotal(line: RecurringLine): boolean {
+  if (!line.running) return false
+  const p = line.payment
+  if (!p) return !line.likely_other
+  return p.kind === 'subscription' && p.status === 'active'
 }
 
 /**

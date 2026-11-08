@@ -170,3 +170,23 @@ def test_too_long_a_gap_is_not_suggested() -> None:
         _span("b", "NEW", _d(2024, 12, 5), _d(2025, 6, 5), 999, 999),
     ]
     assert suggest_links(spans) == []
+
+
+def test_a_refused_pair_lets_the_right_successor_through() -> None:
+    spans = [
+        _span("a", "FIRST", _d(2025, 1, 5), _d(2025, 6, 5), 999, 999),
+        _span("b", "SECOND", _d(2025, 2, 5), _d(2025, 7, 5), 999, 999),
+        _span("c", "THIRD", _d(2025, 7, 20), _d(2026, 1, 5), 999, 999),
+    ]
+    assert suggest_links(spans) == [("a", "c")]
+    assert suggest_links(spans, refused={("FIRST", "THIRD")}) == [("b", "c")]
+
+
+def test_a_refused_pair_lets_the_next_successor_through() -> None:
+    spans = [
+        _span("a", "FIRST", _d(2025, 1, 5), _d(2025, 6, 5), 999, 999),
+        _span("c", "THIRD", _d(2025, 7, 5), _d(2026, 1, 5), 999, 999),
+        _span("d", "FOURTH", _d(2025, 7, 25), _d(2026, 1, 5), 999, 999),
+    ]
+    assert suggest_links(spans) == [("a", "c")]
+    assert suggest_links(spans, refused={("FIRST", "THIRD")}) == [("a", "d")]

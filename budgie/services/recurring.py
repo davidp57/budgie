@@ -14,7 +14,11 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from budgie.models.account import Account
-from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
+from budgie.models.recurring_payment import (
+    RecurringLinkRefusal,
+    RecurringPayment,
+    RecurringPaymentAlias,
+)
 from budgie.models.transaction import Transaction
 from budgie.schemas.recurring import (
     PriceSegmentRead,
@@ -689,19 +693,21 @@ async def get_board(
         )
         for line in visible
     ]
+    refused = await _refusals(db, user_id, session_key)
+    suggestions = suggest_links(spans, refused)
     return RecurringBoard(
         as_of=as_of,
         lines=lines,
         monthly_total=monthly_total,
         yearly_total=monthly_total * MONTHS_PER_YEAR,
+        refused_count=len(refused),
         estimated_count=sum(line.payment is None for line in in_total),
         attention_count=sum(
             line.payment is not None and _needs_attention(line.payment)
             for line in lines
         ),
         suggestions=[
-            RecurringLinkSuggestion(earlier_id=a, later_id=b)
-            for a, b in suggest_links(spans)
+            RecurringLinkSuggestion(earlier_id=a, later_id=b) for a, b in suggestions
         ],
     )
 
@@ -884,6 +890,8 @@ async def link_lines(
 async def reset_payments(db: AsyncSession, user_id: int) -> int:
     """Forget every classification of the user; imported transactions stay.
 
+    Refused link suggestions are classifications too: they are forgotten.
+
     Args:
         db: Async database session.
         user_id: Owner user ID.
@@ -897,5 +905,58 @@ async def reset_payments(db: AsyncSession, user_id: int) -> int:
     payments = list(result.scalars().all())
     for payment in payments:
         await db.delete(payment)
+    refusals = await db.execute(
+        select(RecurringLinkRefusal).where(RecurringLinkRefusal.user_id == user_id)
+    )
+    for refusal in refusals.scalars().all():
+        await db.delete(refusal)
     await db.commit()
     return len(payments)
+
+
+async def _refusals(
+    db: AsyncSession, user_id: int, session_key: bytes | None
+) -> set[tuple[str, str]]:
+    """The link suggestions the user said no to, as (earlier key, later key)."""
+    result = await db.execute(
+        select(RecurringLinkRefusal.earlier_key, RecurringLinkRefusal.later_key).where(
+            RecurringLinkRefusal.user_id == user_id
+        )
+    )
+    return {
+        (
+            decrypt_str(earlier, session_key) or earlier,
+            decrypt_str(later, session_key) or later,
+        )
+        for earlier, later in result.all()
+    }
+
+
+async def refuse_link(
+    db: AsyncSession,
+    earlier_key: str,
+    later_key: str,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> None:
+    """Say no to a link suggestion, so that it is not made again.
+
+    Args:
+        db: Async database session.
+        earlier_key: Label of the line that stopped.
+        later_key: Label of the line that followed.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for encryption, or None.
+    """
+    earlier = normalize_label(earlier_key)
+    later = normalize_label(later_key)
+    if (earlier, later) in await _refusals(db, user_id, session_key):
+        return
+    db.add(
+        RecurringLinkRefusal(
+            user_id=user_id,
+            earlier_key=encrypt_str(earlier, session_key) or earlier,
+            later_key=encrypt_str(later, session_key) or later,
+        )
+    )
+    await db.commit()

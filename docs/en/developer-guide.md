@@ -482,8 +482,9 @@ Interactive documentation available at `http://localhost:8000/docs` (Swagger UI)
 | `POST` | `/api/recurring/{id}/merge` | `{other_id}` — the payment absorbs the labels of another one, which is deleted |
 | `DELETE` | `/api/recurring/{id}/aliases/{alias_id}` | Detach a merged label: its debits become a candidate again |
 | `POST` | `/api/recurring/{id}/accept-price` | Take the latest debited amount as the new reference of the label (main or merged) that billed it |
-| `GET` | `/api/recurring/board` | Every service line (classified or not) with its price segments, `running`, `likely_other`, the totals, `as_of` (date of the most recent imported debit) and link suggestions |
+| `GET` | `/api/recurring/board` | Every service line (classified or not) with its price segments, `running`, `likely_other`, the totals, `as_of` (date of the most recent imported debit), link suggestions (refused ones left out before pairing) and `refused_count` |
 | `POST` | `/api/recurring/link` | `{earlier, later}` line refs — the later line absorbs the earlier one (classified as a subscription if needed) |
+| `POST` | `/api/recurring/link/refuse` | `{earlier_key, later_key}` — refuse a link suggestion; it is not made again (stored in `recurring_link_refusals`) |
 | `DELETE` | `/api/recurring` | Forget every classification of the user; imported transactions stay |
 
 Debits are not linked to a payment: they are matched at each read by normalized bank label (`match_key`, plus the labels merged into the payment in `recurring_payment_aliases`) and amount, after decryption (`services/recurring_detection.py` holds the thresholds as named constants).

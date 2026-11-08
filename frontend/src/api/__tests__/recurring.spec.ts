@@ -3,13 +3,14 @@ import {
   defaultName,
   formatDay,
   formatMonth,
-  lineGroup,
+  countsInTotal,
   localToday,
   monthsBefore,
   needsAttention,
   periodLabel,
   renameKind,
   timelinePercent,
+  timelineSection,
 } from '../recurring'
 import type { RecurringLine, RecurringPayment } from '../types'
 
@@ -90,15 +91,14 @@ describe('recurring helpers', () => {
     expect(localToday(new Date(2026, 0, 1, 0, 30))).toBe('2026-01-01')
   })
 
-  it('sorts lines into the groups of the "now" view', () => {
-    expect(lineGroup(line())).toBe('subscription')
-    expect(lineGroup(line({ likely_other: true }))).toBe('other')
-    expect(lineGroup(line({ running: false }))).toBe('stopped')
-    expect(lineGroup(line({ payment: payment({ kind: 'other' }) }))).toBe('other')
-    expect(lineGroup(line({ payment: payment({ kind: 'dismissed' }) }))).toBe('ignored')
-    expect(lineGroup(line({ payment: payment({ price_changed: true }) }))).toBe('check')
-    // A classified subscription is never moved to "other" by the heuristic
-    expect(lineGroup(line({ likely_other: true, payment: payment() }))).toBe('subscription')
+  it('counts a line in the total the way the server does', () => {
+    expect(countsInTotal(line())).toBe(true)
+    expect(countsInTotal(line({ likely_other: true }))).toBe(false)
+    expect(countsInTotal(line({ running: false }))).toBe(false)
+    expect(countsInTotal(line({ payment: payment() }))).toBe(true)
+    expect(countsInTotal(line({ payment: payment({ kind: 'other' }) }))).toBe(false)
+    expect(countsInTotal(line({ payment: payment({ status: 'cancelled' }) }))).toBe(false)
+    expect(countsInTotal(line({ likely_other: true, payment: payment() }))).toBe(true)
   })
 
   it('places dates on a timeline, clamped to the window', () => {
@@ -116,5 +116,16 @@ describe('recurring helpers', () => {
   it('renames a detected line without turning "probably not" into a subscription', () => {
     expect(renameKind(line())).toBe('subscription')
     expect(renameKind(line({ likely_other: true }))).toBe('other')
+  })
+
+  it('puts each line in a section of the timeline', () => {
+    expect(timelineSection(line())).toBe('main')
+    expect(timelineSection(line({ running: false }))).toBe('main')
+    expect(timelineSection(line({ payment: payment() }))).toBe('main')
+    expect(timelineSection(line({ payment: payment({ kind: 'other' }) }))).toBe('other')
+    expect(timelineSection(line({ likely_other: true }))).toBe('other')
+    // A confirmed subscription stays up, whatever the heuristic says
+    expect(timelineSection(line({ likely_other: true, payment: payment() }))).toBe('main')
+    expect(timelineSection(line({ payment: payment({ kind: 'dismissed' }) }))).toBe('ignored')
   })
 })

@@ -271,6 +271,8 @@ class RecurringBoard(BaseModel):
         estimated_count: Running lines counted in the total without having
             been confirmed as subscriptions.
         attention_count: Classified subscriptions that need a look.
+        refused_count: Link suggestions the user said no to (a reset forgets
+            them).
         suggestions: Probable renames, at the exact same amount.
     """
 
@@ -280,6 +282,7 @@ class RecurringBoard(BaseModel):
     yearly_total: int
     estimated_count: int
     attention_count: int
+    refused_count: int
     suggestions: list[RecurringLinkSuggestion]
 
 
@@ -293,3 +296,15 @@ class RecurringLink(BaseModel):
 
     earlier: RecurringLineRef
     later: RecurringLineRef
+
+
+class RecurringLinkRefuse(BaseModel):
+    """Say no to a link suggestion between two lines.
+
+    Attributes:
+        earlier_key: Normalized label of the line that stopped.
+        later_key: Normalized label of the line that followed.
+    """
+
+    earlier_key: str = Field(..., min_length=1, max_length=200)
+    later_key: str = Field(..., min_length=1, max_length=200)

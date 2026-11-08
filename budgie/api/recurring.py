@@ -8,6 +8,7 @@ from budgie.schemas.recurring import (
     RecurringBoard,
     RecurringCandidateRead,
     RecurringLink,
+    RecurringLinkRefuse,
     RecurringMerge,
     RecurringOverview,
     RecurringPaymentCreate,
@@ -24,6 +25,7 @@ from budgie.services.recurring import (
     get_overview,
     link_lines,
     merge_payments,
+    refuse_link,
     remove_alias,
     reset_payments,
     update_payment,
@@ -331,4 +333,32 @@ async def reset(
         The board, as detected from the transactions alone.
     """
     await reset_payments(db, current_user.id)
+    return await get_board(db, current_user.id, session_key=session_key)
+
+
+@router.post("/link/refuse", response_model=RecurringBoard)
+async def refuse(
+    schema: RecurringLinkRefuse,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringBoard:
+    """Say no to a link suggestion, so that it is not made again.
+
+    Args:
+        schema: The labels of the two lines.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key.
+
+    Returns:
+        The updated board.
+    """
+    await refuse_link(
+        db,
+        schema.earlier_key,
+        schema.later_key,
+        current_user.id,
+        session_key=session_key,
+    )
     return await get_board(db, current_user.id, session_key=session_key)

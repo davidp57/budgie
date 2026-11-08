@@ -456,6 +456,8 @@ export interface RecurringBoard {
   yearly_total: number
   estimated_count: number
   attention_count: number
+  /** Link suggestions refused; a reset forgets them. */
+  refused_count: number
   suggestions: RecurringLinkSuggestion[]
 }
 
