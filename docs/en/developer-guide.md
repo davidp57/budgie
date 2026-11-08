@@ -30,10 +30,14 @@
 ```
 budgie/
 ├── .github/
-│   ├── copilot-instructions.md    # Copilot instructions
+│   ├── copilot-instructions.md    # Points Copilot to AGENTS.md
 │   └── workflows/
 │       ├── ci.yml                 # CI — lint, type check, tests
-│       └── docker.yml             # CI/CD — Docker image build on GHCR
+│       └── docker.yml             # Release — Docker image on GHCR, tag, GitHub release
+├── .claude/skills/release/        # The /release skill (release procedure)
+├── AGENTS.md                      # Instructions for coding agents (CLAUDE.md imports it)
+├── RELEASE_NOTES.md               # Notes of the current version, published with the release
+├── docs/agents/                   # Issue tracker conventions (lots, tickets, status labels)
 ├── alembic/                       # Database migrations
 │   └── versions/
 ├── budgie/                        # Backend Python package
@@ -770,25 +774,28 @@ Located in `.github/workflows/docker.yml`.
 
 | Property | Value |
 |---|---|
-| Trigger | Push to `main` / `develop` + workflow_dispatch (manual) |
+| Trigger | Push to `main` (a release merge) + workflow_dispatch (manual) |
 | Registry | GitHub Container Registry (GHCR) |
 | Image | `ghcr.io/davidp57/budgie` |
 
-**Steps:**
+**On a push to `main`:**
 
-1. Code checkout
-2. GHCR login via `docker/login-action@v3`
-3. Metadata extraction (tags: branch, semver, `latest`) via `docker/metadata-action@v5`
-4. Build & push via `docker/build-push-action@v6`
-5. Smoke test: starts the container and verifies `curl /api/health`
+1. Reads the version from `pyproject.toml`; if the tag `vX.Y.Z` already exists, stops: nothing to publish
+2. Checks that the first line of `RELEASE_NOTES.md` is `# Budgie — X.Y.Z`
+3. Builds and pushes the image tagged `latest` and `X.Y.Z`
+4. Smoke test: starts the container and verifies `curl /api/health`
+5. Creates the tag `vX.Y.Z` and the GitHub release with `RELEASE_NOTES.md` (a pre-release while the version is `0.x`)
 
-### Triggering a Build
+**Run by hand** on a branch, it only builds and pushes `<branch>-latest` (`latest` for `main`), without tag nor release.
+
+### Releasing
+
+Releases follow the `/release` skill (`.claude/skills/release/SKILL.md`): version in `pyproject.toml`, `CHANGELOG.md` and `RELEASE_NOTES.md` on a `chore/RELEASE-X.Y.Z` branch merged into `develop`, then a `develop` → `main` pull request merged with a merge commit, which publishes.
+`tests/test_changelog.py` checks that `[Unreleased]` is open, that the version has its changelog entry and that the release notes are about it.
 
 ```bash
-# Push to main or develop → automatic build
-git push origin main
-
-# Or manually: Actions → docker → Run workflow
+# A develop image, by hand (Actions → CI-Docker → Run workflow → branch develop)
+gh workflow run docker.yml --ref develop
 ```
 
 ---

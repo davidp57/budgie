@@ -1,8 +1,14 @@
 name: CI-Docker
 
+# A merge into main publishes a release when the version of pyproject.toml has
+# no tag yet: image `latest` + `X.Y.Z`, tag `vX.Y.Z`, GitHub release with
+# RELEASE_NOTES.md. A merge without a version change publishes nothing.
+# Run by hand (workflow_dispatch) on a branch, it only builds and pushes
+# `<branch>-latest` (`latest` for main), without tag nor release.
+
 "on":
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -13,7 +19,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -22,22 +28,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve branch context
+      - name: Resolve what to publish
         id: context
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            BRANCH=$(git branch -r --contains "$GITHUB_SHA" \
-              | grep -E 'origin/(main|develop)' \
-              | head -1 \
-              | sed 's|[[:space:]]*origin/||')
-            echo "is_tag=true" >> "$GITHUB_OUTPUT"
-            echo "branch=${BRANCH:-main}" >> "$GITHUB_OUTPUT"
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+              echo "Tag v$VERSION already exists: nothing to publish."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            TITLE=$(head -1 RELEASE_NOTES.md | tr -d '\r')
+            if [[ "$TITLE" != "# Budgie — $VERSION" ]]; then
+              echo "::error::RELEASE_NOTES.md title is '$TITLE', expected '# Budgie — $VERSION'"
+              exit 1
+            fi
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
           else
-            echo "is_tag=false" >> "$GITHUB_OUTPUT"
-            echo "branch=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Log in to GHCR
+        if: steps.context.outputs.build == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -45,17 +63,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker metadata
+        if: steps.context.outputs.build == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=develop-latest,enable=${{ steps.context.outputs.branch == 'develop' }}
             type=raw,value=latest,enable=${{ steps.context.outputs.branch == 'main' }}
-            type=semver,pattern=develop-{{version}},enable=${{ steps.context.outputs.branch == 'develop' }}
-            type=semver,pattern={{version}},enable=${{ steps.context.outputs.branch == 'main' }}
+            type=raw,value=${{ steps.context.outputs.version }},enable=${{ steps.context.outputs.release == 'true' }}
+            type=ref,event=branch,suffix=-latest,enable=${{ steps.context.outputs.branch != 'main' }}
 
       - name: Build and push
+        if: steps.context.outputs.build == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -64,6 +83,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Smoke test
+        if: steps.context.outputs.build == 'true'
         run: |
           IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
           docker pull "$IMAGE"
@@ -87,3 +107,15 @@ jobs:
             sleep 1
           done
           docker stop budgie-test
+
+      - name: Tag and GitHub release
+        if: steps.context.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.context.outputs.version }}
+        run: |
+          # 0.x versions stay pre-releases, as they always have been.
+          PRERELEASE=""
+          if [[ "$VERSION" == 0.* ]]; then PRERELEASE="--prerelease"; fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" \
+            --title "$VERSION" --notes-file RELEASE_NOTES.md $PRERELEASE

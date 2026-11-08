@@ -56,7 +56,7 @@ npm run dev                                    # http://localhost:5173
 ## Workflow
 
 1. **Fork** the repository and clone your fork.
-2. **Branch** from `develop` (not `main`): `git checkout -b feat/my-feature develop`
+2. **Branch** from `develop` (not `main`): `git checkout -b feature/my-feature develop`
 3. **Write tests first** — Budgie follows TDD. See [developer guide](docs/en/developer-guide.md).
 4. **Implement** the minimum code to make the tests pass.
 5. **Quality checks** — all checks must pass before opening a PR:
@@ -103,11 +103,15 @@ Full details in the [developer guide](docs/en/developer-guide.md).
 
 | Branch | Purpose |
 |---|---|
-| `main` | Stable releases only |
-| `develop` | Integration branch — base all PRs here |
-| `feat/*` | New features |
+| `develop` | Default and integration branch — base all PRs here |
+| `main` | Releases only: a merge with a new version publishes the Docker image and the GitHub release |
+| `feature/*` | New features |
 | `fix/*` | Bug fixes |
+| `chore/*` | Tooling, CI, releases (`chore/RELEASE-X.Y.Z`) |
 | `docs/*` | Documentation-only changes |
+
+Planned work is tracked as GitHub issues: a **lot** (label `lot`) holds the specification of one piece of work, and its **tickets** (label `ticket`) are its sub-issues; the project overview is issue [#43](https://github.com/davidp57/budgie/issues/43).
+Coding agents follow [`AGENTS.md`](AGENTS.md).
 
 ---
 
