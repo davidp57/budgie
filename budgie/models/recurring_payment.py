@@ -102,3 +102,33 @@ class RecurringPaymentAlias(Base):
     )
 
     payment: Mapped[RecurringPayment] = relationship(back_populates="aliases")
+
+
+class RecurringLinkRefusal(Base):
+    """A link suggestion the user said no to, so that it is not made again.
+
+    Stored by the normalized labels of the two lines, which stay the same when
+    a line gets classified (its identifier in the board does not).
+
+    Attributes:
+        id: Primary key.
+        user_id: Owner of the refusal.
+        earlier_key: Normalized label of the line that stopped (encrypted).
+        later_key: Normalized label of the line that followed (encrypted).
+        created_at: Timestamp of record creation.
+    """
+
+    __tablename__ = "recurring_link_refusals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    earlier_key: Mapped[str] = mapped_column(Text, nullable=False)
+    later_key: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="recurring_link_refusals")

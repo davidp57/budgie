@@ -352,3 +352,68 @@ async def test_linking_a_classified_line_to_its_new_label_keeps_its_settings(
     assert payment["kind"] == "other"
     assert payment["occurrences"] == 10
     assert len(resp.json()["lines"]) == 1
+
+
+async def test_a_refused_suggestion_does_not_come_back_until_reset(
+    auth_client: AsyncClient,
+) -> None:
+    acc = await _account(auth_client)
+    await _monthly(auth_client, acc, "PRLV SEPA OLDNAME", 1918, 5, end_days_ago=150)
+    await _monthly(auth_client, acc, "PRLV SEPA NEWNAME", 1918, 5)
+    board = (await auth_client.get("/api/recurring/board")).json()
+    assert len(board["suggestions"]) == 1
+
+    resp = await auth_client.post(
+        "/api/recurring/link/refuse",
+        json={"earlier_key": "OLDNAME", "later_key": "NEWNAME"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["suggestions"] == []
+    assert (await auth_client.get("/api/recurring/board")).json()["suggestions"] == []
+
+    # Classifying one of the lines does not bring the refused suggestion back
+    new_ref = _line(board, "NEWNAME")["ref"]
+    await auth_client.post(
+        "/api/recurring", json={**new_ref, "name": "New", "kind": "subscription"}
+    )
+    assert (await auth_client.get("/api/recurring/board")).json()["suggestions"] == []
+
+    reset = await auth_client.delete("/api/recurring")
+    assert len(reset.json()["suggestions"]) == 1
+
+
+async def test_another_users_refusal_does_not_hide_my_suggestion(
+    auth_client: AsyncClient, client: AsyncClient
+) -> None:
+    acc = await _account(auth_client)
+    await _monthly(auth_client, acc, "PRLV SEPA OLDNAME", 1918, 5, end_days_ago=150)
+    await _monthly(auth_client, acc, "PRLV SEPA NEWNAME", 1918, 5)
+    alice_header = auth_client.headers["Authorization"]
+    client.headers["Authorization"] = await _login_bob(client)
+    try:
+        resp = await client.post(
+            "/api/recurring/link/refuse",
+            json={"earlier_key": "OLDNAME", "later_key": "NEWNAME"},
+        )
+        assert resp.status_code == 200
+    finally:
+        client.headers["Authorization"] = alice_header
+    board = (await auth_client.get("/api/recurring/board")).json()
+    assert len(board["suggestions"]) == 1
+
+
+async def test_the_board_counts_refusals_so_that_they_can_be_reset(
+    auth_client: AsyncClient,
+) -> None:
+    acc = await _account(auth_client)
+    await _monthly(auth_client, acc, "PRLV SEPA OLDNAME", 1918, 5, end_days_ago=150)
+    await _monthly(auth_client, acc, "PRLV SEPA NEWNAME", 1918, 5)
+    board = (await auth_client.get("/api/recurring/board")).json()
+    assert board["refused_count"] == 0
+    resp = await auth_client.post(
+        "/api/recurring/link/refuse",
+        json={"earlier_key": "OLDNAME", "later_key": "NEWNAME"},
+    )
+    assert resp.json()["refused_count"] == 1
+    reset = await auth_client.delete("/api/recurring")
+    assert reset.json()["refused_count"] == 0

@@ -15,7 +15,7 @@ import re
 import statistics
 import unicodedata
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Sequence, Set
 from dataclasses import dataclass, field
 
 
@@ -751,7 +751,10 @@ class LineSpan:
     period: Period
 
 
-def suggest_links(spans: Iterable[LineSpan]) -> list[tuple[str, str]]:
+def suggest_links(
+    spans: Iterable[LineSpan],
+    refused: Set[tuple[str, str]] = frozenset(),
+) -> list[tuple[str, str]]:
     """Suggest the lines that are probably one service under a new label.
 
     A line that stops, then another of a different label that starts within
@@ -759,8 +762,13 @@ def suggest_links(spans: Iterable[LineSpan]) -> list[tuple[str, str]]:
     on a real export: with a tolerance on the amount, 12 suggestions out of 13
     were coincidences; the exact amount kept only the genuine renames.
 
+    A refused pair is left out before lines are paired, so that it does not
+    take the place of another possible pair (the right successor of another
+    line, or the next successor of the same one).
+
     Args:
         spans: The service lines.
+        refused: ``(earlier key, later key)`` pairs the user said no to.
 
     Returns:
         ``(earlier line id, later line id)`` pairs, oldest first; each line is
@@ -780,6 +788,7 @@ def suggest_links(spans: Iterable[LineSpan]) -> list[tuple[str, str]]:
             and (later.first_date - earlier.last_date).days
             <= CHAIN_GAP_PERIODS * PERIOD_DAYS[earlier.period]
             and later.first_amount == earlier.last_amount
+            and (earlier.key, later.key) not in refused
         ]
         if successors:
             later = min(successors, key=lambda s: s.first_date)
