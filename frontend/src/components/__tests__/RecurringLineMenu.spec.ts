@@ -154,9 +154,20 @@ describe('RecurringLineMenu', () => {
     expect(wrapper.text()).toContain('Encore prélevé après la résiliation : 05/10/2026')
   })
 
-  it('does not offer renaming a detected line that stopped', () => {
-    expect(items(mountMenu(line({ running: false })))).not.toContain('Renommer…')
+  it('offers renaming on every line, stopped ones included', () => {
+    expect(items(mountMenu(line({ running: false })))).toContain('Renommer…')
     expect(items(mountMenu(line({ running: false, payment: payment() })))).toContain('Renommer…')
+  })
+
+  it('shows the usual corrections as buttons and keeps the rest in the menu', () => {
+    const wrapper = mountMenu(line({ payment: payment() }))
+    const visible = wrapper
+      .findAll('[data-test=menu-item]')
+      .filter((b) => !b.element.closest('details'))
+      .map((b) => b.text())
+    expect(visible).toEqual(['Pas un abonnement', 'Résilié…', 'Renommer…'])
+    const inMenu = wrapper.findAll('details [data-test=menu-item]').map((b) => b.text())
+    expect(inMenu).toEqual(['Catégorie…', 'Retirer le classement'])
   })
 
   it('closes the menu on a click elsewhere and on Escape', async () => {

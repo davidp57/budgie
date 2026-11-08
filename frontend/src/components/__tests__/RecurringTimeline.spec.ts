@@ -109,4 +109,70 @@ describe('RecurringTimeline', () => {
     await row.findAll('[data-test=menu-item]').find((b) => b.text() === '✓ Abonnement')!.trigger('click')
     expect(wrapper.emitted('action')![0]).toEqual(['b', { type: 'kind', kind: 'subscription' }])
   })
+
+  it('folds the lines that are not subscriptions into a section below', async () => {
+    const other: RecurringLine = {
+      ...line('o', 'Impots', '2025-01-10', '2026-11-01', 25000),
+      likely_other: true,
+    }
+    const ignored: RecurringLine = {
+      ...line('i', 'Vieux', '2024-01-10', '2024-06-10'),
+      payment: {
+        id: 9,
+        key: 'VIEUX',
+        name: 'Vieux',
+        kind: 'dismissed',
+        period: 'monthly',
+        amount: 1918,
+        current_amount: 1918,
+        monthly_cost: 1918,
+        category_id: null,
+        cancelled_at: null,
+        last_date: '2024-06-10',
+        occurrences: 4,
+        status: 'probably_ended',
+        price_changed: false,
+        debits_after_cancellation: [],
+        aliases: [],
+      },
+    }
+    const wrapper = mount(RecurringTimeline, {
+      props: {
+        lines: [other, recent, ignored, old],
+        suggestions: [],
+        today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [],
+        busy: false,
+      },
+    })
+    const names = () =>
+      wrapper.findAll('[data-test=timeline-row]').map((r) => r.find('p').text())
+    // Folded by default: only the main section shows its rows
+    expect(names()).toEqual(['Newname', 'Oldname'])
+    const headers = wrapper.findAll('[data-test=timeline-section]')
+    expect(headers.map((h) => h.text().replace(/^[▸▾]/, ''))).toEqual([
+      'Pas des abonnements (1)',
+      'Ignorées (1)',
+    ])
+    await headers[0]!.trigger('click')
+    expect(names()).toEqual(['Newname', 'Oldname', 'Impots'])
+    await headers[1]!.trigger('click')
+    expect(names()).toEqual(['Newname', 'Oldname', 'Impots', 'Vieux'])
+  })
+
+  it('refuses a suggestion', async () => {
+    const wrapper = mount(RecurringTimeline, {
+      props: {
+        lines: [old, recent],
+        suggestions: [{ earlier_id: 'a', later_id: 'b' }],
+        today: '2026-11-08',
+        cancelDefault: '2026-11-08',
+        groups: [],
+        busy: false,
+      },
+    })
+    await wrapper.find('[data-test=suggestion-refuse]').trigger('click')
+    expect(wrapper.emitted('refuse')![0]).toEqual(['a', 'b'])
+  })
 })

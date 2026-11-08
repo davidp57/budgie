@@ -2,12 +2,11 @@
 /**
  * RecurringLineMenu — status and every correction of one service line.
  *
- * One component for every place a line is shown, so that whatever can be
- * done on a line in one tab can be done in the other: a status badge, the
- * line's alerts, and a "⋯" menu (confirm, not a subscription, cancel or undo
- * the cancellation, rename, category, accept a new price, linked labels,
- * ignore, propose again, remove the classification). The editors that need
- * a value (name, date, category) open under the line.
+ * A status badge, the line's alerts, the usual corrections as visible
+ * buttons (confirm, not a subscription, cancelled or undo, rename, accept a
+ * new price, propose again) and the rest in a "⋯" menu (category, linked
+ * labels, ignore, remove the classification). The editors that need a value
+ * (name, date, category) open under the line.
  */
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -56,6 +55,9 @@ const statusClass = computed(() => {
   return 'badge-ghost'
 })
 
+const primaryItems = computed(() => items.value.filter((i) => i.primary))
+const menuItems = computed(() => items.value.filter((i) => !i.primary))
+
 const alerts = computed(() =>
   payment.value?.kind === 'subscription' ? attentionLines(payment.value) : [],
 )
@@ -63,6 +65,8 @@ const alerts = computed(() =>
 interface Item {
   label: string
   run: () => void
+  /** Shown as a button on the line; otherwise in the "⋯" menu. */
+  primary?: boolean
 }
 
 const items = computed<Item[]>(() => {
@@ -70,28 +74,41 @@ const items = computed<Item[]>(() => {
   const result: Item[] = []
   const act = (action: LineAction) => () => send(action)
   if (p?.kind === 'dismissed') {
-    return [{ label: 'Reproposer', run: act({ type: 'forget' }) }]
+    return [{ label: 'Reproposer', run: act({ type: 'forget' }), primary: true }]
   }
   if (p?.kind === 'subscription' && p.price_changed && p.status !== 'cancelled') {
-    result.push({ label: 'Accepter le nouveau prix', run: act({ type: 'acceptPrice' }) })
+    result.push({
+      label: 'Accepter le nouveau prix',
+      run: act({ type: 'acceptPrice' }),
+      primary: true,
+    })
   }
   if (p?.kind !== 'subscription') {
-    result.push({ label: '✓ Abonnement', run: act({ type: 'kind', kind: 'subscription' }) })
+    result.push({
+      label: '✓ Abonnement',
+      run: act({ type: 'kind', kind: 'subscription' }),
+      primary: true,
+    })
   }
   if (p?.kind !== 'other') {
-    result.push({ label: 'Pas un abonnement', run: act({ type: 'kind', kind: 'other' }) })
+    result.push({
+      label: 'Pas un abonnement',
+      run: act({ type: 'kind', kind: 'other' }),
+      primary: true,
+    })
   }
   if (p?.kind !== 'other') {
     if (p?.cancelled_at) {
-      result.push({ label: 'Annuler la résiliation', run: act({ type: 'cancel', date: null }) })
+      result.push({
+        label: 'Annuler la résiliation',
+        run: act({ type: 'cancel', date: null }),
+        primary: true,
+      })
     } else {
-      result.push({ label: 'Résilié…', run: () => open('cancel') })
+      result.push({ label: 'Résilié…', run: () => open('cancel'), primary: true })
     }
   }
-  // A detected line that stopped is renamed once classified (confirm first)
-  if (p || props.line.running) {
-    result.push({ label: 'Renommer…', run: () => open('rename') })
-  }
+  result.push({ label: 'Renommer…', run: () => open('rename'), primary: true })
   if (p) {
     result.push({ label: 'Catégorie…', run: () => open('category') })
     if (p.aliases.length > 0) {
@@ -172,8 +189,16 @@ function onCategory(event: Event): void {
   <div class="flex flex-col gap-1 min-w-0">
     <div class="flex flex-wrap items-center gap-1">
       <span class="badge badge-sm" :class="statusClass" data-test="line-status">{{ status }}</span>
-      <!-- Opens to the right: the line's name sits at the left edge of the page -->
-      <details ref="menu" class="dropdown">
+      <button
+        v-for="item in primaryItems"
+        :key="item.label"
+        class="btn btn-xs"
+        :class="item.label === '✓ Abonnement' ? 'btn-primary' : 'btn-ghost border-base-300'"
+        :disabled="busy"
+        data-test="menu-item"
+        @click="item.run"
+      >{{ item.label }}</button>
+      <details v-if="menuItems.length > 0" ref="menu" class="dropdown dropdown-end">
         <summary
           class="btn btn-ghost btn-xs px-1.5"
           :class="{ 'btn-disabled': busy }"
@@ -181,7 +206,7 @@ function onCategory(event: Event): void {
           title="Actions"
         >⋯</summary>
         <ul class="dropdown-content menu menu-sm bg-base-100 border border-base-300 rounded-box z-20 w-56 p-1 shadow">
-          <li v-for="item in items" :key="item.label">
+          <li v-for="item in menuItems" :key="item.label">
             <button data-test="menu-item" :disabled="busy" @click="item.run">{{ item.label }}</button>
           </li>
         </ul>

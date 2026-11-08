@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * RecurringTimeline — one line per service over the last two years, sorted
- * by name.
+ * by name; what is not a subscription and what was ignored are folded in
+ * sections below the main list.
  *
  * Each line runs from its first to its last debit; its successive prices are
  * stretches of the same line. A line that probably continues another one
@@ -22,8 +23,9 @@ import {
   monthsBefore,
   periodLabel,
   timelinePercent,
+  timelineSection,
 } from '@/api/recurring'
-import type { LineAction } from '@/api/recurring'
+import type { LineAction, TimelineSection } from '@/api/recurring'
 import RecurringLineMenu from '@/components/RecurringLineMenu.vue'
 import RecurringPicker from '@/components/RecurringPicker.vue'
 
@@ -49,10 +51,18 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   link: [earlierId: string, laterId: string]
+  refuse: [earlierId: string, laterId: string]
   action: [lineId: string, action: LineAction]
 }>()
 
 const linkingId = ref<string | null>(null)
+
+// Folded sections below the main list: what is not a subscription, what was ignored
+const SECTION_TITLES: Record<Exclude<TimelineSection, 'main'>, string> = {
+  other: 'Pas des abonnements',
+  ignored: 'Ignorées',
+}
+const opened = ref<Record<string, boolean>>({})
 
 const start = computed(() => monthsBefore(WINDOW_MONTHS, props.today))
 
@@ -65,6 +75,18 @@ const rows = computed(() =>
       (b.last_date ?? '').localeCompare(a.last_date ?? ''),
   ),
 )
+
+const sections = computed(() =>
+  (['main', 'other', 'ignored'] as const).map((id) => ({
+    id,
+    title: id === 'main' ? null : SECTION_TITLES[id],
+    rows: rows.value.filter((l) => timelineSection(l) === id),
+  })),
+)
+
+function toggle(sectionId: string): void {
+  opened.value = { ...opened.value, [sectionId]: !opened.value[sectionId] }
+}
 
 const byId = computed(() => new Map(props.lines.map((l) => [l.id, l])))
 
@@ -164,71 +186,92 @@ function linkWith(line: RecurringLine, otherId: string): void {
       </div>
     </div>
 
-    <div
-      v-for="line in rows"
-      :key="line.id"
-      class="grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-3 gap-y-1 py-2 border-b border-base-300"
-      :class="{ 'opacity-50': line.payment?.kind === 'dismissed' }"
-      data-test="timeline-row"
-    >
-      <div class="min-w-0">
-        <p class="text-sm font-medium truncate" :title="line.label ?? line.name">
-          {{ line.name }}
-        </p>
-        <p class="text-xs text-base-content/60">
-          {{ formatAmount(line.amount) }} · {{ periodLabel(line.period) }}
-          <span v-if="!line.running"> · arrêté</span>
-          <template v-if="line.payment?.kind !== 'dismissed'">
-            ·
-            <button
-              class="link link-hover"
-              :disabled="busy"
-              @click="linkingId = linkingId === line.id ? null : line.id"
-            >relier à…</button>
-          </template>
-        </p>
-        <RecurringLineMenu
-          :line="line"
-          :groups="groups"
-          :today="cancelDefault"
-          :busy="busy"
-          @action="(a) => emit('action', line.id, a)"
-        />
-      </div>
+    <template v-for="section in sections" :key="section.id">
+      <button
+        v-if="section.title && section.rows.length > 0"
+        class="flex items-center gap-2 mt-4 py-2 text-sm font-semibold text-left"
+        :aria-expanded="!!opened[section.id]"
+        data-test="timeline-section"
+        @click="toggle(section.id)"
+      >
+        <span class="text-base-content/50" aria-hidden="true">{{ opened[section.id] ? '▾' : '▸' }}</span>
+        <span>{{ section.title }} ({{ section.rows.length }})</span>
+      </button>
+      <template v-if="!section.title || opened[section.id]">
+        <div
+          v-for="line in section.rows"
+          :key="line.id"
+          class="grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-3 gap-y-1 py-2 border-b border-base-300"
+          :class="{ 'opacity-60': line.payment?.kind === 'dismissed' }"
+          data-test="timeline-row"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-medium truncate" :title="line.label ?? line.name">
+              {{ line.name }}
+            </p>
+            <p class="text-xs text-base-content/60">
+              {{ formatAmount(line.amount) }} · {{ periodLabel(line.period) }}
+              <span v-if="!line.running"> · arrêté</span>
+              <template v-if="line.payment?.kind !== 'dismissed'">
+                ·
+                <button
+                  class="link link-hover"
+                  :disabled="busy"
+                  @click="linkingId = linkingId === line.id ? null : line.id"
+                >relier à…</button>
+              </template>
+            </p>
+          </div>
 
-      <div class="flex flex-col gap-1 min-w-0">
-        <div class="relative h-6 rounded bg-base-200">
-          <div
-            v-for="(b, i) in bars(line)"
-            :key="i"
-            class="absolute top-1 bottom-1 rounded-sm text-[10px] leading-4 text-white text-center overflow-hidden whitespace-nowrap"
-            :class="barClass(line)"
-            :style="{ left: `${b.left}%`, width: `${b.width}%` }"
-            :title="b.title"
-          >
-            <span v-if="b.width >= LABEL_MIN_WIDTH">{{ formatAmount(b.amount) }}</span>
+          <div class="flex flex-col gap-1 min-w-0">
+            <div class="relative h-6 rounded bg-base-200">
+              <div
+                v-for="(b, i) in bars(line)"
+                :key="i"
+                class="absolute top-1 bottom-1 rounded-sm text-[10px] leading-4 text-white text-center overflow-hidden whitespace-nowrap"
+                :class="barClass(line)"
+                :style="{ left: `${b.left}%`, width: `${b.width}%` }"
+                :title="b.title"
+              >
+                <span v-if="b.width >= LABEL_MIN_WIDTH">{{ formatAmount(b.amount) }}</span>
+              </div>
+            </div>
+
+            <RecurringLineMenu
+              :line="line"
+              :groups="groups"
+              :today="cancelDefault"
+              :busy="busy"
+              @action="(a) => emit('action', line.id, a)"
+            />
+
+            <div v-if="suggestionFor.get(line.id)" class="flex flex-wrap items-center gap-2">
+              <span class="text-xs text-warning">
+                Probablement la suite de « {{ suggestionFor.get(line.id)!.name }} » (même montant)
+              </span>
+              <button
+                class="btn btn-xs btn-warning"
+                :disabled="busy"
+                @click="emit('link', suggestionFor.get(line.id)!.id, line.id)"
+              >Relier</button>
+              <button
+                class="btn btn-xs btn-ghost"
+                :disabled="busy"
+                data-test="suggestion-refuse"
+                @click="emit('refuse', suggestionFor.get(line.id)!.id, line.id)"
+              >Non</button>
+            </div>
+            <RecurringPicker
+              v-if="linkingId === line.id"
+              :options="optionsFor(line)"
+              prompt="Même service que :"
+              :busy="busy"
+              @choose="(id) => linkWith(line, id)"
+              @cancel="linkingId = null"
+            />
           </div>
         </div>
-
-        <div v-if="suggestionFor.get(line.id)" class="flex flex-wrap items-center gap-2">
-          <span class="text-xs text-warning">
-            Probablement la suite de « {{ suggestionFor.get(line.id)!.name }} » (même montant)
-          </span>
-          <button
-            class="btn btn-xs btn-warning"
-            :disabled="busy"
-            @click="emit('link', suggestionFor.get(line.id)!.id, line.id)"
-          >Relier</button>
-        </div>
-        <RecurringPicker
-          v-if="linkingId === line.id"
-          :options="optionsFor(line)"
-          prompt="Même service que :"
-          :busy="busy"
-          @choose="(id) => linkWith(line, id)"
-          @cancel="linkingId = null"
-        />
-      </div>
-    </div>
+      </template>
+    </template>
   </div>
 </template>
