@@ -456,6 +456,7 @@ A price increase is reported from its second debit at the new amount: a one-off 
 ### Historique (history)
 
 A two-year timeline: one line per service, from its first to its last debit, with its successive prices on the same line.
+Lines are sorted alphabetically: one service that moved to another label ("Tesla Lu" and "Tesla Motors Lux") shows up on two neighbouring lines.
 It shows what stopped, when, and what took over.
 
 - When the bank or the merchant renamed a debit, **relier à…** (link to…) joins the two lines: the more recent one absorbs the other, whose debits then count for it.
