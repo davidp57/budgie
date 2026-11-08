@@ -374,6 +374,13 @@ export interface RecurringCandidate {
   last_date: string
 }
 
+/** A bank label merged into a classified payment (after a label change). */
+export interface RecurringAlias {
+  id: number
+  key: string
+  amount: number
+}
+
 /** A classified recurring payment and what the debits say about it. */
 export interface RecurringPayment {
   id: number
@@ -391,6 +398,7 @@ export interface RecurringPayment {
   status: RecurringStatus
   price_changed: boolean
   debits_after_cancellation: string[]
+  aliases: RecurringAlias[]
 }
 
 export interface RecurringOverview {

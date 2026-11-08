@@ -68,7 +68,7 @@ budgie/
 │   │   ├── category_rule.py
 │   │   ├── envelope.py
 │   │   ├── payee.py
-│   │   ├── recurring_payment.py   # Débits récurrents classés (abonnements)
+│   │   ├── recurring_payment.py   # Débits récurrents classés (abonnements) et leurs libellés rattachés
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── schemas/                   # Schémas Pydantic requête/réponse
@@ -478,8 +478,12 @@ Documentation interactive disponible à `http://localhost:8000/docs` (Swagger UI
 | `POST` | `/api/recurring` | `{key, name, amount, period, kind}` — `kind` : `subscription`, `other`, `dismissed` |
 | `PATCH` | `/api/recurring/{id}` | `name`, `kind`, `amount`, `category_id`, `cancelled_at` (envoyer `null` pour effacer) |
 | `DELETE` | `/api/recurring/{id}` | Oublie le verdict : les débits redeviennent une proposition |
+| `POST` | `/api/recurring/{id}/aliases` | `{key, amount}` — rattache le libellé d'une proposition au paiement |
+| `POST` | `/api/recurring/{id}/merge` | `{other_id}` — le paiement absorbe les libellés d'un autre, qui est supprimé |
+| `DELETE` | `/api/recurring/{id}/aliases/{alias_id}` | Détache un libellé rattaché : ses débits redeviennent une proposition |
+| `POST` | `/api/recurring/{id}/accept-price` | Prend le dernier montant prélevé comme nouvelle référence du libellé (principal ou rattaché) qui l'a prélevé |
 
-Les débits ne sont pas liés à un paiement : ils sont retrouvés à chaque lecture par libellé bancaire normalisé (`match_key`) et montant, après déchiffrement (`services/recurring_detection.py` porte les seuils en constantes nommées).
+Les débits ne sont pas liés à un paiement : ils sont retrouvés à chaque lecture par libellé bancaire normalisé (`match_key`, plus les libellés rattachés au paiement dans `recurring_payment_aliases`) et montant, après déchiffrement (`services/recurring_detection.py` porte les seuils en constantes nommées).
 Seules les transactions importées (`import_hash` renseigné) comptent, pour qu'une dépense saisie et pointée avec une ligne bancaire ne compte pas deux fois.
 
 ### Utilisateurs

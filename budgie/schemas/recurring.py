@@ -79,6 +79,42 @@ class RecurringPaymentUpdate(BaseModel):
     cancelled_at: datetime.date | None = None
 
 
+class RecurringAliasCreate(BaseModel):
+    """A label to merge into a classified payment (from a candidate).
+
+    Attributes:
+        key: Normalized bank label of the candidate.
+        amount: Reference amount under that label, in positive centimes.
+    """
+
+    key: str = Field(..., min_length=1, max_length=200)
+    amount: int = Field(..., gt=0)
+
+
+class RecurringMerge(BaseModel):
+    """Merge another classified payment into this one.
+
+    Attributes:
+        other_id: The payment to absorb; it is deleted.
+    """
+
+    other_id: int
+
+
+class RecurringAliasRead(BaseModel):
+    """A bank label merged into a classified payment.
+
+    Attributes:
+        id: Primary key.
+        key: Normalized bank label.
+        amount: Reference amount under that label, in centimes.
+    """
+
+    id: int
+    key: str
+    amount: int
+
+
 class RecurringPaymentRead(BaseModel):
     """A classified payment with what the debits say about it.
 
@@ -99,6 +135,7 @@ class RecurringPaymentRead(BaseModel):
         price_changed: True when the current amount left the tolerance of the
             reference amount.
         debits_after_cancellation: Debit dates after the declared cancellation.
+        aliases: Other bank labels merged into the payment.
     """
 
     id: int
@@ -116,6 +153,7 @@ class RecurringPaymentRead(BaseModel):
     status: PaymentStatus
     price_changed: bool
     debits_after_cancellation: list[datetime.date]
+    aliases: list[RecurringAliasRead]
 
 
 class RecurringOverview(BaseModel):

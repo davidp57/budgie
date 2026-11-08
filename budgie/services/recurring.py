@@ -10,12 +10,15 @@ import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from budgie.models.account import Account
-from budgie.models.recurring_payment import RecurringPayment
+from budgie.models.recurring_payment import RecurringPayment, RecurringPaymentAlias
 from budgie.models.transaction import Transaction
 from budgie.schemas.recurring import (
+    RecurringAliasCreate,
+    RecurringAliasRead,
     RecurringCandidateRead,
     RecurringKind,
     RecurringOverview,
@@ -77,7 +80,11 @@ async def _payments(
     result = await db.execute(
         select(RecurringPayment)
         .where(RecurringPayment.user_id == user_id)
+        .options(selectinload(RecurringPayment.aliases))
         .order_by(RecurringPayment.id)
+        # Reload rows already in the session: their decrypted values and alias
+        # lists may predate a change made earlier in the same session.
+        .execution_options(populate_existing=True)
     )
     payments = list(result.scalars().all())
     for payment in payments:
@@ -88,16 +95,28 @@ async def _payments(
         set_committed_value(
             payment, "match_key", decrypt_str(payment.match_key, session_key) or ""
         )
+        for alias in payment.aliases:
+            set_committed_value(
+                alias, "match_key", decrypt_str(alias.match_key, session_key) or ""
+            )
     return payments
 
 
 def _tracked(payments: list[RecurringPayment]) -> list[TrackedPayment]:
-    return [
-        TrackedPayment(
-            id=p.id, key=p.match_key, amount=p.amount, period=Period(p.period)
+    """Every label of every payment: the main one, then the merged ones."""
+    labels: list[TrackedPayment] = []
+    for p in payments:
+        period = Period(p.period)
+        labels.append(
+            TrackedPayment(id=p.id, key=p.match_key, amount=p.amount, period=period)
         )
-        for p in payments
-    ]
+        labels.extend(
+            TrackedPayment(
+                id=p.id, key=a.match_key, amount=a.amount, period=period, alias_id=a.id
+            )
+            for a in p.aliases
+        )
+    return labels
 
 
 async def get_candidates(
@@ -149,10 +168,19 @@ def _read(
         last_date=track.last_date,
         occurrences=len(track.dates),
         status=payment_status(track, period, payment.cancelled_at, today),
-        price_changed=not amount_matches(track.current_amount, payment.amount),
+        price_changed=not amount_matches(
+            track.current_amount,
+            track.last_reference
+            if track.last_reference is not None
+            else payment.amount,
+        ),
         debits_after_cancellation=debits_after_cancellation(
             track, payment.cancelled_at
         ),
+        aliases=[
+            RecurringAliasRead(id=a.id, key=a.match_key, amount=a.amount)
+            for a in payment.aliases
+        ],
     )
 
 
@@ -306,5 +334,209 @@ async def delete_payment(db: AsyncSession, payment_id: int, user_id: int) -> boo
     if payment is None:
         return False
     await db.delete(payment)
+    await db.commit()
+    return True
+
+
+def _reencrypt(value: str, session_key: bytes | None) -> str:
+    """Return a stored label encrypted with the session key.
+
+    Works whether the in-memory value is still the ciphertext or was
+    decrypted earlier in the same session.
+    """
+    plain = decrypt_str(value, session_key) or value
+    return encrypt_str(plain, session_key) or plain
+
+
+async def add_alias(
+    db: AsyncSession,
+    payment_id: int,
+    schema: RecurringAliasCreate,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> bool:
+    """Merge a candidate's label into a classified payment.
+
+    Args:
+        db: Async database session.
+        payment_id: Payment the label is merged into.
+        schema: Label and amount of the candidate.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for encryption, or None.
+
+    Returns:
+        False when the payment does not exist or belongs to another user.
+    """
+    payment = await _owned(db, payment_id, user_id)
+    if payment is None:
+        return False
+    key = normalize_label(schema.key)
+    if not await _carries_label(db, payment, key, schema.amount, session_key):
+        db.add(
+            RecurringPaymentAlias(
+                payment_id=payment.id,
+                match_key=encrypt_str(key, session_key) or key,
+                amount=schema.amount,
+            )
+        )
+    await db.commit()
+    return True
+
+
+async def _carries_label(
+    db: AsyncSession,
+    payment: RecurringPayment,
+    key: str,
+    amount: int,
+    session_key: bytes | None,
+) -> bool:
+    """Tell whether a payment already carries a label at about this amount."""
+    aliases = (
+        (
+            await db.execute(
+                select(RecurringPaymentAlias).where(
+                    RecurringPaymentAlias.payment_id == payment.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    labels = [(payment.match_key, payment.amount)]
+    labels += [(a.match_key, a.amount) for a in aliases]
+    return any(
+        (decrypt_str(stored, session_key) or stored) == key
+        and amount_matches(amount, reference)
+        for stored, reference in labels
+    )
+
+
+async def merge_payments(
+    db: AsyncSession,
+    payment_id: int,
+    other_id: int,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> bool:
+    """Merge another classified payment into this one.
+
+    The payment keeps its name, kind, category and cancellation; the main
+    label and the merged labels of the other become its own, and the other
+    payment is deleted.
+
+    Args:
+        db: Async database session.
+        payment_id: Payment that absorbs the other.
+        other_id: Payment to absorb.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for encryption, or None.
+
+    Returns:
+        False when either payment does not exist, belongs to another user, or
+        both are the same payment.
+    """
+    if payment_id == other_id:
+        return False
+    target = await _owned(db, payment_id, user_id)
+    other = await _owned(db, other_id, user_id)
+    if target is None or other is None:
+        return False
+    other_aliases = (
+        (
+            await db.execute(
+                select(RecurringPaymentAlias).where(
+                    RecurringPaymentAlias.payment_id == other.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    labels = [(other.match_key, other.amount)]
+    labels += [(a.match_key, a.amount) for a in other_aliases]
+    for match_key, amount in labels:
+        key = decrypt_str(match_key, session_key) or match_key
+        if await _carries_label(db, target, key, amount, session_key):
+            continue
+        db.add(
+            RecurringPaymentAlias(
+                payment_id=target.id,
+                match_key=_reencrypt(match_key, session_key),
+                amount=amount,
+            )
+        )
+        await db.flush()
+    await db.delete(other)
+    await db.commit()
+    return True
+
+
+async def remove_alias(
+    db: AsyncSession, payment_id: int, alias_id: int, user_id: int
+) -> bool:
+    """Detach a merged label: its debits become a candidate again.
+
+    Args:
+        db: Async database session.
+        payment_id: Payment the label is merged into.
+        alias_id: Merged label to detach.
+        user_id: Owner user ID.
+
+    Returns:
+        False when the label does not exist, belongs to another payment, or
+        the payment belongs to another user.
+    """
+    result = await db.execute(
+        select(RecurringPaymentAlias)
+        .join(RecurringPayment, RecurringPaymentAlias.payment_id == RecurringPayment.id)
+        .where(
+            RecurringPaymentAlias.id == alias_id,
+            RecurringPaymentAlias.payment_id == payment_id,
+            RecurringPayment.user_id == user_id,
+        )
+    )
+    alias = result.scalar_one_or_none()
+    if alias is None:
+        return False
+    await db.delete(alias)
+    await db.commit()
+    return True
+
+
+async def accept_price(
+    db: AsyncSession,
+    payment_id: int,
+    user_id: int,
+    session_key: bytes | None = None,
+) -> bool:
+    """Take the latest debited amount as the new reference price.
+
+    The reference changed is the one of the label that billed the most recent
+    debit (the main label or a merged one), so that the other labels keep
+    their own history.
+
+    Args:
+        db: Async database session.
+        payment_id: Payment primary key.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for decryption, or None.
+
+    Returns:
+        False when the payment does not exist or belongs to another user.
+    """
+    if await _owned(db, payment_id, user_id) is None:
+        return False
+    debits = await _bank_debits(db, user_id, session_key)
+    payments = await _payments(db, user_id, session_key)
+    tracks, _ = track_payments(debits, _tracked(payments))
+    track = tracks[payment_id]
+    if track.last_reference is None:
+        return True
+    payment = next(p for p in payments if p.id == payment_id)
+    if track.last_alias_id is None:
+        payment.amount = track.current_amount
+    else:
+        alias = next(a for a in payment.aliases if a.id == track.last_alias_id)
+        alias.amount = track.current_amount
     await db.commit()
     return True

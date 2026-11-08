@@ -4,17 +4,23 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from budgie.api.deps import CurrentUser, DBSession, SessionKey
 from budgie.schemas.recurring import (
+    RecurringAliasCreate,
     RecurringCandidateRead,
+    RecurringMerge,
     RecurringOverview,
     RecurringPaymentCreate,
     RecurringPaymentUpdate,
 )
 from budgie.services.ownership import ForeignReferenceError
 from budgie.services.recurring import (
+    accept_price,
+    add_alias,
     create_payment,
     delete_payment,
     get_candidates,
     get_overview,
+    merge_payments,
+    remove_alias,
     update_payment,
 )
 
@@ -141,3 +147,118 @@ async def forget(
     if not await delete_payment(db, payment_id, current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{payment_id}/aliases", response_model=RecurringOverview)
+async def merge_candidate(
+    payment_id: int,
+    schema: RecurringAliasCreate,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringOverview:
+    """Merge a candidate's label into a classified payment ("same as…").
+
+    Args:
+        payment_id: Payment the label is merged into.
+        schema: Label and amount of the candidate.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for encryption.
+
+    Returns:
+        The updated overview.
+
+    Raises:
+        HTTPException: 404 if the payment is not the user's.
+    """
+    if not await add_alias(
+        db, payment_id, schema, current_user.id, session_key=session_key
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return await get_overview(db, current_user.id, session_key=session_key)
+
+
+@router.post("/{payment_id}/merge", response_model=RecurringOverview)
+async def merge(
+    payment_id: int,
+    schema: RecurringMerge,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringOverview:
+    """Merge another classified payment into this one, which absorbs its labels.
+
+    Args:
+        payment_id: Payment that absorbs the other.
+        schema: The payment to absorb.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for encryption.
+
+    Returns:
+        The updated overview.
+
+    Raises:
+        HTTPException: 404 if either payment is not the user's, or both are
+            the same payment.
+    """
+    if not await merge_payments(
+        db, payment_id, schema.other_id, current_user.id, session_key=session_key
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return await get_overview(db, current_user.id, session_key=session_key)
+
+
+@router.delete("/{payment_id}/aliases/{alias_id}", response_model=RecurringOverview)
+async def detach(
+    payment_id: int,
+    alias_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringOverview:
+    """Detach a merged label: its debits become a candidate again.
+
+    Args:
+        payment_id: Payment the label is merged into.
+        alias_id: Merged label to detach.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The updated overview.
+
+    Raises:
+        HTTPException: 404 if the label is not one of the user's payment.
+    """
+    if not await remove_alias(db, payment_id, alias_id, current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return await get_overview(db, current_user.id, session_key=session_key)
+
+
+@router.post("/{payment_id}/accept-price", response_model=RecurringOverview)
+async def accept_new_price(
+    payment_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringOverview:
+    """Take the latest debited amount as the new reference price.
+
+    Args:
+        payment_id: Payment primary key.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The updated overview.
+
+    Raises:
+        HTTPException: 404 if the payment is not the user's.
+    """
+    if not await accept_price(db, payment_id, current_user.id, session_key=session_key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return await get_overview(db, current_user.id, session_key=session_key)

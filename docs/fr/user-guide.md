@@ -453,6 +453,14 @@ Un abonnement se renomme en cliquant sur son nom, et peut recevoir une catégori
   - un changement de prix, avec l'ancien et le nouveau montant (**Accepter le nouveau prix** le confirme).
 - Un nouveau montant chez un commerçant qui ne porte qu'un abonnement, au moment habituel du prélèvement, est compté comme un changement de prix ; chez un commerçant qui en porte plusieurs, il devient une nouvelle proposition.
 
+### Trier un long historique, et les libellés qui changent
+
+- Le sélecteur **Dernier prélèvement** de la rubrique **À classer** n'affiche que les propositions prélevées depuis 3 mois (par défaut), 6 mois, 1 an, 2 ans, ou toutes ; une ligne dit combien sont masquées. On traite ainsi un long historique morceau par morceau, en commençant par le plus récent. Le filtre ne change ni la détection ni les totaux.
+- Un changement de **montant** sous un même libellé n'a rien à faire : en classant la série la plus récente, les anciens tarifs s'y rattachent tout seuls.
+- Quand c'est le **libellé** qui a changé (la banque ou le commerçant a renommé le prélèvement), **C'est le même que…** sur la proposition la rattache à un paiement déjà classé : ses prélèvements comptent alors pour lui (dernier prélèvement, statut, montant), et la proposition disparaît. Si le prix a changé en même temps que le libellé, ce n'est pas signalé comme une hausse : chaque libellé garde son propre montant de référence.
+- **Fusionner avec…** sur un paiement classé lui fait absorber un autre paiement classé, qui disparaît ; le premier garde son nom, sa catégorie et sa résiliation.
+- Les libellés rattachés s'affichent sous le paiement (**Aussi prélevé sous**) ; la croix **✕** en détache un, qui redevient une proposition.
+
 ---
 
 ## 14. Thème et installation mobile (PWA)

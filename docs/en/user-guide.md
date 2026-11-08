@@ -455,6 +455,14 @@ Click a subscription's name to rename it; it can also get a category.
   - a price change, with the old and new amounts (**Accepter le nouveau prix** confirms it).
 - A new amount at a merchant carrying a single subscription, at the usual debit time, counts as a price change; at a merchant carrying several, it becomes a new proposal.
 
+### Working through a long history, and labels that change
+
+- The **Dernier prélèvement** (last debit) selector of **À classer** only shows the proposals debited within 3 months (default), 6 months, 1 year, 2 years, or all of them; a line says how many are hidden. This lets you work through a long history piece by piece, starting with the most recent. The filter changes neither the detection nor the totals.
+- A change of **amount** under the same label needs nothing: once the most recent series is classified, the older prices attach to it by themselves.
+- When the **label** changed (the bank or the merchant renamed the debit), **C'est le même que…** (same as…) on the proposal attaches it to a payment already classified: its debits then count for that payment (last debit, status, amount), and the proposal disappears. If the price changed together with the label, it is not reported as a price change: each label keeps its own reference amount.
+- **Fusionner avec…** (merge with…) on a classified payment makes it absorb another classified payment, which disappears; the first keeps its name, category and cancellation.
+- Merged labels are listed under the payment (**Aussi prélevé sous**, also debited as); the **✕** detaches one, which becomes a proposal again.
+
 ---
 
 ## 14. Theme & Mobile Installation (PWA)
