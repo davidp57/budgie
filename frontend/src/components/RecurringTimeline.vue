@@ -10,7 +10,11 @@
  */
 
 import { computed, ref } from 'vue'
-import type { RecurringLine, RecurringLinkSuggestion } from '@/api/types'
+import type {
+  CategoryGroupWithCategories,
+  RecurringLine,
+  RecurringLinkSuggestion,
+} from '@/api/types'
 import { formatAmount } from '@/api/types'
 import {
   formatDay,
@@ -19,24 +23,33 @@ import {
   periodLabel,
   timelinePercent,
 } from '@/api/recurring'
+import type { LineAction } from '@/api/recurring'
+import RecurringLineMenu from '@/components/RecurringLineMenu.vue'
 import RecurringPicker from '@/components/RecurringPicker.vue'
 
 /** Months shown on the timeline. */
 const WINDOW_MONTHS = 24
 /** A stretch narrower than this (percent of the width) is drawn at this width. */
 const MIN_SEGMENT_WIDTH = 1.2
+/** No month tick beyond this position (percent): its label would overlap the last one. */
+const MAX_TICK_LEFT = 92
 /** A stretch wider than this (percent) shows its amount inside. */
 const LABEL_MIN_WIDTH = 14
 
 const props = defineProps<{
   lines: RecurringLine[]
   suggestions: RecurringLinkSuggestion[]
+  /** End of the timeline: the date of the most recent imported debit. */
   today: string
+  /** Default date of a cancellation declared from a line (the real today). */
+  cancelDefault: string
+  groups: CategoryGroupWithCategories[]
   busy: boolean
 }>()
 
 const emit = defineEmits<{
   link: [earlierId: string, laterId: string]
+  action: [lineId: string, action: LineAction]
 }>()
 
 const linkingId = ref<string | null>(null)
@@ -73,7 +86,10 @@ const ticks = computed(() => {
     const total = y0 * 12 + (m0 - 1) + i
     const iso = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-01`
     if (iso > props.today) break
-    result.push({ left: timelinePercent(iso, start.value, props.today), label: formatMonth(iso) })
+    const left = timelinePercent(iso, start.value, props.today)
+    // A month before the window, or too close to its end, would overlap its neighbour
+    if (iso < start.value || left > MAX_TICK_LEFT) continue
+    result.push({ left, label: formatMonth(iso) })
   }
   return result
 })
@@ -103,14 +119,16 @@ function bars(line: RecurringLine): { left: number; width: number; amount: numbe
 }
 
 function barClass(line: RecurringLine): string {
-  if (!line.running) return 'bg-base-content/25'
-  if (line.payment?.kind === 'other' || (!line.payment && line.likely_other)) return 'bg-secondary/60'
-  return 'bg-primary'
+  const p = line.payment
+  if (!line.running || p?.kind === 'dismissed' || p?.cancelled_at) return 'bg-base-content/25'
+  if (p?.kind === 'other' || (!p && line.likely_other)) return 'bg-secondary/60'
+  // A confirmed subscription is solid; one found automatically is lighter
+  return p?.kind === 'subscription' ? 'bg-primary' : 'bg-primary/50'
 }
 
 function optionsFor(line: RecurringLine): { id: string; label: string }[] {
   return props.lines
-    .filter((l) => l.id !== line.id)
+    .filter((l) => l.id !== line.id && l.payment?.kind !== 'dismissed')
     .map((l) => ({
       id: l.id,
       label: `${l.name} — ${formatAmount(l.amount)} · ${l.first_date ? formatMonth(l.first_date) : '?'} → ${l.last_date ? formatMonth(l.last_date) : '?'}`,
@@ -150,6 +168,7 @@ function linkWith(line: RecurringLine, otherId: string): void {
       v-for="line in rows"
       :key="line.id"
       class="grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-3 gap-y-1 py-2 border-b border-base-300"
+      :class="{ 'opacity-50': line.payment?.kind === 'dismissed' }"
       data-test="timeline-row"
     >
       <div class="min-w-0">
@@ -159,13 +178,22 @@ function linkWith(line: RecurringLine, otherId: string): void {
         <p class="text-xs text-base-content/60">
           {{ formatAmount(line.amount) }} · {{ periodLabel(line.period) }}
           <span v-if="!line.running"> · arrêté</span>
-          ·
-          <button
-            class="link link-hover"
-            :disabled="busy"
-            @click="linkingId = linkingId === line.id ? null : line.id"
-          >relier à…</button>
+          <template v-if="line.payment?.kind !== 'dismissed'">
+            ·
+            <button
+              class="link link-hover"
+              :disabled="busy"
+              @click="linkingId = linkingId === line.id ? null : line.id"
+            >relier à…</button>
+          </template>
         </p>
+        <RecurringLineMenu
+          :line="line"
+          :groups="groups"
+          :today="cancelDefault"
+          :busy="busy"
+          @action="(a) => emit('action', line.id, a)"
+        />
       </div>
 
       <div class="flex flex-col gap-1 min-w-0">
