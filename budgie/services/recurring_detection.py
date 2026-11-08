@@ -15,7 +15,7 @@ import re
 import statistics
 import unicodedata
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 
@@ -100,6 +100,7 @@ class RecurringSeries:
         occurrences: Number of debits in the series.
         first_date: Date of the first debit.
         last_date: Date of the most recent debit.
+        hits: The debits of the series, oldest first.
     """
 
     key: str
@@ -109,6 +110,7 @@ class RecurringSeries:
     occurrences: int
     first_date: datetime.date
     last_date: datetime.date
+    hits: tuple[BankDebit, ...] = ()
 
     @property
     def monthly_cost(self) -> int:
@@ -225,6 +227,7 @@ def _series_of(key: str, debits: list[BankDebit]) -> RecurringSeries | None:
             occurrences=len(debits),
             first_date=debits[0].date,
             last_date=debits[-1].date,
+            hits=tuple(debits),
         )
     return None
 
@@ -309,12 +312,14 @@ class PaymentTrack:
             when no debit was attributed.
         last_alias_id: Merged label that billed the most recent debit, or
             None when it was the main label (or no debit was attributed).
+        amounts: Amounts of the debits, in the order of ``dates``.
     """
 
     dates: list[datetime.date]
     current_amount: int
     last_reference: int | None = None
     last_alias_id: int | None = None
+    amounts: list[int] = field(default_factory=list)
 
     @property
     def last_date(self) -> datetime.date | None:
@@ -398,6 +403,7 @@ def track_payments(
                 current_amount=last_debit.amount,
                 last_reference=last_label.amount,
                 last_alias_id=last_label.alias_id,
+                amounts=[debit.amount for debit, _ in hits],
             )
         else:
             tracks[label.id] = PaymentTrack(
@@ -564,3 +570,219 @@ def debits_after_cancellation(
     if cancelled_at is None:
         return []
     return [d for d in track.dates if d > cancelled_at]
+
+
+# ---------------------------------------------------------------------------
+# Service lines: what a person sees as one subscription over time
+# ---------------------------------------------------------------------------
+
+#: Successive series of one label belong to the same service when the next
+#: one starts within this many periods after the previous one stopped.
+CHAIN_GAP_PERIODS = 2
+
+
+def is_running(last_date: datetime.date, period: Period, today: datetime.date) -> bool:
+    """Tell whether a payment still runs: debited within the last 1.5 periods.
+
+    Args:
+        last_date: Date of the most recent debit.
+        period: Billing rhythm.
+        today: Reference date.
+
+    Returns:
+        True when the last debit is recent enough for the payment to go on.
+    """
+    return (today - last_date).days <= ENDED_AFTER_PERIODS * PERIOD_DAYS[period]
+
+
+@dataclass(frozen=True)
+class PriceSegment:
+    """A stretch of time billed at one price.
+
+    Attributes:
+        start: Date of the first debit at this price.
+        end: Date of the last debit at this price.
+        amount: Median amount of the stretch, in positive integer centimes.
+        count: Number of debits in the stretch.
+    """
+
+    start: datetime.date
+    end: datetime.date
+    amount: int
+    count: int
+
+
+def price_segments(hits: Sequence[tuple[datetime.date, int]]) -> list[PriceSegment]:
+    """Cut a line's debits into stretches of one price.
+
+    A new stretch starts when an amount leaves the tolerance of the first
+    amount of the current stretch.
+
+    Args:
+        hits: ``(date, amount)`` of each debit, in any order.
+
+    Returns:
+        The stretches, oldest first.
+    """
+    segments: list[PriceSegment] = []
+    current: list[tuple[datetime.date, int]] = []
+
+    def close() -> None:
+        if current:
+            segments.append(
+                PriceSegment(
+                    start=current[0][0],
+                    end=current[-1][0],
+                    amount=round(statistics.median(a for _, a in current)),
+                    count=len(current),
+                )
+            )
+
+    for date, amount in sorted(hits):
+        if current and not amount_matches(amount, current[0][1]):
+            close()
+            current = []
+        current.append((date, amount))
+    close()
+    return segments
+
+
+@dataclass(frozen=True)
+class SeriesChain:
+    """Successive series of one label: one service whose price changed.
+
+    Attributes:
+        key: Normalized label of the series.
+        series: The series, oldest first; they never overlap in time.
+    """
+
+    key: str
+    series: tuple[RecurringSeries, ...]
+
+    @property
+    def latest(self) -> RecurringSeries:
+        """The most recent series: its price and rhythm are the current ones."""
+        return self.series[-1]
+
+    @property
+    def amount(self) -> int:
+        """Current amount per period, in centimes."""
+        return self.latest.amount
+
+    @property
+    def period(self) -> Period:
+        """Current billing rhythm."""
+        return self.latest.period
+
+    @property
+    def first_date(self) -> datetime.date:
+        """Date of the first debit of the service."""
+        return self.series[0].first_date
+
+    @property
+    def last_date(self) -> datetime.date:
+        """Date of the most recent debit of the service."""
+        return self.latest.last_date
+
+    @property
+    def hits(self) -> list[BankDebit]:
+        """Every debit of the service, oldest first."""
+        return sorted((h for s in self.series for h in s.hits), key=lambda d: d.date)
+
+
+def chain_series(series: Iterable[RecurringSeries]) -> list[SeriesChain]:
+    """Group the series of each label into service lines.
+
+    Series of one label that follow each other (the next starts after the
+    previous stopped, within :data:`CHAIN_GAP_PERIODS` periods) are one
+    service whose price changed; series that overlap in time are distinct
+    services billed by the same merchant (two formulas).
+
+    Args:
+        series: Detected series, in any order.
+
+    Returns:
+        The service lines, most expensive per month first.
+    """
+    by_key: dict[str, list[RecurringSeries]] = defaultdict(list)
+    for s in series:
+        by_key[s.key].append(s)
+    chains: list[list[RecurringSeries]] = []
+    for group in by_key.values():
+        open_chains: list[list[RecurringSeries]] = []
+        for s in sorted(group, key=lambda s: s.first_date):
+            followers = [
+                c
+                for c in open_chains
+                if c[-1].last_date < s.first_date
+                and (s.first_date - c[-1].last_date).days
+                <= CHAIN_GAP_PERIODS * PERIOD_DAYS[c[-1].period]
+            ]
+            if followers:
+                max(followers, key=lambda c: c[-1].last_date).append(s)
+            else:
+                open_chains.append([s])
+        chains.extend(open_chains)
+    result = [SeriesChain(key=c[0].key, series=tuple(c)) for c in chains]
+    result.sort(key=lambda c: (-c.latest.monthly_cost, c.key))
+    return result
+
+
+@dataclass(frozen=True)
+class LineSpan:
+    """What link suggestions need to know about a service line.
+
+    Attributes:
+        id: Identifier of the line.
+        key: Normalized label of the line's latest debits.
+        first_date: Date of the line's first debit.
+        last_date: Date of the line's most recent debit.
+        first_amount: Amount of the line's first price stretch, in centimes.
+        last_amount: Amount of the line's latest price stretch, in centimes.
+        period: Billing rhythm.
+    """
+
+    id: str
+    key: str
+    first_date: datetime.date
+    last_date: datetime.date
+    first_amount: int
+    last_amount: int
+    period: Period
+
+
+def suggest_links(spans: Iterable[LineSpan]) -> list[tuple[str, str]]:
+    """Suggest the lines that are probably one service under a new label.
+
+    A line that stops, then another of a different label that starts within
+    :data:`CHAIN_GAP_PERIODS` periods, at the **exact same** amount.  Measured
+    on a real export: with a tolerance on the amount, 12 suggestions out of 13
+    were coincidences; the exact amount kept only the genuine renames.
+
+    Args:
+        spans: The service lines.
+
+    Returns:
+        ``(earlier line id, later line id)`` pairs, oldest first; each line is
+        the earlier one of at most one pair and the later one of at most one.
+    """
+    ordered = sorted(spans, key=lambda s: s.first_date)
+    taken_as_later: set[str] = set()
+    links: list[tuple[str, str]] = []
+    for earlier in sorted(ordered, key=lambda s: s.last_date):
+        successors = [
+            later
+            for later in ordered
+            if later.id != earlier.id
+            and later.id not in taken_as_later
+            and later.key != earlier.key
+            and later.first_date > earlier.last_date
+            and (later.first_date - earlier.last_date).days
+            <= CHAIN_GAP_PERIODS * PERIOD_DAYS[earlier.period]
+            and later.first_amount == earlier.last_amount
+        ]
+        if successors:
+            later = min(successors, key=lambda s: s.first_date)
+            taken_as_later.add(later.id)
+            links.append((earlier.id, later.id))
+    return links
