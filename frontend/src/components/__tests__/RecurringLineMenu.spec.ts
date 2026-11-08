@@ -103,12 +103,31 @@ describe('RecurringLineMenu', () => {
     expect(cancelled.emitted('action')![0]).toEqual([{ type: 'cancel', date: null }])
   })
 
-  it('declares a cancellation with a date', async () => {
+  it('proposes the date of the last debit, in French', async () => {
+    const wrapper = mountMenu(line({ payment: payment(), last_date: '2026-10-03' }))
+    await click(wrapper, 'Résilié…')
+    const input = wrapper.find('[data-test=cancel-date]')
+    expect((input.element as HTMLInputElement).value).toBe('03/10/2026')
+    await wrapper.find('[data-test=cancel-confirm]').trigger('click')
+    expect(wrapper.emitted('action')![0]).toEqual([{ type: 'cancel', date: '2026-10-03' }])
+  })
+
+  it('declares a cancellation with a French date', async () => {
     const wrapper = mountMenu(line({ payment: payment() }))
     await click(wrapper, 'Résilié…')
-    await wrapper.find('[data-test=cancel-date]').setValue('2026-10-15')
+    await wrapper.find('[data-test=cancel-date]').setValue('15/10/2026')
     await wrapper.find('[data-test=cancel-confirm]').trigger('click')
     expect(wrapper.emitted('action')![0]).toEqual([{ type: 'cancel', date: '2026-10-15' }])
+  })
+
+  it('refuses a date that does not exist, and says so', async () => {
+    const wrapper = mountMenu(line({ payment: payment() }))
+    await click(wrapper, 'Résilié…')
+    await wrapper.find('[data-test=cancel-date]').setValue('31/02/2026')
+    await wrapper.find('[data-test=cancel-confirm]').trigger('click')
+    expect(wrapper.emitted('action')).toBeUndefined()
+    expect(wrapper.find('[data-test=cancel-error]').text()).toContain('jj/mm/aaaa')
+    expect(wrapper.find('[data-test=cancel-date]').exists()).toBe(true)
   })
 
   it('renames, once even if Enter and blur both fire', async () => {

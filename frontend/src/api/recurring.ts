@@ -206,6 +206,20 @@ export function localToday(now: Date = new Date()): string {
   return `${now.getFullYear()}-${month}-${day}`
 }
 
+/**
+ * Read a French date ("15/12/2025", day and month on one or two digits) as
+ * an ISO date (YYYY-MM-DD), or null when it is not a date that exists.
+ */
+export function parseFrenchDate(text: string): string | null {
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text.trim())
+  if (!match) return null
+  const [day, month, year] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  if (month < 1 || month > 12 || day < 1) return null
+  const lastDay = new Date(year, month, 0).getDate()
+  if (day > lastDay) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 /** Format an ISO date (YYYY-MM-DD) as a short French date ("05/02/2026"). */
 export function formatDay(iso: string): string {
   const [y, m, d] = iso.split('-')
