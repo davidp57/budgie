@@ -11,14 +11,14 @@
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CategoryGroupWithCategories, RecurringLine } from '@/api/types'
-import { attentionLines, formatDay } from '@/api/recurring'
+import { attentionLines, formatDay, parseFrenchDate } from '@/api/recurring'
 import type { LineAction } from '@/api/recurring'
 import RecurringLabels from '@/components/RecurringLabels.vue'
 
 const props = defineProps<{
   line: RecurringLine
   groups: CategoryGroupWithCategories[]
-  /** Default date for a cancellation (YYYY-MM-DD). */
+  /** Fallback date for a cancellation when the line has no debit (YYYY-MM-DD). */
   today: string
   busy: boolean
 }>()
@@ -31,6 +31,7 @@ type Editor = 'rename' | 'cancel' | 'category' | 'labels' | null
 const editor = ref<Editor>(null)
 const nameValue = ref('')
 const dateValue = ref('')
+const dateError = ref(false)
 const menu = ref<HTMLDetailsElement | null>(null)
 const nameInput = ref<HTMLInputElement | null>(null)
 const dateInput = ref<HTMLInputElement | null>(null)
@@ -135,7 +136,11 @@ async function open(which: Exclude<Editor, null>): Promise<void> {
   closeMenu()
   editor.value = which
   if (which === 'rename') nameValue.value = props.line.name
-  if (which === 'cancel') dateValue.value = props.today
+  // The useful date is the last debit, not today; typed and shown the French way
+  if (which === 'cancel') {
+    dateValue.value = formatDay(props.line.last_date ?? props.today)
+    dateError.value = false
+  }
   await nextTick()
   if (which === 'rename') nameInput.value?.focus()
   if (which === 'cancel') dateInput.value?.focus()
@@ -173,9 +178,13 @@ function saveName(): void {
 }
 
 function saveCancel(): void {
-  const date = dateValue.value
+  const date = parseFrenchDate(dateValue.value)
+  if (!date) {
+    dateError.value = true
+    return
+  }
   editor.value = null
-  if (date) emit('action', { type: 'cancel', date })
+  emit('action', { type: 'cancel', date })
 }
 
 function onCategory(event: Event): void {
@@ -232,18 +241,29 @@ function onCategory(event: Event): void {
 
     <div v-if="editor === 'cancel'" class="flex flex-wrap items-center gap-1">
       <span class="text-xs">Résilié le</span>
+      <!-- Text, not type="date": a native date field follows the browser's
+           language (mm/dd/yyyy in an English browser), not the page's -->
       <input
         ref="dateInput"
         v-model="dateValue"
-        type="date"
-        class="input input-xs input-bordered"
-        aria-label="Date de résiliation"
+        type="text"
+        inputmode="numeric"
+        placeholder="jj/mm/aaaa"
+        maxlength="10"
+        class="input input-xs input-bordered w-28"
+        :class="{ 'input-error': dateError }"
+        aria-label="Date de résiliation (jj/mm/aaaa)"
         data-test="cancel-date"
+        @input="dateError = false"
+        @keydown.enter="saveCancel"
       />
       <button class="btn btn-xs btn-primary" :disabled="busy" data-test="cancel-confirm" @click="saveCancel">
         Confirmer
       </button>
       <button class="btn btn-xs btn-ghost" @click="editor = null">Annuler</button>
+      <span v-if="dateError" class="text-xs text-error w-full" data-test="cancel-error">
+        Date invalide : saisis-la au format jj/mm/aaaa.
+      </span>
     </div>
 
     <div v-if="editor === 'category' && payment" class="flex items-center gap-1">

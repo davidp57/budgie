@@ -447,7 +447,7 @@ Each line carries its status (subscription, to confirm, not a subscription, canc
 |---|---|
 | **✓ Abonnement** | It is a subscription: it counts in the total |
 | **Pas un abonnement** (not a subscription) | The line moves to the **Pas des abonnements** section, out of the total |
-| **Résilié…** / **Annuler la résiliation** | Records or removes the cancellation date; a cancelled subscription leaves the total |
+| **Résilié…** / **Annuler la résiliation** | Records or removes the cancellation date (typed as dd/mm/yyyy; the date proposed is the last debit); a cancelled subscription leaves the total |
 | **Renommer…** | Names the line |
 | **Accepter le nouveau prix** | After a price increase, takes the new amount as the reference |
 | **⋯** | Category, linked labels (**✕** detaches one), **Ignorer** (ignore), **Retirer le classement** (remove the classification) |

@@ -445,7 +445,7 @@ Chaque ligne porte son statut (abonnement, à confirmer, pas un abonnement, rés
 |---|---|
 | **✓ Abonnement** | C'est un abonnement : il compte dans le total |
 | **Pas un abonnement** | La ligne passe dans la sous-liste **Pas des abonnements**, hors du total |
-| **Résilié…** / **Annuler la résiliation** | Enregistre ou retire la date de résiliation ; un abonnement résilié sort du total |
+| **Résilié…** / **Annuler la résiliation** | Enregistre ou retire la date de résiliation (saisie au format jj/mm/aaaa ; la date proposée est celle du dernier prélèvement) ; un abonnement résilié sort du total |
 | **Renommer…** | Donne un nom à la ligne |
 | **Accepter le nouveau prix** | Après une hausse, prend le nouveau montant comme référence |
 | **⋯** | Catégorie, libellés reliés (avec **✕** pour en détacher un), **Ignorer**, **Retirer le classement** |

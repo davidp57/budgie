@@ -7,6 +7,7 @@ import {
   localToday,
   monthsBefore,
   needsAttention,
+  parseFrenchDate,
   periodLabel,
   renameKind,
   timelinePercent,
@@ -127,5 +128,16 @@ describe('recurring helpers', () => {
     // A confirmed subscription stays up, whatever the heuristic says
     expect(timelineSection(line({ likely_other: true, payment: payment() }))).toBe('main')
     expect(timelineSection(line({ payment: payment({ kind: 'dismissed' }) }))).toBe('ignored')
+  })
+
+  it('reads a French date, and refuses what is not one', () => {
+    expect(parseFrenchDate('15/12/2025')).toBe('2025-12-15')
+    expect(parseFrenchDate(' 5/1/2026 ')).toBe('2026-01-05')
+    expect(parseFrenchDate('29/02/2024')).toBe('2024-02-29')
+    expect(parseFrenchDate('29/02/2025')).toBeNull()
+    expect(parseFrenchDate('31/04/2026')).toBeNull()
+    expect(parseFrenchDate('2026-02-03')).toBeNull()
+    expect(parseFrenchDate('12/31/2025')).toBeNull()
+    expect(parseFrenchDate('')).toBeNull()
   })
 })
