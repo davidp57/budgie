@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from budgie.models.account import Account
 from budgie.models.payee import Payee
+from budgie.models.recurring_payment import RecurringPayment
 from budgie.models.transaction import Transaction
 from budgie.models.user import User
 from budgie.services.crypto import InvalidKeyError, decrypt_field, encrypt_field
@@ -35,6 +36,7 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
     Encrypted fields:
     - ``Transaction.memo`` (all transactions across all user accounts)
     - ``Payee.name`` (all payees belonging to the user)
+    - ``RecurringPayment.name`` and ``RecurringPayment.match_key``
 
     Args:
         db: Async database session (must be open and active).
@@ -63,6 +65,19 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
             # Already encrypted — skip.
         except InvalidKeyError:
             payee.name = encrypt_field(payee.name, key)
+
+    # ── Recurring payments ──────────────────────────────────────────────────────
+    recurring_result = await db.execute(
+        select(RecurringPayment).where(RecurringPayment.user_id == user_id)
+    )
+    for payment in recurring_result.scalars().all():
+        for field in ("name", "match_key"):
+            value = getattr(payment, field)
+            try:
+                decrypt_field(value, key)
+                # Already encrypted — skip.
+            except InvalidKeyError:
+                setattr(payment, field, encrypt_field(value, key))
 
     # ── Mark migration as done ────────────────────────────────────────────────
     user_result = await db.execute(select(User).where(User.id == user_id))

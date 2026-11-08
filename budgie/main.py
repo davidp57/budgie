@@ -33,6 +33,7 @@ from budgie.api import (
     imports,
     payees,
     reconciliation,
+    recurring,
     transactions,
     users,
     webauthn,
@@ -147,6 +148,7 @@ app.include_router(imports.router)
 app.include_router(categorize.router)
 app.include_router(category_rules.router)
 app.include_router(reconciliation.router)
+app.include_router(recurring.router)
 app.include_router(data_reset.router)
 app.include_router(webauthn.router)
 
