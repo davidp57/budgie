@@ -16,11 +16,12 @@
 10. [The Budget (Envelopes)](#10-the-budget-envelopes)
 11. [Virtual Transactions (Forecasts)](#11-virtual-transactions-forecasts)
 12. [Quick Expense](#12-quick-expense)
-13. [Theme & Mobile Installation (PWA)](#13-theme--mobile-installation-pwa)
-14. [Docker Deployment](#14-docker-deployment)
-15. [Backups & Updates](#15-backups--updates)
-16. [FAQ / Troubleshooting](#16-faq--troubleshooting)
-17. [Security & Encryption](#17-security--encryption)
+13. [Subscriptions](#13-subscriptions)
+14. [Theme & Mobile Installation (PWA)](#14-theme--mobile-installation-pwa)
+15. [Docker Deployment](#15-docker-deployment)
+16. [Backups & Updates](#16-backups--updates)
+17. [FAQ / Troubleshooting](#17-faq--troubleshooting)
+18. [Security & Encryption](#18-security--encryption)
 
 ---
 
@@ -38,6 +39,7 @@ It follows the **envelope budgeting** method: every centime of income is assigne
 | 🏷️ Auto-categorization | Based on payee history and custom rules |
 | 💰 Envelope budgeting | Envelopes with optional rollover of unspent balance |
 | 🔮 Virtual transactions | Plan future purchases and see their immediate budget impact |
+| 🔁 Subscriptions | Recurring payments found in your statements, monthly and yearly cost, cancellation follow-up |
 | ⚡ Quick Expense | Fast transaction entry with presets and geolocation suggestions |
 | 🌓 Dark / light theme | Automatic or manual toggle |
 | 📱 Mobile PWA | Add to home screen, full-screen experience |
@@ -414,7 +416,48 @@ If you allow location access (requires HTTPS), Budgie queries nearby shops via O
 
 ---
 
-## 13. Theme & Mobile Installation (PWA)
+## 13. Subscriptions
+
+Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost and follow their cancellations.
+
+Open it from the **Subscriptions** card of the home page (on a phone) or the **Abonnements** entry of the menu (on a computer).
+
+### What Budgie finds
+
+- Imported debits sharing one bank label (dates and card numbers in the label do not count), with an amount stable within 10 %, coming back every month, quarter or year.
+- A monthly or quarterly payment needs at least three debits, a yearly one two; a series of fewer than four debits must repeat the exact same amount.
+- Two subscriptions of different prices at the same merchant give two proposals.
+- Only imported transactions count: a manually entered expense is never proposed.
+
+### Classifying a proposal
+
+Each proposal under **À classer** (to classify) waits for your verdict:
+
+| Button | Effect |
+|---|---|
+| **Abonnement** (subscription) | Counted in the subscriptions total |
+| **Autre paiement récurrent** (other recurring payment) | Taxes, savings, insurance…: followed, but left out of the total |
+| **Ignorer** (ignore) | No longer proposed (listed under **Ignorés**, **Reproposer** brings it back) |
+
+Newly imported statements are attached to the payments already classified, with no extra step.
+
+### What your subscriptions cost
+
+At the top of the page, the total of the active subscriptions per month, and the same total per year: a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth.
+Click a subscription's name to rename it; it can also get a category.
+
+### Cancellations and alerts
+
+- **Résilié…** (cancelled) records the cancellation date: the subscription leaves the total.
+- The **À vérifier** (to check) list reports:
+  - a subscription still debited after its cancellation, with the dates;
+  - a subscription not debited for more than one and a half of its period (**terminé ?**, ended?);
+  - a price change, with the old and new amounts (**Accepter le nouveau prix** confirms it).
+- A new amount at a merchant carrying a single subscription, at the usual debit time, counts as a price change; at a merchant carrying several, it becomes a new proposal.
+
+---
+
+## 14. Theme & Mobile Installation (PWA)
 
 ### Dark / Light Theme
 
@@ -428,7 +471,7 @@ On mobile (Android / iOS), open Budgie in your browser and use the **Add to Home
 
 ---
 
-## 14. Docker Deployment
+## 15. Docker Deployment
 
 ### Deployment on Synology NAS (SSH)
 
@@ -573,7 +616,7 @@ docker compose restart
 
 ---
 
-## 15. Backups & Updates
+## 16. Backups & Updates
 
 ### Automatic Backups
 
@@ -612,7 +655,7 @@ Database migrations run **automatically** on startup — no manual step needed.
 
 ---
 
-## 16. FAQ / Troubleshooting
+## 17. FAQ / Troubleshooting
 
 | Problem | Solution |
 |---|---|
@@ -647,7 +690,7 @@ docker exec budgie /bin/bash /app/scripts/backup.sh /app/data/backups
 
 ---
 
-## 17. Security & Encryption
+## 18. Security & Encryption
 
 ### What Is Encrypted?
 

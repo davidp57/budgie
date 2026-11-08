@@ -356,6 +356,50 @@ export interface ClotureResponse {
   reconciled_count: number
 }
 
+// ── Recurring payments (subscriptions) ───────────────────────────
+
+export type RecurringPeriod = 'monthly' | 'quarterly' | 'yearly'
+export type RecurringKind = 'subscription' | 'other' | 'dismissed'
+export type RecurringStatus = 'active' | 'probably_ended' | 'cancelled'
+
+/** A recurring bank debit not classified yet. Amounts in positive centimes. */
+export interface RecurringCandidate {
+  key: string
+  label: string
+  amount: number
+  period: RecurringPeriod
+  monthly_cost: number
+  occurrences: number
+  first_date: string
+  last_date: string
+}
+
+/** A classified recurring payment and what the debits say about it. */
+export interface RecurringPayment {
+  id: number
+  key: string
+  name: string
+  kind: RecurringKind
+  period: RecurringPeriod
+  amount: number
+  current_amount: number
+  monthly_cost: number
+  category_id: number | null
+  cancelled_at: string | null
+  last_date: string | null
+  occurrences: number
+  status: RecurringStatus
+  price_changed: boolean
+  debits_after_cancellation: string[]
+}
+
+export interface RecurringOverview {
+  payments: RecurringPayment[]
+  monthly_total: number
+  yearly_total: number
+  attention_count: number
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Format centimes to display string (e.g. 10050 → "100,50 €") */

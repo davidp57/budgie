@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Passkey unlock offered after a passphrase unlock** — when the account has a passkey and the device has no passkey unlock yet, Budgie now offers to set it up right after the passphrase is typed (it was only set up when logging in with a passkey); the offer can be declined per device, and **Settings → Passkeys → Passkey unlock → Enable on this device** turns it on at any time
+- **Subscriptions** — Budgie finds the payments that come back every month, quarter or year in the imported bank statements and proposes them; each proposal is classified as a subscription, another recurring payment (taxes, savings, insurance) or ignored. The new **Subscriptions** page (home card on a phone, menu entry on a computer) shows the monthly and yearly cost of the active subscriptions, takes cancellation dates, and lists what needs a look: a debit after a cancellation, a subscription no longer debited, a price change (database migration `b5c6d7e8f9a0`)
 
 ### Removed
 

@@ -68,6 +68,7 @@ budgie/
 │   │   ├── category_rule.py
 │   │   ├── envelope.py
 │   │   ├── payee.py
+│   │   ├── recurring_payment.py   # Débits récurrents classés (abonnements)
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── schemas/                   # Schémas Pydantic requête/réponse
@@ -81,6 +82,8 @@ budgie/
 │   │   ├── envelope.py
 │   │   ├── importer.py
 │   │   ├── payee.py
+│   │   ├── recurring.py           # Propositions, verdicts, coût des abonnements
+│   │   ├── recurring_detection.py # Détection pure des débits récurrents
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── config.py                  # Pydantic Settings
@@ -466,6 +469,19 @@ Documentation interactive disponible à `http://localhost:8000/docs` (Swagger UI
 | `GET/POST` | `/api/payees` |
 | `PUT/DELETE` | `/api/payees/{id}` |
 
+### Paiements récurrents (abonnements)
+
+| Méthode | Chemin | Notes |
+|---|---|---|
+| `GET` | `/api/recurring/candidates` | Débits importés récurrents pas encore classés |
+| `GET` | `/api/recurring` | Paiements classés avec leur statut calculé, plus `monthly_total`, `yearly_total`, `attention_count` |
+| `POST` | `/api/recurring` | `{key, name, amount, period, kind}` — `kind` : `subscription`, `other`, `dismissed` |
+| `PATCH` | `/api/recurring/{id}` | `name`, `kind`, `amount`, `category_id`, `cancelled_at` (envoyer `null` pour effacer) |
+| `DELETE` | `/api/recurring/{id}` | Oublie le verdict : les débits redeviennent une proposition |
+
+Les débits ne sont pas liés à un paiement : ils sont retrouvés à chaque lecture par libellé bancaire normalisé (`match_key`) et montant, après déchiffrement (`services/recurring_detection.py` porte les seuils en constantes nommées).
+Seules les transactions importées (`import_hash` renseigné) comptent, pour qu'une dépense saisie et pointée avec une ligne bancaire ne compte pas deux fois.
+
 ### Utilisateurs
 
 | Méthode | Chemin | Notes |
@@ -846,7 +862,7 @@ Le conteneur expose le port **8000** en interne ; `docker-compose.yml` le mappe 
 
 ### Déploiement Synology
 
-Voir le [Guide utilisateur — section Déploiement Docker](user-guide.md#14-déploiement-docker) pour les instructions complètes (SSH, Portainer, proxy inverse HTTPS).
+Voir le [Guide utilisateur — section Déploiement Docker](user-guide.md#15-déploiement-docker) pour les instructions complètes (SSH, Portainer, proxy inverse HTTPS).
 
 ---
 

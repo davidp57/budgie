@@ -68,6 +68,7 @@ budgie/
 │   │   ├── category_rule.py
 │   │   ├── envelope.py
 │   │   ├── payee.py
+│   │   ├── recurring_payment.py   # Classified recurring debits (subscriptions)
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── schemas/                   # Pydantic request/response schemas
@@ -81,6 +82,8 @@ budgie/
 │   │   ├── envelope.py
 │   │   ├── importer.py
 │   │   ├── payee.py
+│   │   ├── recurring.py           # Candidates, verdicts, subscription costs
+│   │   ├── recurring_detection.py # Pure detection of recurring debits
 │   │   ├── transaction.py
 │   │   └── user.py
 │   ├── config.py                  # Pydantic Settings
@@ -466,6 +469,19 @@ Interactive documentation available at `http://localhost:8000/docs` (Swagger UI)
 | `GET/POST` | `/api/payees` |
 | `PUT/DELETE` | `/api/payees/{id}` |
 
+### Recurring payments (subscriptions)
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/recurring/candidates` | Recurring imported debits not classified yet |
+| `GET` | `/api/recurring` | Classified payments with computed status, plus `monthly_total`, `yearly_total`, `attention_count` |
+| `POST` | `/api/recurring` | `{key, name, amount, period, kind}` — `kind`: `subscription`, `other`, `dismissed` |
+| `PATCH` | `/api/recurring/{id}` | `name`, `kind`, `amount`, `category_id`, `cancelled_at` (send `null` to clear) |
+| `DELETE` | `/api/recurring/{id}` | Forget the verdict: the debits become a candidate again |
+
+Debits are not linked to a payment: they are matched at each read by normalized bank label (`match_key`) and amount, after decryption (`services/recurring_detection.py` holds the thresholds as named constants).
+Only imported transactions (`import_hash` set) count, so that a manual expense reconciled with a bank line is not counted twice.
+
 ### Users
 
 | Method | Path | Notes |
@@ -846,7 +862,7 @@ The container exposes port **8000** internally; `docker-compose.yml` maps it to 
 
 ### Synology Deployment
 
-See the [User Guide — Docker Deployment section](user-guide.md#14-docker-deployment) for full instructions (SSH, Portainer, HTTPS reverse proxy).
+See the [User Guide — Docker Deployment section](user-guide.md#15-docker-deployment) for full instructions (SSH, Portainer, HTTPS reverse proxy).
 
 ---
 

@@ -83,6 +83,7 @@ La vue liste des transactions actuelle est devenue moins utile depuis que le rap
 
 ### Transactions récurrentes
 
+- [x] **Repérer les abonnements** — paiements récurrents détectés dans les relevés importés, classés par l'utilisateur, coût mensuel et annuel, résiliations et alertes (prélèvement après résiliation, abonnement arrêté, hausse de prix)
 - [ ] Définir des modèles de transactions récurrentes (loyer, abonnements…)
 - [ ] Générer automatiquement des transactions virtuelles depuis les plannings récurrents
 - [ ] Notifications pour les transactions récurrentes à venir
