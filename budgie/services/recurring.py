@@ -26,6 +26,7 @@ from budgie.schemas.recurring import (
     RecurringAliasRead,
     RecurringBoard,
     RecurringCandidateRead,
+    RecurringDebitRead,
     RecurringKind,
     RecurringLine,
     RecurringLineRef,
@@ -35,6 +36,8 @@ from budgie.schemas.recurring import (
     RecurringPaymentCreate,
     RecurringPaymentRead,
     RecurringPaymentUpdate,
+    RecurringSummary,
+    RecurringSummaryItem,
 )
 from budgie.services.crypto import decrypt_str, encrypt_str
 from budgie.services.ownership import ensure_references_owned
@@ -57,6 +60,12 @@ from budgie.services.recurring_detection import (
     price_segments,
     suggest_links,
     track_payments,
+)
+from budgie.services.recurring_tags import (
+    delete_user_tags,
+    list_tags,
+    move_tags,
+    tags_by_payment,
 )
 
 #: Months in a year, for the yearly total.
@@ -438,8 +447,8 @@ async def merge_payments(
     """Merge another classified payment into this one.
 
     The payment keeps its name, kind, category and cancellation; the main
-    label and the merged labels of the other become its own, and the other
-    payment is deleted.
+    label, the merged labels and the tags of the other become its own, and
+    the other payment is deleted.
 
     Args:
         db: Async database session.
@@ -483,6 +492,7 @@ async def merge_payments(
             )
         )
         await db.flush()
+    await move_tags(db, other.id, target.id)
     await db.delete(other)
     await db.commit()
     return True
@@ -712,6 +722,90 @@ async def get_board(
     )
 
 
+#: Kinds of payment the user kept: the presentation lists them.
+_KEPT_KINDS = (RecurringKind.SUBSCRIPTION, RecurringKind.OTHER)
+
+
+def _summary_item(
+    read: RecurringPaymentRead, track: PaymentTrack, tag_ids: list[int]
+) -> RecurringSummaryItem:
+    return RecurringSummaryItem(
+        id=read.id,
+        name=read.name,
+        kind=read.kind,
+        period=read.period,
+        amount=read.current_amount,
+        monthly_cost=read.monthly_cost,
+        category_id=read.category_id,
+        first_date=track.dates[0],
+        last_date=track.dates[-1],
+        occurrences=len(track.dates),
+        tag_ids=tag_ids,
+        debits=[
+            RecurringDebitRead(date=d, amount=a)
+            for d, a in reversed(list(zip(track.dates, track.amounts, strict=True)))
+        ],
+        segments=_segments(track.dates, track.amounts),
+    )
+
+
+async def get_summary(
+    db: AsyncSession,
+    user_id: int,
+    session_key: bytes | None = None,
+    today: datetime.date | None = None,
+) -> RecurringSummary:
+    """Return the recurring payments the user kept that run now, with history.
+
+    Kept means classified as a subscription or as another recurring payment;
+    running means not cancelled and debited within the last one and a half
+    periods, judged as of the most recent imported debit (like the board).
+
+    Args:
+        db: Async database session.
+        user_id: Owner user ID.
+        session_key: AES-256-GCM key for decryption, or None.
+        today: Date used when no debit was imported (defaults to today).
+
+    Returns:
+        The presentation.
+    """
+    debits = await _bank_debits(db, user_id, session_key)
+    as_of = max((d.date for d in debits), default=today or datetime.date.today())
+    payments = await _payments(db, user_id, session_key)
+    tracks, unattributed = track_payments(debits, _tracked(payments))
+    tag_ids = await tags_by_payment(db, user_id)
+
+    reads = [(_read(p, tracks[p.id], as_of), tracks[p.id]) for p in payments]
+    items = [
+        _summary_item(read, track, tag_ids.get(read.id, []))
+        for read, track in reads
+        if read.kind in _KEPT_KINDS
+        and read.status is PaymentStatus.ACTIVE
+        and track.dates
+    ]
+    items.sort(key=lambda i: (-i.monthly_cost, i.name.lower()))
+    subscriptions = sum(
+        i.monthly_cost for i in items if i.kind is RecurringKind.SUBSCRIPTION
+    )
+    total = sum(i.monthly_cost for i in items)
+    to_confirm = sum(
+        is_running(c.last_date, c.period, as_of) and not _likely_other(c)
+        for c in chain_series(detect_series(unattributed))
+    )
+    return RecurringSummary(
+        as_of=as_of,
+        items=items,
+        tags=await list_tags(db, user_id, session_key),
+        subscriptions_monthly=subscriptions,
+        subscriptions_yearly=subscriptions * MONTHS_PER_YEAR,
+        monthly_total=total,
+        yearly_total=total * MONTHS_PER_YEAR,
+        to_confirm_count=to_confirm,
+        attention_count=sum(_needs_attention(read) for read, _ in reads),
+    )
+
+
 async def _chain_of(
     db: AsyncSession,
     ref: RecurringLineRef,
@@ -890,7 +984,8 @@ async def link_lines(
 async def reset_payments(db: AsyncSession, user_id: int) -> int:
     """Forget every classification of the user; imported transactions stay.
 
-    Refused link suggestions are classifications too: they are forgotten.
+    Refused link suggestions and tags are classifications too: they are
+    forgotten.
 
     Args:
         db: Async database session.
@@ -910,6 +1005,7 @@ async def reset_payments(db: AsyncSession, user_id: int) -> int:
     )
     for refusal in refusals.scalars().all():
         await db.delete(refusal)
+    await delete_user_tags(db, user_id)
     await db.commit()
     return len(payments)
 

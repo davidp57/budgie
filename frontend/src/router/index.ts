@@ -44,6 +44,11 @@ const router = createRouter({
     {
       path: '/abonnements',
       name: 'abonnements',
+      component: () => import('@/views/SubscriptionsSummaryView.vue'),
+    },
+    {
+      path: '/abonnements/gerer',
+      name: 'abonnements-gerer',
       component: () => import('@/views/SubscriptionsView.vue'),
     },
     {

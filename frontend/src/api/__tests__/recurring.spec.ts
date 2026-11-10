@@ -10,10 +10,11 @@ import {
   parseFrenchDate,
   periodLabel,
   renameKind,
+  subscriptionsRoute,
   timelinePercent,
   timelineSection,
 } from '../recurring'
-import type { RecurringLine, RecurringPayment } from '../types'
+import type { RecurringBoard, RecurringLine, RecurringPayment } from '../types'
 
 function payment(overrides: Partial<RecurringPayment> = {}): RecurringPayment {
   return {
@@ -139,5 +140,32 @@ describe('recurring helpers', () => {
     expect(parseFrenchDate('2026-02-03')).toBeNull()
     expect(parseFrenchDate('12/31/2025')).toBeNull()
     expect(parseFrenchDate('')).toBeNull()
+  })
+})
+
+describe('subscriptionsRoute', () => {
+  function board(lines: RecurringLine[]): RecurringBoard {
+    return {
+      as_of: '2026-11-01',
+      lines,
+      monthly_total: 0,
+      yearly_total: 0,
+      estimated_count: 0,
+      attention_count: 0,
+      refused_count: 0,
+      suggestions: [],
+    }
+  }
+
+  it('leads to the timeline while nothing is kept', () => {
+    expect(subscriptionsRoute(board([]))).toBe('abonnements-gerer')
+    expect(subscriptionsRoute(board([line()]))).toBe('abonnements-gerer')
+    const ignored = line({ payment: payment({ kind: 'dismissed' }) })
+    expect(subscriptionsRoute(board([ignored]))).toBe('abonnements-gerer')
+  })
+
+  it('leads to the presentation once a line is kept', () => {
+    const kept = line({ payment: payment({ kind: 'other' }) })
+    expect(subscriptionsRoute(board([line(), kept]))).toBe('abonnements')
   })
 })

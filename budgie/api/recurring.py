@@ -13,6 +13,9 @@ from budgie.schemas.recurring import (
     RecurringOverview,
     RecurringPaymentCreate,
     RecurringPaymentUpdate,
+    RecurringSummary,
+    RecurringTagCreate,
+    RecurringTagRead,
 )
 from budgie.services.ownership import ForeignReferenceError
 from budgie.services.recurring import (
@@ -23,6 +26,7 @@ from budgie.services.recurring import (
     get_board,
     get_candidates,
     get_overview,
+    get_summary,
     link_lines,
     merge_payments,
     refuse_link,
@@ -30,10 +34,18 @@ from budgie.services.recurring import (
     reset_payments,
     update_payment,
 )
+from budgie.services.recurring_tags import (
+    create_tag,
+    delete_tag,
+    list_tags,
+    tag_payment,
+    untag_payment,
+)
 
 router = APIRouter(prefix="/api/recurring", tags=["recurring"])
 
 _NOT_FOUND = "Recurring payment not found"
+_TAG_NOT_FOUND = "Recurring payment or tag not found"
 
 
 @router.get("/candidates", response_model=list[RecurringCandidateRead])
@@ -53,6 +65,155 @@ async def list_candidates(
         Candidates, most expensive per month first.
     """
     return await get_candidates(db, current_user.id, session_key=session_key)
+
+
+@router.get("/summary", response_model=RecurringSummary)
+async def summary(
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringSummary:
+    """What runs now among the payments the user kept, with their history.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The presentation.
+    """
+    return await get_summary(db, current_user.id, session_key=session_key)
+
+
+@router.get("/tags", response_model=list[RecurringTagRead])
+async def tags(
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> list[RecurringTagRead]:
+    """List the user's tags, by name.
+
+    Args:
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The tags.
+    """
+    return await list_tags(db, current_user.id, session_key=session_key)
+
+
+@router.post(
+    "/tags", status_code=status.HTTP_201_CREATED, response_model=RecurringTagRead
+)
+async def new_tag(
+    schema: RecurringTagCreate,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringTagRead:
+    """Create a tag, or return the user's tag of that name (case aside).
+
+    Args:
+        schema: The tag name.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for encryption.
+
+    Returns:
+        The new or existing tag.
+    """
+    return await create_tag(db, schema.name, current_user.id, session_key=session_key)
+
+
+@router.delete("/tags/{tag_id}", response_model=RecurringSummary)
+async def remove_tag(
+    tag_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringSummary:
+    """Delete a tag; the payments that carried it lose it.
+
+    Args:
+        tag_id: Tag primary key.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The updated presentation.
+
+    Raises:
+        HTTPException: 404 if the tag is not the user's.
+    """
+    if not await delete_tag(db, tag_id, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_TAG_NOT_FOUND
+        )
+    return await get_summary(db, current_user.id, session_key=session_key)
+
+
+@router.put("/{payment_id}/tags/{tag_id}", response_model=RecurringSummary)
+async def put_tag(
+    payment_id: int,
+    tag_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringSummary:
+    """Put a tag on a payment.
+
+    Args:
+        payment_id: Payment primary key.
+        tag_id: Tag primary key.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The updated presentation.
+
+    Raises:
+        HTTPException: 404 if the payment or the tag is not the user's.
+    """
+    if not await tag_payment(db, payment_id, tag_id, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_TAG_NOT_FOUND
+        )
+    return await get_summary(db, current_user.id, session_key=session_key)
+
+
+@router.delete("/{payment_id}/tags/{tag_id}", response_model=RecurringSummary)
+async def take_tag_off(
+    payment_id: int,
+    tag_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    session_key: SessionKey,
+) -> RecurringSummary:
+    """Take a tag off a payment.
+
+    Args:
+        payment_id: Payment primary key.
+        tag_id: Tag primary key.
+        db: Async database session.
+        current_user: JWT-authenticated user.
+        session_key: AES-256-GCM session key for decryption.
+
+    Returns:
+        The updated presentation.
+
+    Raises:
+        HTTPException: 404 if the payment or the tag is not the user's.
+    """
+    if not await untag_payment(db, payment_id, tag_id, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_TAG_NOT_FOUND
+        )
+    return await get_summary(db, current_user.id, session_key=session_key)
 
 
 @router.get("", response_model=RecurringOverview)

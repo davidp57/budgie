@@ -421,6 +421,8 @@ Si vous autorisez l'accès à votre position (nécessite HTTPS), Budgie interrog
 Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements, d'où ils viennent, et suivre leurs résiliations.
 
 On y accède par l'entrée **Abos** du dock en bas (sur téléphone), par l'entrée **Abonnements** du menu (sur ordinateur), ou par la carte **Abonnements** de la page d'accueil.
+La page **Abonnements** présente ce que tu paies chaque mois ; le bouton **Gérer** ouvre la frise où l'on classe les paiements repérés.
+Tant que rien n'est classé, la carte de l'accueil mène directement à **Gérer**.
 
 ### Ce que Budgie repère
 
@@ -430,13 +432,32 @@ On y accède par l'entrée **Abos** du dock en bas (sur téléphone), par l'entr
 - Seules les transactions importées comptent : une dépense saisie à la main n'est jamais proposée.
 - La situation est celle du **dernier relevé importé** : un paiement « tourne » s'il a été prélevé moins d'une fois et demie son rythme avant le dernier prélèvement importé. La page indique cette date quand elle est passée.
 
-### Le total
+### La présentation
 
-En haut de la page, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième).
+La page **Abonnements** liste les paiements récurrents **en cours** que tu as gardés : les abonnements confirmés, et aussi ceux classés « pas un abonnement » (un virement d'épargne, une assurance), du plus cher au moins cher par mois.
+Les lignes ignorées, les abonnements résiliés ou terminés et les lignes pas encore classées n'y figurent pas : ils restent dans **Gérer**.
+
+- En tête, le total mensuel et annuel de tout ce qui est listé, et à part celui des seuls abonnements.
+- Un bandeau rappelle ce qui reste à faire dans **Gérer** (lignes **à confirmer**, abonnements **à vérifier**) ; un appui dessus y mène.
+- Chaque ligne montre son nom, son rythme, depuis quand il tourne, son coût mensuel (et son montant par trimestre ou par an quand il n'est pas mensuel) et ses étiquettes.
+- Un appui sur une ligne la déplie : ses étiquettes, ses tarifs successifs (le tarif actuel « depuis… », les précédents « de… à… », avec le nombre de prélèvements) et la liste de ses prélèvements, du plus récent au plus ancien.
+
+### Les étiquettes
+
+Des étiquettes libres (Téléphone, Épargne, Streaming…) regroupent tes paiements comme tu l'entends ; un paiement peut en porter plusieurs.
+
+- Dans une ligne dépliée, un appui sur une étiquette la pose ou la retire ; **Nouvelle étiquette** puis **Ajouter** en crée une et la pose aussitôt (taper le nom d'une étiquette existante, même avec d'autres majuscules, pose celle-ci).
+- Une étiquette qu'aucun paiement ne porte plus peut être supprimée avec sa **×**.
+- En tête de page, une pastille par étiquette affiche son sous-total mensuel ; un appui filtre la liste sur cette étiquette, et les totaux suivent le filtre. Plusieurs pastilles se cumulent (un paiement est montré s'il porte l'une d'elles) ; **Tout** retire le filtre.
+- Les noms d'étiquettes sont chiffrés comme tes autres libellés.
+
+### Gérer : le total
+
+En haut de la page **Gérer**, le total des abonnements en cours ramené au mois et à l'année (un abonnement trimestriel compte pour un tiers de son montant chaque mois, un annuel pour un douzième).
 Il compte d'emblée les paiements repérés automatiquement, sans rien avoir à classer ; ceux qui n'ont pas été confirmés portent **à confirmer** dans la liste.
 Les virements et les paiements de 100 €/mois ou plus (impôts, épargne, assurance…) n'y entrent pas.
 
-### La liste
+### Gérer : la frise
 
 Une frise sur deux ans : une ligne par service, de son premier à son dernier prélèvement, ses tarifs successifs sur la même ligne, classées par ordre alphabétique (un même service passé sous un autre libellé, comme « Tesla Lu » et « Tesla Motors Lux », se retrouve sur la ligne voisine).
 Une barre pleine est un abonnement confirmé, une barre claire un abonnement repéré automatiquement, une barre grise un paiement arrêté ou résilié.
@@ -468,7 +489,7 @@ Sous la liste, deux sous-listes repliées, qui se déplient d'un clic :
 
 ### Repartir de zéro
 
-**Réinitialiser les classements…**, en bas de la page, efface après confirmation tout ce que tu as classé (abonnements confirmés, « pas un abonnement », ignorés, libellés reliés, résiliations, suggestions refusées).
+**Réinitialiser les classements…**, en bas de la page **Gérer**, efface après confirmation tout ce que tu as classé (abonnements confirmés, « pas un abonnement », ignorés, libellés reliés, résiliations, étiquettes, suggestions refusées).
 Les transactions importées ne sont pas touchées : la page repart de la détection seule.
 
 ---

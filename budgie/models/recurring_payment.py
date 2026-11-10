@@ -5,7 +5,17 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from budgie.database import Base
@@ -13,6 +23,26 @@ from budgie.database import Base
 if TYPE_CHECKING:
     from budgie.models.category import Category
     from budgie.models.user import User
+
+
+#: Link table between recurring payments and the user's tags (many to many).
+recurring_payment_tags = Table(
+    "recurring_payment_tags",
+    Base.metadata,
+    Column(
+        "payment_id",
+        Integer,
+        ForeignKey("recurring_payments.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id",
+        Integer,
+        ForeignKey("recurring_tags.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
 
 
 class RecurringPayment(Base):
@@ -68,6 +98,9 @@ class RecurringPayment(Base):
         back_populates="payment",
         cascade="all, delete-orphan",
         order_by="RecurringPaymentAlias.id",
+    )
+    tags: Mapped[list[RecurringTag]] = relationship(
+        secondary=recurring_payment_tags, back_populates="payments"
     )
 
 
@@ -132,3 +165,35 @@ class RecurringLinkRefusal(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="recurring_link_refusals")
+
+
+class RecurringTag(Base):
+    """A free tag the user puts on recurring payments ("Phone", "Savings").
+
+    A payment carries any number of tags, and a tag any number of payments.
+    Names are unique per user, compared after decryption (in Python, never in
+    SQL, since they are encrypted).
+
+    Attributes:
+        id: Primary key.
+        user_id: Owner of the tag.
+        name: Display name (encrypted at rest).
+        created_at: Timestamp of record creation.
+    """
+
+    __tablename__ = "recurring_tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="recurring_tags")
+    payments: Mapped[list[RecurringPayment]] = relationship(
+        secondary=recurring_payment_tags, back_populates="tags"
+    )
