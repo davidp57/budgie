@@ -15,6 +15,7 @@ from budgie.models.recurring_payment import (
     RecurringLinkRefusal,
     RecurringPayment,
     RecurringPaymentAlias,
+    RecurringTag,
 )
 from budgie.models.transaction import Transaction
 from budgie.models.user import User
@@ -43,6 +44,7 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
     - ``RecurringPayment.name`` and ``RecurringPayment.match_key``
     - ``RecurringPaymentAlias.match_key``
     - ``RecurringLinkRefusal.earlier_key`` and ``RecurringLinkRefusal.later_key``
+    - ``RecurringTag.name``
 
     Args:
         db: Async database session (must be open and active).
@@ -107,6 +109,16 @@ async def encrypt_user_data(db: AsyncSession, user_id: int, key: bytes) -> None:
                 # Already encrypted — skip.
             except InvalidKeyError:
                 setattr(refusal, field, encrypt_field(value, key))
+
+    tag_result = await db.execute(
+        select(RecurringTag).where(RecurringTag.user_id == user_id)
+    )
+    for tag in tag_result.scalars().all():
+        try:
+            decrypt_field(tag.name, key)
+            # Already encrypted — skip.
+        except InvalidKeyError:
+            tag.name = encrypt_field(tag.name, key)
 
     # ── Mark migration as done ────────────────────────────────────────────────
     user_result = await db.execute(select(User).where(User.id == user_id))

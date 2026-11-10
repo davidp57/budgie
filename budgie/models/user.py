@@ -15,7 +15,11 @@ if TYPE_CHECKING:
     from budgie.models.category import CategoryGroup
     from budgie.models.category_rule import CategoryRule
     from budgie.models.payee import Payee
-    from budgie.models.recurring_payment import RecurringLinkRefusal, RecurringPayment
+    from budgie.models.recurring_payment import (
+        RecurringLinkRefusal,
+        RecurringPayment,
+        RecurringTag,
+    )
     from budgie.models.webauthn import WebAuthnCredential
 
 
@@ -86,5 +90,8 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     recurring_link_refusals: Mapped[list[RecurringLinkRefusal]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    recurring_tags: Mapped[list[RecurringTag]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

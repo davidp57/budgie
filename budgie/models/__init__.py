@@ -14,6 +14,8 @@ from budgie.models.recurring_payment import (
     RecurringLinkRefusal,
     RecurringPayment,
     RecurringPaymentAlias,
+    RecurringTag,
+    recurring_payment_tags,
 )
 from budgie.models.transaction import SplitTransaction, Transaction
 from budgie.models.user import User
@@ -30,9 +32,11 @@ __all__ = [
     "RecurringLinkRefusal",
     "RecurringPayment",
     "RecurringPaymentAlias",
+    "RecurringTag",
     "SplitTransaction",
     "Transaction",
     "User",
     "WebAuthnCredential",
     "envelope_categories",
+    "recurring_payment_tags",
 ]

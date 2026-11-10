@@ -2,8 +2,9 @@
 
 import datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 from budgie.services.recurring_detection import PaymentStatus, Period
 
@@ -308,3 +309,116 @@ class RecurringLinkRefuse(BaseModel):
 
     earlier_key: str = Field(..., min_length=1, max_length=200)
     later_key: str = Field(..., min_length=1, max_length=200)
+
+
+#: Longest tag name accepted, in characters.
+TAG_NAME_MAX_LENGTH = 40
+
+#: A tag name: surrounding spaces dropped, never empty.
+TagName = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TAG_NAME_MAX_LENGTH
+    ),
+]
+
+
+class RecurringTagCreate(BaseModel):
+    """A tag to create (or to find, when the user already has that name).
+
+    Attributes:
+        name: Display name.
+    """
+
+    name: TagName
+
+
+class RecurringTagRead(BaseModel):
+    """A tag of the user.
+
+    Attributes:
+        id: Primary key.
+        name: Display name.
+    """
+
+    id: int
+    name: str
+
+
+class RecurringDebitRead(BaseModel):
+    """One debit of a recurring payment.
+
+    Attributes:
+        date: Date of the debit.
+        amount: Amount debited, in positive centimes.
+    """
+
+    date: datetime.date
+    amount: int
+
+
+class RecurringSummaryItem(BaseModel):
+    """A recurring payment that runs now, as the presentation shows it.
+
+    Attributes:
+        id: Payment primary key.
+        name: Display name.
+        kind: Subscription, or other recurring payment.
+        period: Billing rhythm.
+        amount: Amount of the most recent debit, in centimes.
+        monthly_cost: That amount brought back to one month, in centimes.
+        category_id: Category, if any.
+        first_date: Date of the first debit: since when it runs.
+        last_date: Date of the most recent debit.
+        occurrences: Number of debits.
+        tag_ids: The payment's tags, sorted.
+        debits: Every debit, most recent first.
+        segments: Stretches of one price, oldest first.
+    """
+
+    id: int
+    name: str
+    kind: RecurringKind
+    period: Period
+    amount: int
+    monthly_cost: int
+    category_id: int | None
+    first_date: datetime.date
+    last_date: datetime.date
+    occurrences: int
+    tag_ids: list[int]
+    debits: list[RecurringDebitRead]
+    segments: list[PriceSegmentRead]
+
+
+class RecurringSummary(BaseModel):
+    """What the user pays every month, and for what: the presentation page.
+
+    Lists the classified payments kept by the user (subscriptions and other
+    recurring payments) that still run; dismissed, cancelled and stopped ones
+    stay on the timeline only.
+
+    Attributes:
+        as_of: Reference date of "running": the date of the most recent
+            imported debit (today when there is none), as on the timeline.
+        items: The running payments, most expensive per month first.
+        tags: Every tag of the user, by name.
+        subscriptions_monthly: Monthly cost of the subscriptions, in centimes.
+        subscriptions_yearly: ``subscriptions_monthly`` times twelve.
+        monthly_total: Monthly cost of every item, in centimes.
+        yearly_total: ``monthly_total`` times twelve.
+        to_confirm_count: Running lines not classified yet (not counted
+            here), to confirm on the timeline.
+        attention_count: Classified subscriptions that need a look on the
+            timeline.
+    """
+
+    as_of: datetime.date
+    items: list[RecurringSummaryItem]
+    tags: list[RecurringTagRead]
+    subscriptions_monthly: int
+    subscriptions_yearly: int
+    monthly_total: int
+    yearly_total: int
+    to_confirm_count: int
+    attention_count: int
