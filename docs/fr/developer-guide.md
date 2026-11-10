@@ -485,10 +485,17 @@ Documentation interactive disponible à `http://localhost:8000/docs` (Swagger UI
 | `GET` | `/api/recurring/board` | Chaque ligne de service (classée ou non) avec ses tarifs, `running`, `likely_other`, les totaux, `as_of` (date du dernier débit importé), les suggestions de lien (les refusées écartées avant l'appariement) et `refused_count` |
 | `POST` | `/api/recurring/link` | Références de lignes `{earlier, later}` — la plus récente absorbe l'autre (classée abonnement s'il le faut) |
 | `POST` | `/api/recurring/link/refuse` | `{earlier_key, later_key}` — refuse une suggestion de lien, qui ne revient plus (table `recurring_link_refusals`) |
-| `DELETE` | `/api/recurring` | Oublie tous les classements de l'utilisateur ; les transactions importées restent |
+| `DELETE` | `/api/recurring` | Oublie tous les classements de l'utilisateur (étiquettes comprises) ; les transactions importées restent |
+| `GET` | `/api/recurring/summary` | La page de présentation : les paiements gardés (`subscription` ou `other`) encore en cours à la date `as_of`, chacun avec ses prélèvements (du plus récent au plus ancien), ses tarifs et ses `tag_ids` ; les `tags` de l'utilisateur ; `subscriptions_monthly`/`_yearly`, `monthly_total`/`yearly_total` (tous les paiements listés), `to_confirm_count` (lignes en cours pas encore classées) et `attention_count` |
+| `GET` | `/api/recurring/tags` | Les étiquettes de l'utilisateur, par nom |
+| `POST` | `/api/recurring/tags` | `{name}` — crée une étiquette ; renvoie celle qui existe déjà si l'utilisateur a ce nom (sans tenir compte de la casse) |
+| `DELETE` | `/api/recurring/tags/{tag_id}` | Supprime une étiquette ; renvoie la présentation |
+| `PUT` | `/api/recurring/{id}/tags/{tag_id}` | Pose une étiquette sur un paiement ; renvoie la présentation |
+| `DELETE` | `/api/recurring/{id}/tags/{tag_id}` | Retire une étiquette d'un paiement ; renvoie la présentation |
 
 Les débits ne sont pas liés à un paiement : ils sont retrouvés à chaque lecture par libellé bancaire normalisé (`match_key`, plus les libellés rattachés au paiement dans `recurring_payment_aliases`) et montant, après déchiffrement (`services/recurring_detection.py` porte les seuils en constantes nommées).
 Seules les transactions importées (`import_hash` renseigné) comptent, pour qu'une dépense saisie et pointée avec une ligne bancaire ne compte pas deux fois.
+Les étiquettes vivent dans `recurring_tags` (une ligne par étiquette de l'utilisateur, `name` chiffré) et `recurring_payment_tags` (la liaison plusieurs-à-plusieurs) ; les noms sont comparés et triés en Python après déchiffrement, et les routes d'étiquettes répondent 404 sauf si le paiement et l'étiquette appartiennent tous deux à l'utilisateur.
 
 ### Utilisateurs
 

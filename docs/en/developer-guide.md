@@ -485,10 +485,17 @@ Interactive documentation available at `http://localhost:8000/docs` (Swagger UI)
 | `GET` | `/api/recurring/board` | Every service line (classified or not) with its price segments, `running`, `likely_other`, the totals, `as_of` (date of the most recent imported debit), link suggestions (refused ones left out before pairing) and `refused_count` |
 | `POST` | `/api/recurring/link` | `{earlier, later}` line refs — the later line absorbs the earlier one (classified as a subscription if needed) |
 | `POST` | `/api/recurring/link/refuse` | `{earlier_key, later_key}` — refuse a link suggestion; it is not made again (stored in `recurring_link_refusals`) |
-| `DELETE` | `/api/recurring` | Forget every classification of the user; imported transactions stay |
+| `DELETE` | `/api/recurring` | Forget every classification of the user (tags included); imported transactions stay |
+| `GET` | `/api/recurring/summary` | The presentation page: the kept payments (`subscription` or `other`) still running as of `as_of`, each with its debits (most recent first), price segments and `tag_ids`; the user's `tags`; `subscriptions_monthly`/`_yearly`, `monthly_total`/`yearly_total` (every item), `to_confirm_count` (running lines not classified yet) and `attention_count` |
+| `GET` | `/api/recurring/tags` | The user's tags, by name |
+| `POST` | `/api/recurring/tags` | `{name}` — create a tag; returns the existing one when the user already has that name (case aside) |
+| `DELETE` | `/api/recurring/tags/{tag_id}` | Delete a tag; returns the summary |
+| `PUT` | `/api/recurring/{id}/tags/{tag_id}` | Put a tag on a payment; returns the summary |
+| `DELETE` | `/api/recurring/{id}/tags/{tag_id}` | Take a tag off a payment; returns the summary |
 
 Debits are not linked to a payment: they are matched at each read by normalized bank label (`match_key`, plus the labels merged into the payment in `recurring_payment_aliases`) and amount, after decryption (`services/recurring_detection.py` holds the thresholds as named constants).
 Only imported transactions (`import_hash` set) count, so that a manual expense reconciled with a bank line is not counted twice.
+Tags live in `recurring_tags` (one row per user tag, `name` encrypted) and `recurring_payment_tags` (the many-to-many link); names are compared and sorted in Python after decryption, and the tag routes answer 404 unless both the payment and the tag are the user's.
 
 ### Users
 
