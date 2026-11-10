@@ -12,7 +12,7 @@ import { useBudgetStore } from '@/stores/budget'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { useAppVersion } from '@/composables/useAppVersion'
 import { listAccounts } from '@/api/accounts'
-import { getRecurringBoard } from '@/api/recurring'
+import { getRecurringBoard, subscriptionsRoute } from '@/api/recurring'
 import DrawerCard from '@/components/DrawerCard.vue'
 import QuickExpense from '@/components/QuickExpense.vue'
 import type { Account, EnvelopeLine, RecurringBoard } from '@/api/types'
@@ -132,7 +132,7 @@ onMounted(async () => {
       v-if="recurring"
       class="w-full flex items-center gap-3 rounded-2xl border border-base-300 bg-base-100 px-4 py-3 mb-5 text-left"
       data-test="subscriptions-card"
-      @click="router.push({ name: 'abonnements' })"
+      @click="router.push({ name: subscriptionsRoute(recurring) })"
     >
       <span class="text-xl">🔁</span>
       <span class="flex-1 text-sm font-semibold">

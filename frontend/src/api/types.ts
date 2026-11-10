@@ -442,6 +442,54 @@ export interface RecurringLine {
   segments: PriceSegment[]
 }
 
+/** A free tag the user puts on recurring payments ("Téléphone", "Épargne"). */
+export interface RecurringTag {
+  id: number
+  name: string
+}
+
+/** One debit of a recurring payment. Amount in positive centimes. */
+export interface RecurringDebit {
+  date: string
+  amount: number
+}
+
+/** A recurring payment that runs now, as the presentation page shows it. */
+export interface RecurringSummaryItem {
+  id: number
+  name: string
+  kind: RecurringKind
+  period: RecurringPeriod
+  /** Amount of the most recent debit, in centimes. */
+  amount: number
+  monthly_cost: number
+  category_id: number | null
+  first_date: string
+  last_date: string
+  occurrences: number
+  tag_ids: number[]
+  /** Every debit, most recent first. */
+  debits: RecurringDebit[]
+  /** Stretches of one price, oldest first. */
+  segments: PriceSegment[]
+}
+
+/** What the user pays every month, and for what: the presentation page. */
+export interface RecurringSummary {
+  /** Date of the most recent imported debit: "running" is judged as of it. */
+  as_of: string
+  items: RecurringSummaryItem[]
+  tags: RecurringTag[]
+  subscriptions_monthly: number
+  subscriptions_yearly: number
+  monthly_total: number
+  yearly_total: number
+  /** Running lines not classified yet, to confirm in "Gérer". */
+  to_confirm_count: number
+  /** Classified subscriptions that need a look in "Gérer". */
+  attention_count: number
+}
+
 export interface RecurringLinkSuggestion {
   earlier_id: string
   later_id: string

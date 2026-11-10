@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * SubscriptionsView — what recurring debits cost, as one timeline.
+ * SubscriptionsView — the "Gérer" page: where recurring debits are
+ * classified, as one timeline. The presentation of what runs is the
+ * subscriptions page itself (SubscriptionsSummaryView).
  *
  * The total of the running subscriptions at the top, then one line per
  * service over two years (successive prices on the same line), each with its
@@ -130,7 +132,15 @@ onMounted(load)
 
 <template>
   <div class="px-4 py-5 lg:px-8 lg:py-6 max-w-5xl mx-auto pb-24">
-    <h1 class="text-xl font-bold mb-4">Abonnements</h1>
+    <div class="flex items-center gap-2 mb-4">
+      <RouterLink
+        :to="{ name: 'abonnements' }"
+        class="btn btn-ghost btn-sm btn-circle"
+        aria-label="Retour à la présentation des abonnements"
+        data-test="back-to-summary"
+      >←</RouterLink>
+      <h1 class="text-xl font-bold">Gérer les abonnements</h1>
+    </div>
 
     <div v-if="loading" class="flex flex-col gap-3">
       <div v-for="i in 3" :key="i" class="skeleton h-20 rounded-2xl" />
@@ -208,7 +218,7 @@ onMounted(load)
         >
           <p class="text-sm">
             Effacer tous tes classements (abonnements confirmés, « pas un abonnement », ignorés,
-            libellés reliés, résiliations) et tes suggestions refusées ? Les transactions importées
+            libellés reliés, résiliations, étiquettes) et tes suggestions refusées ? Les transactions importées
             ne sont pas touchées : la page repart de la détection seule. Ce n'est pas réversible.
           </p>
           <div class="flex gap-2">

@@ -7,7 +7,13 @@ import type {
   RecurringLineRef,
   RecurringPayment,
   RecurringPeriod,
+  RecurringSummary,
+  RecurringSummaryItem,
+  RecurringTag,
 } from './types'
+
+/** Months in a year, for the yearly totals. */
+const MONTHS_PER_YEAR = 12
 
 /** Every service line, classified or not, and what runs now. */
 export async function getRecurringBoard(): Promise<RecurringBoard> {
@@ -81,6 +87,104 @@ export async function refuseLink(earlierKey: string, laterKey: string): Promise<
 export async function resetRecurring(): Promise<RecurringBoard> {
   const { data } = await client.delete<RecurringBoard>('/api/recurring')
   return data
+}
+
+/** The running payments the user kept, with their history: the presentation page. */
+export async function getRecurringSummary(): Promise<RecurringSummary> {
+  const { data } = await client.get<RecurringSummary>('/api/recurring/summary')
+  return data
+}
+
+/** Create a tag, or get the user's tag of that name (case aside). */
+export async function createRecurringTag(name: string): Promise<RecurringTag> {
+  const { data } = await client.post<RecurringTag>('/api/recurring/tags', { name })
+  return data
+}
+
+/** Delete a tag; the payments that carried it lose it. */
+export async function deleteRecurringTag(tagId: number): Promise<RecurringSummary> {
+  const { data } = await client.delete<RecurringSummary>(`/api/recurring/tags/${tagId}`)
+  return data
+}
+
+/** Put a tag on a payment. */
+export async function tagRecurring(paymentId: number, tagId: number): Promise<RecurringSummary> {
+  const { data } = await client.put<RecurringSummary>(`/api/recurring/${paymentId}/tags/${tagId}`)
+  return data
+}
+
+/** Take a tag off a payment. */
+export async function untagRecurring(paymentId: number, tagId: number): Promise<RecurringSummary> {
+  const { data } = await client.delete<RecurringSummary>(
+    `/api/recurring/${paymentId}/tags/${tagId}`,
+  )
+  return data
+}
+
+/** The items carrying any of the selected tags; every item when none is selected. */
+export function filterByTags(
+  items: RecurringSummaryItem[],
+  selected: number[],
+): RecurringSummaryItem[] {
+  if (selected.length === 0) return items
+  return items.filter((i) => i.tag_ids.some((id) => selected.includes(id)))
+}
+
+/** Totals of a list of items: the subscriptions apart, and every item. In centimes. */
+export interface SummaryTotals {
+  subscriptionsMonthly: number
+  subscriptionsYearly: number
+  monthly: number
+  yearly: number
+}
+
+/** What a list of items costs per month and per year, subscriptions apart. */
+export function summaryTotals(items: RecurringSummaryItem[]): SummaryTotals {
+  const monthly = items.reduce((sum, i) => sum + i.monthly_cost, 0)
+  const subscriptionsMonthly = items
+    .filter((i) => i.kind === 'subscription')
+    .reduce((sum, i) => sum + i.monthly_cost, 0)
+  return {
+    subscriptionsMonthly,
+    subscriptionsYearly: subscriptionsMonthly * MONTHS_PER_YEAR,
+    monthly,
+    yearly: monthly * MONTHS_PER_YEAR,
+  }
+}
+
+/** A tag with what its payments cost per month. */
+export interface TagSubtotal {
+  tag: RecurringTag
+  monthly: number
+  count: number
+}
+
+/** Monthly subtotal of each tag carried by at least one item, in the tags' order. */
+export function tagSubtotals(items: RecurringSummaryItem[], tags: RecurringTag[]): TagSubtotal[] {
+  return tags
+    .map((tag) => {
+      const tagged = items.filter((i) => i.tag_ids.includes(tag.id))
+      return {
+        tag,
+        monthly: tagged.reduce((sum, i) => sum + i.monthly_cost, 0),
+        count: tagged.length,
+      }
+    })
+    .filter((s) => s.count > 0)
+}
+
+/**
+ * Where the Home card leads: the presentation once a line is kept
+ * (classified, not ignored), the timeline to classify lines before that.
+ */
+export function subscriptionsRoute(board: RecurringBoard): 'abonnements' | 'abonnements-gerer' {
+  const kept = board.lines.some((l) => l.payment !== null && l.payment.kind !== 'dismissed')
+  return kept ? 'abonnements' : 'abonnements-gerer'
+}
+
+/** Since when a payment runs, from its first debit ("depuis févr. 2024"). */
+export function sinceLabel(firstDate: string): string {
+  return `depuis ${formatMonth(firstDate)}`
 }
 
 const PERIOD_LABELS: Record<RecurringPeriod, string> = {
