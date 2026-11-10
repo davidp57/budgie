@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ownership of referenced objects** — categories, envelopes and payees referenced by categorization rules, payees and transactions must belong to the current user (otherwise `404`); assigning categories to an envelope no longer detaches categories the user does not own; names resolved in the reconciliation view are restricted to the user's own categories and envelopes. A record that already points at another user's object must have that reference changed or cleared before it can be edited
 - **Category rule updates validated** — updating a rule now applies the same regex checks as creating one, on the rule as it will be stored (so a stored rule with an invalid regex must get a valid pattern on its next edit); such a rule is skipped instead of failing the whole request
 - **Subscriptions: cancellation date** — "Cancelled…" now proposes the date of the last detected debit instead of today, typed and shown as dd/mm/yyyy (a native date field followed the browser's language, mm/dd/yyyy in an English browser); a date that does not exist is refused with a message
+- **Subscriptions on a phone** — the Subscriptions page now has its own **Abos** entry in the mobile bottom dock (seven entries); it was only reachable from a home page card on a phone
 
 ---
 

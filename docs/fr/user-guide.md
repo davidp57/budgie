@@ -197,18 +197,20 @@ CORS (Cross-Origin Resource Sharing) contrôle **quels sites web sont autorisés
 
 L'interface responsive de Budgie s'adapte à l'appareil :
 
-- **Mobile** : un **dock en bas** (5 icônes) pour un accès rapide.
+- **Mobile** : un **dock en bas** (7 icônes) pour un accès rapide.
 - **Desktop** : une **barre latérale** à gauche avec des libellés.
 
-La navigation (AppNav) propose 5 sections :
+La navigation (AppNav) propose 7 sections, dans le même ordre sur les deux :
 
 | Icône | Page | Description |
 |---|---|---|
 | 🏠 | **Accueil** | Résumé du mois : revenus, dépenses, solde, mois précédent/suivant |
 | 💰 | **Budget** | Vue des enveloppes avec édition inline du budget alloué |
-| ⚡ | **Dépense rapide** | Saisie rapide d'une transaction avec préréglages |
 | 📋 | **Dépenses** | Vue des dépenses avec filtres, tri, regroupement, édition et dashboard mensuel |
-| ⚙️ | **Paramètres** | Comptes, catégories, enveloppes, règles, import, thème |
+| 🔁 | **Abonnements** | Paiements récurrents et leur coût ; libellé **Abos** dans le dock mobile |
+| ⇄ | **Pointage** | Rapprochement des transactions avec le relevé bancaire |
+| ⬆️ | **Importer** | Import des relevés bancaires |
+| ⚙️ | **Réglages** | Comptes, catégories, enveloppes, règles, thème |
 
 ### Page Accueil
 
@@ -418,7 +420,7 @@ Si vous autorisez l'accès à votre position (nécessite HTTPS), Budgie interrog
 
 Budgie repère dans tes relevés importés les paiements qui reviennent à intervalle régulier, pour montrer ce que coûtent tes abonnements, d'où ils viennent, et suivre leurs résiliations.
 
-On y accède par la carte **Abonnements** de la page d'accueil (sur téléphone) ou par l'entrée **Abonnements** du menu (sur ordinateur).
+On y accède par l'entrée **Abos** du dock en bas (sur téléphone), par l'entrée **Abonnements** du menu (sur ordinateur), ou par la carte **Abonnements** de la page d'accueil.
 
 ### Ce que Budgie repère
 
