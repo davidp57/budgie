@@ -111,6 +111,22 @@ describe('SubscriptionsSummaryView', () => {
     expect(wrapper.findAllComponents(RecurringSummaryRow)).toHaveLength(4)
   })
 
+  it('drops a filter whose tag no payment carries any more', async () => {
+    const { wrapper } = await mountView()
+    await wrapper.findAll('[data-test=tag-filter]')[0]!.trigger('click')
+    expect(wrapper.findAllComponents(RecurringSummaryRow)).toHaveLength(1)
+
+    // The only payment tagged "Épargne" loses it: the chip goes, so must the filter.
+    const untagged = summary()
+    untagged.items = untagged.items.map((i) => (i.id === 1 ? { ...i, tag_ids: [] } : i))
+    vi.mocked(untagRecurring).mockResolvedValue(untagged)
+    wrapper.findAllComponents(RecurringSummaryRow)[0]!.vm.$emit('untag', 1, 2)
+    await flushPromises()
+
+    expect(wrapper.findAllComponents(RecurringSummaryRow)).toHaveLength(4)
+    expect(wrapper.find('[data-test=tag-filter-all]').attributes('aria-pressed')).toBe('true')
+  })
+
   it('points to "Gérer" for what is left to confirm or to check', async () => {
     const { wrapper, router } = await mountView()
     expect(text(wrapper.find('[data-test=summary-pending]'))).toContain('2 à confirmer')

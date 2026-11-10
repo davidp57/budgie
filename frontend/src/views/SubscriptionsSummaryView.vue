@@ -63,13 +63,17 @@ async function load(): Promise<void> {
   }
 }
 
-/** Run a change, then show the summary it returns; a filter on a vanished tag is dropped. */
+/**
+ * Run a change, then show the summary it returns. A filter on a tag no
+ * payment carries any more is dropped: its chip is gone, so it could not be
+ * cleared otherwise.
+ */
 async function run(action: () => Promise<RecurringSummary>): Promise<void> {
   busy.value = true
   try {
     summary.value = await action()
-    const ids = summary.value.tags.map((t) => t.id)
-    selected.value = selected.value.filter((id) => ids.includes(id))
+    const used = tagSubtotals(summary.value.items, summary.value.tags).map((s) => s.tag.id)
+    selected.value = selected.value.filter((id) => used.includes(id))
   } catch {
     // Errors are shown by the client interceptor
   } finally {

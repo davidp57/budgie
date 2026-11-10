@@ -115,8 +115,8 @@ const prices = computed(() =>
         </h3>
         <ul class="text-sm max-h-48 overflow-y-auto divide-y divide-base-200">
           <li
-            v-for="debit in item.debits"
-            :key="debit.date + debit.amount"
+            v-for="(debit, index) in item.debits"
+            :key="index"
             class="flex justify-between py-1 pr-1"
             data-test="summary-debit"
           >

@@ -12,6 +12,9 @@ import type {
   RecurringTag,
 } from './types'
 
+/** Longest tag name the server accepts, in characters. */
+export const TAG_NAME_MAX_LENGTH = 40
+
 /** Months in a year, for the yearly totals. */
 const MONTHS_PER_YEAR = 12
 

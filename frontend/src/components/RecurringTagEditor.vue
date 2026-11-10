@@ -7,6 +7,7 @@
 
 import { ref } from 'vue'
 import type { RecurringTag } from '@/api/types'
+import { TAG_NAME_MAX_LENGTH } from '@/api/recurring'
 
 const props = defineProps<{
   tags: RecurringTag[]
@@ -73,7 +74,7 @@ function submit(): void {
       <input
         v-model="newName"
         type="text"
-        maxlength="40"
+        :maxlength="TAG_NAME_MAX_LENGTH"
         class="input input-bordered input-sm join-item flex-1 min-w-0"
         placeholder="Nouvelle étiquette"
         aria-label="Nouvelle étiquette"
