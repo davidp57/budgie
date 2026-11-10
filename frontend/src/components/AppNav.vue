@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUnassignedCount } from '@/composables/useUnassignedCount'
 import { useAppVersion } from '@/composables/useAppVersion'
+import { isNavActive } from '@/router/navActive'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,7 +40,7 @@ const links = [
     <button
       v-for="link in links"
       :key="link.path"
-      :class="{ 'dock-active': route.path === link.path }"
+      :class="{ 'dock-active': isNavActive(route.path, link.path) }"
       class="relative"
       @click="router.push(link.path)"
     >
@@ -78,7 +79,7 @@ const links = [
         v-for="link in links"
         :key="link.path"
         class="btn btn-ghost justify-start gap-3 font-normal relative"
-        :class="{ 'btn-active': route.path === link.path }"
+        :class="{ 'btn-active': isNavActive(route.path, link.path) }"
         @click="router.push(link.path)"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
