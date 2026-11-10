@@ -197,18 +197,20 @@ CORS (Cross-Origin Resource Sharing) controls **which websites are allowed to ca
 
 Budgie's responsive interface adapts to the device:
 
-- **Mobile**: a **bottom dock** (5 icons) for quick access.
+- **Mobile**: a **bottom dock** (7 icons) for quick access.
 - **Desktop**: a **sidebar** on the left with labels.
 
-The navigation (AppNav) offers 5 sections:
+The navigation (AppNav) offers 7 sections, in the same order on both:
 
 | Icon | Page | Description |
 |---|---|---|
-| 🏠 | **Home** | Month summary: income, expenses, balance, previous/next month navigation |
+| 🏠 | **Accueil** (Home) | Month summary: income, expenses, balance, previous/next month navigation |
 | 💰 | **Budget** | Envelope view with inline budget editing |
-| ⚡ | **Quick Expense** | Fast transaction entry with presets |
-| 📋 | **Expenses** | Expenses with filters, sort, grouping, edit and monthly dashboard |
-| ⚙️ | **Settings** | Accounts, categories, envelopes, rules, import, theme |
+| 📋 | **Dépenses** (Expenses) | Expenses with filters, sort, grouping, edit and monthly dashboard |
+| 🔁 | **Abonnements** (Subscriptions) | Recurring payments and their cost; labelled **Abos** in the mobile dock |
+| ⇄ | **Pointage** (Reconciliation) | Checking transactions against the bank statement |
+| ⬆️ | **Importer** (Import) | Importing bank statements |
+| ⚙️ | **Réglages** (Settings) | Accounts, categories, envelopes, rules, theme |
 
 ### Home Page
 
@@ -420,7 +422,7 @@ If you allow location access (requires HTTPS), Budgie queries nearby shops via O
 
 Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost, where they come from, and follow their cancellations.
 
-Open it from the **Abonnements** card of the home page (on a phone) or the **Abonnements** entry of the menu (on a computer).
+Open it from the **Abos** entry of the bottom dock (on a phone), the **Abonnements** entry of the menu (on a computer), or the **Abonnements** card of the home page.
 
 ### What Budgie finds
 
