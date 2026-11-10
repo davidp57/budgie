@@ -423,6 +423,8 @@ If you allow location access (requires HTTPS), Budgie queries nearby shops via O
 Budgie finds the payments that come back at regular intervals in your imported bank statements, to show what your subscriptions cost, where they come from, and follow their cancellations.
 
 Open it from the **Abos** entry of the bottom dock (on a phone), the **Abonnements** entry of the menu (on a computer), or the **Abonnements** card of the home page.
+The **Abonnements** page presents what you pay every month; the **Gérer** (manage) button opens the timeline where the payments found are classified.
+As long as nothing is classified, the home card leads straight to **Gérer**.
 
 ### What Budgie finds
 
@@ -432,13 +434,32 @@ Open it from the **Abos** entry of the bottom dock (on a phone), the **Abonnemen
 - Only imported transactions count: a manually entered expense is never proposed.
 - The situation is the one of the **last imported statement**: a payment "runs" when it was debited less than one and a half of its period before the most recent imported debit. The page shows that date when it is in the past.
 
-### The total
+### The presentation
 
-At the top of the page, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth).
+The **Abonnements** page lists the **running** recurring payments you kept: the confirmed subscriptions, and also those classified "not a subscription" (a savings transfer, an insurance), from the most to the least expensive per month.
+Ignored lines, cancelled or ended subscriptions and lines not classified yet are not shown: they stay in **Gérer**.
+
+- At the top, the monthly and yearly total of everything listed, and apart that of the subscriptions alone.
+- A banner recalls what is left to do in **Gérer** (lines **à confirmer**, to confirm; subscriptions **à vérifier**, to check); tapping it goes there.
+- Each line shows its name, its rhythm, since when it runs, its monthly cost (and its amount per quarter or per year when it is not monthly) and its tags.
+- Tapping a line unfolds it: its tags, its successive prices (the current one "depuis…", since, the earlier ones "de… à…", from… to…, with the number of debits) and the list of its debits, most recent first.
+
+### Tags
+
+Free tags (Phone, Savings, Streaming…) group your payments the way you want; a payment can carry several.
+
+- In an unfolded line, tapping a tag puts it on or takes it off; **Nouvelle étiquette** (new tag) then **Ajouter** (add) creates one and puts it on at once (typing the name of an existing tag, even with other capitals, puts that one on).
+- A tag no payment carries any more can be deleted with its **×**.
+- At the top of the page, one chip per tag shows its monthly subtotal; tapping it filters the list on that tag, and the totals follow the filter. Several chips add up (a payment is shown when it carries any of them); **Tout** (all) clears the filter.
+- Tag names are encrypted like your other labels.
+
+### Gérer: the total
+
+At the top of the **Gérer** page, the total of the running subscriptions per month and per year (a quarterly subscription counts for a third of its amount each month, a yearly one for a twelfth).
 It counts the payments found automatically from the start, with nothing to classify; those not confirmed are marked **à confirmer** (to confirm) in the list.
 Transfers and payments of 100 €/month or more (taxes, savings, insurance…) are left out.
 
-### The list
+### Gérer: the timeline
 
 A two-year timeline: one line per service, from its first to its last debit, with its successive prices on the same line, sorted alphabetically (one service that moved to another label, like "Tesla Lu" and "Tesla Motors Lux", sits on the next line).
 A solid bar is a confirmed subscription, a light one a subscription found automatically, a grey one a stopped or cancelled payment.
@@ -470,7 +491,7 @@ Below the list, two folded sections, opened with a click:
 
 ### Starting over
 
-**Réinitialiser les classements…** at the bottom of the page erases, after confirmation, everything you classified (confirmed subscriptions, "not a subscription", ignored, linked labels, cancellations, refused suggestions).
+**Réinitialiser les classements…** at the bottom of the **Gérer** page erases, after confirmation, everything you classified (confirmed subscriptions, "not a subscription", ignored, linked labels, cancellations, tags, refused suggestions).
 Imported transactions are not touched: the page starts again from the detection alone.
 
 ---
